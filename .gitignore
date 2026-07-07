@@ -5,7 +5,6 @@
 # Build outputs
 dist/
 build/
-api/index.js
 *.dist
 
 # Environment variables (NUNCA commitar segredos)
