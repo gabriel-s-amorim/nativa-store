@@ -33,27 +33,27 @@ const feathers = [
 export default function HeroSection() {
   return (
     <section className="relative w-full overflow-hidden" style={{ background: "#F5F0E8" }}>
-      <img
-        src="/images/bannerNativa.jpg"
-        alt="Nativa — Fauna e flora brasileira"
-        className="w-full h-[38vh] max-h-[260px] sm:h-[48vh] sm:max-h-[340px] md:h-auto md:max-h-none object-cover object-[center_20%] md:object-center block"
-      />
+      <div className="relative">
+        <img
+          src="/images/bannerNativa.jpg"
+          alt="Nativa — Fauna e flora brasileira"
+          className="w-full h-[42vh] max-h-[300px] sm:h-[48vh] sm:max-h-[340px] md:h-auto md:max-h-none object-cover object-[center_15%] md:object-center block"
+        />
 
-      <div className="absolute inset-0 pointer-events-none z-10 hidden sm:block">
-        {feathers.map(({ Feather, top, left, right, size, rotate, anim, opacity }, i) => (
-          <div
-            key={i}
-            className={`absolute ${anim}`}
-            style={{ top, left, right, opacity: opacity / 100 }}
-          >
-            <Feather className={`${size} ${rotate}`} />
-          </div>
-        ))}
+        <div className="absolute inset-0 pointer-events-none z-10 hidden sm:block">
+          {feathers.map(({ Feather, top, left, right, size, rotate, anim, opacity }, i) => (
+            <div
+              key={i}
+              className={`absolute ${anim}`}
+              style={{ top, left, right, opacity: opacity / 100 }}
+            >
+              <Feather className={`${size} ${rotate}`} />
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0">
-        <WaveDividerDown color="#F5F0E8" />
-      </div>
+      <WaveDividerDown color="#F5F0E8" />
     </section>
   );
 }
