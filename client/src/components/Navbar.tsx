@@ -1,35 +1,13 @@
 /**
  * Nativa Store — Navbar Component
  * Design: Brasil Vivo — Artesanato com Alma
- * Amendment: "The Nativa logo must always include the abstract agulha + pena 'N' symbol"
  */
 
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { ShoppingBag, Menu, X, Search, Heart } from "lucide-react";
 import { toast } from "sonner";
-
-// Custom SVG logo mark: agulha + pena forming abstract "N"
-function NativaLogoMark({ size = 36 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Needle — diagonal from top-left to bottom-right */}
-      <line x1="8" y1="6" x2="32" y2="34" stroke="#C4522A" strokeWidth="2.5" strokeLinecap="round"/>
-      {/* Needle eye */}
-      <ellipse cx="9" cy="7" rx="3" ry="4" fill="#C4522A" opacity="0.9" transform="rotate(-45 9 7)"/>
-      <ellipse cx="9" cy="7" rx="1.5" ry="2" fill="white" opacity="0.5" transform="rotate(-45 9 7)"/>
-      {/* Thread */}
-      <path d="M10 10 Q16 20 12 28" stroke="#E8821A" strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.8"/>
-      {/* Feather — diagonal from top-right to bottom-left */}
-      <path d="M32 6 C36 10, 36 18, 30 22 C24 26, 16 28, 12 34 C10 30, 14 24, 20 20 C26 16, 32 12, 32 6Z" fill="#2D6A4F" opacity="0.75"/>
-      {/* Feather spine */}
-      <line x1="32" y1="6" x2="12" y2="34" stroke="#1A4A35" strokeWidth="1" strokeLinecap="round" opacity="0.6"/>
-      {/* Feather color accents */}
-      <path d="M28 10 C30 14, 28 18, 24 20" stroke="#52A87A" strokeWidth="1" fill="none" strokeLinecap="round" opacity="0.6"/>
-      <path d="M24 14 C26 18, 22 22, 18 24" stroke="#1B7A8C" strokeWidth="1" fill="none" strokeLinecap="round" opacity="0.5"/>
-    </svg>
-  );
-}
+import NativaLogo from "./NativaLogo";
 
 const navLinks = [
   { label: "Coleções", href: "#colecoes" },
@@ -72,33 +50,8 @@ export default function Navbar() {
         <div className="container">
           <div className="flex items-center justify-between h-14 md:h-20">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 group">
-              <span className="md:hidden">
-                <NativaLogoMark size={32} />
-              </span>
-              <span className="hidden md:block">
-                <NativaLogoMark size={38} />
-              </span>
-              <span className="flex flex-col leading-none">
-                <span
-                  className="text-xl md:text-2xl font-bold italic tracking-tight"
-                  style={{
-                    fontFamily: "'Playfair Display', Georgia, serif",
-                    background: "linear-gradient(135deg, #C4522A 0%, #E8821A 40%, #2D6A4F 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-                  }}
-                >
-                  Nativa
-                </span>
-                <span
-                  className="hidden sm:block text-[0.6rem] uppercase tracking-[0.18em] text-[#8B6F5E]"
-                  style={{ fontFamily: "'Nunito', sans-serif" }}
-                >
-                  Liberdade em cada detalhe
-                </span>
-              </span>
+            <Link href="/" className="group">
+              <NativaLogo className="h-9 sm:h-10 md:h-12 w-auto" showTagline />
             </Link>
 
             {/* Desktop Nav */}

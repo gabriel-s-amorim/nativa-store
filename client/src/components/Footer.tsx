@@ -6,20 +6,7 @@
 
 import { toast } from "sonner";
 import { Instagram, Facebook, Youtube, Mail, MapPin, Phone } from "lucide-react";
-
-// Inline logo mark for footer
-function NativaLogoMark({ size = 32 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <line x1="8" y1="6" x2="32" y2="34" stroke="#E8821A" strokeWidth="2.5" strokeLinecap="round"/>
-      <ellipse cx="9" cy="7" rx="3" ry="4" fill="#E8821A" opacity="0.9" transform="rotate(-45 9 7)"/>
-      <ellipse cx="9" cy="7" rx="1.5" ry="2" fill="white" opacity="0.4" transform="rotate(-45 9 7)"/>
-      <path d="M10 10 Q16 20 12 28" stroke="#C9922A" strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.8"/>
-      <path d="M32 6 C36 10, 36 18, 30 22 C24 26, 16 28, 12 34 C10 30, 14 24, 20 20 C26 16, 32 12, 32 6Z" fill="#52A87A" opacity="0.75"/>
-      <line x1="32" y1="6" x2="12" y2="34" stroke="#2D6A4F" strokeWidth="1" strokeLinecap="round" opacity="0.6"/>
-    </svg>
-  );
-}
+import NativaLogo from "./NativaLogo";
 
 const footerLinks = {
   loja: [
@@ -62,20 +49,8 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10">
           {/* Brand column */}
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2.5 mb-4">
-              <NativaLogoMark size={36} />
-              <span
-                className="text-2xl font-bold italic"
-                style={{
-                  fontFamily: "'Playfair Display', serif",
-                  background: "linear-gradient(135deg, #E8821A, #C9922A, #52A87A)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                Nativa
-              </span>
+            <div className="mb-4">
+              <NativaLogo className="h-14 w-auto" taglineClassName="text-white/70" showTagline />
             </div>
             <p
               className="text-white/65 text-sm leading-relaxed mb-6 max-w-xs"
