@@ -37,7 +37,7 @@ export default function HeroSection() {
         <img
           src="/images/bannerNativa.jpg"
           alt="Nativa — Fauna e flora brasileira"
-          className="w-full h-[42vh] max-h-[300px] sm:h-[48vh] sm:max-h-[340px] md:h-auto md:max-h-none object-cover object-[center_15%] md:object-center block"
+          className="w-full h-[50vh] max-h-[330px] sm:h-[52vh] sm:max-h-[380px] md:h-auto md:max-h-none object-cover object-[center_22%] sm:object-[center_18%] md:object-center block"
         />
 
         <div className="absolute inset-0 pointer-events-none z-10 hidden sm:block">
@@ -51,9 +51,11 @@ export default function HeroSection() {
             </div>
           ))}
         </div>
-      </div>
 
-      <WaveDividerDown color="#F5F0E8" />
+        <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
+          <WaveDividerDown color="#F5F0E8" />
+        </div>
+      </div>
     </section>
   );
 }

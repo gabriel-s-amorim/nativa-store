@@ -43,10 +43,21 @@ export function FeatherRed({ className = "" }: { className?: string }) {
   );
 }
 
-export function WaveDividerDown({ color = "#F5F0E8" }: { color?: string }) {
+export function WaveDividerDown({
+  color = "#F5F0E8",
+  className,
+}: {
+  color?: string;
+  className?: string;
+}) {
   return (
-    <div className="relative z-10 -mt-1" style={{ lineHeight: 0 }}>
-      <svg viewBox="0 0 1440 80" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" className="block w-full h-8 sm:h-12 md:h-20">
+    <div className={`relative z-10 -mt-px ${className ?? ""}`} style={{ lineHeight: 0 }}>
+      <svg
+        viewBox="0 0 1440 80"
+        xmlns="http://www.w3.org/2000/svg"
+        preserveAspectRatio="none"
+        className="block w-full h-10 sm:h-14 md:h-20"
+      >
         <path
           d="M0,0 C240,80 480,80 720,40 C960,0 1200,0 1440,60 L1440,80 L0,80 Z"
           fill={color}
