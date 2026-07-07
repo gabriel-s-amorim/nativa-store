@@ -11,7 +11,7 @@ interface NativaLogoProps {
 const LOGO_SRC = "/images/logo-nativa.png";
 
 export default function NativaLogo({
-  className = "h-10 md:h-12 w-auto",
+  className = "w-36 sm:w-40 md:w-44 h-auto max-h-16 md:max-h-20",
   showTagline = false,
   taglineClassName = "text-[#8B6F5E]",
 }: NativaLogoProps) {
