@@ -50,7 +50,7 @@ export default function Footer() {
           {/* Brand column */}
           <div className="lg:col-span-2">
             <div className="mb-4">
-              <NativaLogo className="w-56 sm:w-64 h-auto" taglineClassName="text-white/70" showTagline />
+              <NativaLogo className="h-12 sm:h-14 w-auto" taglineClassName="text-white/70" showTagline />
             </div>
             <p
               className="text-white/65 text-sm leading-relaxed mb-6 max-w-xs"

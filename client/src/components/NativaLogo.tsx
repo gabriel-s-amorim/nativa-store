@@ -11,7 +11,7 @@ interface NativaLogoProps {
 const LOGO_SRC = "/images/logo-nativa.png";
 
 export default function NativaLogo({
-  className = "w-48 sm:w-56 md:w-64 h-auto",
+  className = "h-10 sm:h-11 md:h-12 w-auto",
   showTagline = false,
   taglineClassName = "text-[#8B6F5E]",
 }: NativaLogoProps) {
@@ -24,7 +24,7 @@ export default function NativaLogo({
       />
       {showTagline && (
         <span
-          className={`hidden lg:block text-[0.65rem] uppercase tracking-[0.18em] leading-tight ${taglineClassName}`}
+          className={`hidden md:block text-[0.6rem] uppercase tracking-[0.18em] leading-tight ${taglineClassName}`}
           style={{ fontFamily: "'Nunito', sans-serif" }}
         >
           Liberdade em cada detalhe

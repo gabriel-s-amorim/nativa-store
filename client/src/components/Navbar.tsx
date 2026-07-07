@@ -48,10 +48,10 @@ export default function Navbar() {
         }`}
       >
         <div className="container">
-          <div className="flex items-center justify-between min-h-[5rem] md:min-h-28 py-2">
+          <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo */}
             <Link href="/" className="group shrink-0">
-              <NativaLogo className="w-52 sm:w-60 md:w-72 h-auto" showTagline />
+              <NativaLogo className="h-9 sm:h-10 md:h-11 w-auto" showTagline />
             </Link>
 
             {/* Desktop Nav */}
