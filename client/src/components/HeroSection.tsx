@@ -36,7 +36,7 @@ export default function HeroSection() {
       <img
         src="/images/bannerNativa.jpg"
         alt="Nativa — Fauna e flora brasileira"
-        className="w-full h-auto block"
+        className="w-full h-[70vh] md:h-auto object-cover object-center block"
       />
 
       <div className="absolute inset-0 pointer-events-none z-10">
