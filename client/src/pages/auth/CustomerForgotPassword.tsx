@@ -55,7 +55,7 @@ export default function CustomerForgotPassword() {
         <AuthFormCard
           icon={KeyRound}
           title="Recuperar senha"
-          description="Enviaremos um link seguro para redefinir sua senha."
+          description="Enviaremos um link seguro para redefinir sua senha. Use o link logo após receber — não reutilize e-mails antigos."
         >
           {sent ? (
             <div className="flex flex-col gap-4">

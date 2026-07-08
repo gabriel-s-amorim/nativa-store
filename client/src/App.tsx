@@ -1,3 +1,4 @@
+import AuthHashRouter from "@/components/auth/AuthHashRouter";
 import { Spinner } from "@/components/ui/spinner";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -71,6 +72,7 @@ function App() {
         // switchable
       >
         <CustomerAuthProvider>
+          <AuthHashRouter />
           <TooltipProvider>
             <Toaster />
             <Router />

@@ -29,13 +29,14 @@ export function parseAuthHashError(): string | null {
   if (!error) return null;
 
   const decoded = decodeURIComponent(error.replace(/\+/g, " "));
+  const site = getAppUrl() || "seu domínio";
 
   if (decoded.toLowerCase().includes("expired") || decoded.toLowerCase().includes("invalid")) {
-    return "Este link expirou ou já foi usado. Solicite um novo e-mail de recuperação.";
+    return `Este link expirou ou já foi usado. Solicite um novo e-mail em ${site}/recuperar-senha e clique no link assim que receber (alguns apps de e-mail abrem o link sozinhos e invalidam o token).`;
   }
 
   if (decoded.toLowerCase().includes("access_denied")) {
-    return "Não foi possível validar o link. Verifique as configurações de URL no Supabase e tente novamente.";
+    return `Não foi possível validar o link. No Supabase, confira Site URL e Redirect URL ${site}/redefinir-senha, depois solicite um novo e-mail.`;
   }
 
   return decoded;
