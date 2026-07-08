@@ -1,6 +1,7 @@
 import { Spinner } from "@/components/ui/spinner";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 import NotFound from "@/pages/NotFound";
 import ProductPage from "@/pages/ProductPage";
 import { lazy, Suspense } from "react";
@@ -8,6 +9,9 @@ import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import CustomerLogin from "./pages/auth/CustomerLogin";
+import CustomerRegister from "./pages/auth/CustomerRegister";
+import CustomerAccount from "./pages/auth/CustomerAccount";
 
 // Lazy: o painel admin (e a lib de planilhas usada na importação em massa) só é
 // carregado quando alguém acessa /admin — não pesa o bundle da loja pública.
@@ -37,6 +41,9 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/entrar"} component={CustomerLogin} />
+      <Route path={"/cadastro"} component={CustomerRegister} />
+      <Route path={"/conta"} component={CustomerAccount} />
       <Route path={"/produto/:slug"} component={ProductPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
@@ -57,10 +64,12 @@ function App() {
         defaultTheme="light"
         // switchable
       >
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <CustomerAuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </CustomerAuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

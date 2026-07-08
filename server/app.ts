@@ -1,6 +1,7 @@
 import cookieParser from "cookie-parser";
 import express from "express";
 import adminRouter from "./routes/admin";
+import customersRouter from "./routes/customers";
 import productsRouter from "./routes/products";
 
 export function createApiApp() {
@@ -9,6 +10,7 @@ export function createApiApp() {
   app.use(express.json());
   app.use(cookieParser());
   app.use("/api/admin", adminRouter);
+  app.use("/api/customers", customersRouter);
   app.use("/api/products", productsRouter);
 
   return app;

@@ -5,9 +5,10 @@
 
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, Menu, X, Search, Heart } from "lucide-react";
+import { ShoppingBag, Menu, X, Search, Heart, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import NativaLogo from "./NativaLogo";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 
 const navLinks = [
   { label: "Coleções", href: "#colecoes" },
@@ -21,6 +22,7 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isHome = location === "/";
+  const { user, isLoading } = useCustomerAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
@@ -85,6 +87,21 @@ export default function Navbar() {
 
             {/* Actions */}
             <div className="relative z-10 flex items-center gap-3">
+              {!isLoading && (
+                <Link
+                  href={user ? "/conta" : "/entrar"}
+                  className="hidden md:flex items-center gap-2 rounded-full px-3 py-2 hover:bg-[#C4522A]/10 text-[#3D2B1F] hover:text-[#C4522A] transition-all duration-200"
+                  aria-label={user ? "Minha conta" : "Entrar"}
+                >
+                  <UserRound size={18} />
+                  <span
+                    className="text-sm font-semibold"
+                    style={{ fontFamily: "'Nunito', sans-serif", letterSpacing: "0.02em" }}
+                  >
+                    {user ? "Minha conta" : "Entrar"}
+                  </span>
+                </Link>
+              )}
               <button
                 onClick={() => toast("Busca em breve!", { description: "Funcionalidade sendo desenvolvida." })}
                 className="hidden md:flex items-center justify-center w-9 h-9 rounded-full hover:bg-[#C4522A]/10 text-[#3D2B1F] hover:text-[#C4522A] transition-all duration-200"
@@ -145,6 +162,17 @@ export default function Navbar() {
               ))}
             </nav>
             <div className="mt-auto pt-6 border-t border-[#C4522A]/15">
+              {!isLoading && (
+                <Link
+                  href={user ? "/conta" : "/entrar"}
+                  onClick={() => setMobileOpen(false)}
+                  className="mb-4 flex items-center justify-center gap-2 rounded-lg border border-[#C4522A]/20 bg-white/40 py-3 text-sm font-semibold text-[#3D2B1F] hover:bg-[#C4522A]/10 hover:text-[#C4522A] transition-all duration-200"
+                  style={{ fontFamily: "'Nunito', sans-serif" }}
+                >
+                  <UserRound size={18} />
+                  {user ? "Minha conta" : "Entrar"}
+                </Link>
+              )}
               <p className="text-xs text-[#8B6F5E] text-center italic" style={{ fontFamily: "'Lora', serif" }}>
                 "Liberdade em cada detalhe"
               </p>
