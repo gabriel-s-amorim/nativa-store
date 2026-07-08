@@ -7,6 +7,7 @@
 import { toast } from "sonner";
 import { Instagram, Facebook, Youtube, Mail, MapPin, Phone } from "lucide-react";
 import NativaLogo from "./NativaLogo";
+import { WaveDividerUp } from "./NativaDecorations";
 
 const footerLinks = {
   loja: [
@@ -40,10 +41,12 @@ export default function Footer() {
   };
 
   return (
-    <footer
-      id="contato"
-      style={{ background: "#1A3D2B" }}
-    >
+    <>
+      <WaveDividerUp color="#FAF7F2" />
+      <footer
+        id="contato"
+        style={{ background: "#1A3D2B" }}
+      >
       {/* Main footer content */}
       <div className="container py-16">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 text-center md:text-left">
@@ -159,5 +162,6 @@ export default function Footer() {
         </div>
       </div>
     </footer>
+    </>
   );
 }

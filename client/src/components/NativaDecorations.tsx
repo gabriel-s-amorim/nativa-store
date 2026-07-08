@@ -67,10 +67,21 @@ export function WaveDividerDown({
   );
 }
 
-export function WaveDividerUp({ color = "#F5F0E8" }: { color?: string }) {
+export function WaveDividerUp({
+  color = "#F5F0E8",
+  className,
+}: {
+  color?: string;
+  className?: string;
+}) {
   return (
-    <div className="relative z-10 -mb-1" style={{ lineHeight: 0 }}>
-      <svg viewBox="0 0 1440 80" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style={{ display: "block", width: "100%", height: "80px" }}>
+    <div className={`relative z-10 -mb-px ${className ?? ""}`} style={{ lineHeight: 0 }}>
+      <svg
+        viewBox="0 0 1440 80"
+        xmlns="http://www.w3.org/2000/svg"
+        preserveAspectRatio="none"
+        className="block w-full h-10 sm:h-14 md:h-20"
+      >
         <path
           d="M0,80 C240,0 480,0 720,40 C960,80 1200,80 1440,20 L1440,0 L0,0 Z"
           fill={color}
