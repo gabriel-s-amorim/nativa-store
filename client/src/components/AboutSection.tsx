@@ -1,10 +1,12 @@
 /**
  * Nativa Store — About Section
  * Design: Brasil Vivo — Artesanato com Alma
- * Two-column layout: text left, artisan workshop image right
+ * Two-column layout: portrait artisan photo left, story text right
  */
 
 import { ArrowNativa, FeatherGreen, FeatherRed, WaveDividerDown, WaveDividerUp } from "./NativaDecorations";
+
+const ABOUT_IMAGE = "/images/1cad9ce5-deab-4955-8b80-f93e26115088.jpg";
 
 const values = [
   {
@@ -42,39 +44,51 @@ export default function AboutSection() {
         </div>
 
         <div className="container">
-          <div className="grid md:grid-cols-2 gap-12 lg:gap-20 items-center">
-            {/* Image side */}
-            <div className="relative order-2 md:order-1">
+          <div className="grid md:grid-cols-[minmax(0,340px)_1fr] lg:grid-cols-[minmax(0,380px)_1fr] gap-12 lg:gap-16 xl:gap-20 items-center">
+            {/* Portrait photo — natural aspect ratio with decorative frame */}
+            <div className="relative order-2 md:order-1 flex justify-center md:justify-start">
               <div
-                className="rounded-3xl overflow-hidden shadow-2xl"
-                style={{ boxShadow: "0 24px 64px oklch(0.52 0.14 38 / 0.18)" }}
-              >
-                <img
-                  src="/manus-storage/nativa-about-section_dd4ffc97.jpg"
-                  alt="Ateliê Nativa — artesãs trabalhando"
-                  className="w-full h-80 md:h-[480px] object-cover"
-                />
-              </div>
-              {/* Floating accent card */}
-              <div
-                className="absolute -bottom-6 -right-4 md:-right-8 bg-white rounded-2xl p-4 shadow-xl border border-[#E8D5C4]"
-                style={{ maxWidth: "180px" }}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">🏆</span>
-                  <span
-                    className="text-xs font-bold text-[#C4522A] uppercase tracking-wide"
-                    style={{ fontFamily: "'Nunito', sans-serif" }}
-                  >
-                    Premiada
-                  </span>
-                </div>
-                <p
-                  className="text-xs text-[#8B6F5E] leading-snug"
-                  style={{ fontFamily: "'Lora', serif" }}
+                className="absolute top-5 left-5 right-0 bottom-0 rounded-3xl hidden sm:block"
+                style={{
+                  background: "linear-gradient(145deg, #C4522A22, #2D6A4F18)",
+                  transform: "translate(12px, 12px)",
+                }}
+                aria-hidden
+              />
+              <div className="relative w-full max-w-[280px] sm:max-w-[300px] lg:max-w-[340px]">
+                <div
+                  className="rounded-3xl overflow-hidden shadow-2xl ring-[3px] ring-white/90"
+                  style={{ boxShadow: "0 24px 64px oklch(0.52 0.14 38 / 0.18)" }}
                 >
-                  Melhor marca artesanal brasileira 2024
-                </p>
+                  <img
+                    src={ABOUT_IMAGE}
+                    alt="Artesã Nativa no ateliê, com bolsa artesanal e máquina de costura"
+                    className="w-full h-auto block"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+                {/* Floating accent card */}
+                <div
+                  className="absolute -bottom-5 -right-3 sm:-right-6 bg-white rounded-2xl p-4 shadow-xl border border-[#E8D5C4] z-10"
+                  style={{ maxWidth: "168px" }}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xl">🪡</span>
+                    <span
+                      className="text-xs font-bold text-[#C4522A] uppercase tracking-wide"
+                      style={{ fontFamily: "'Nunito', sans-serif" }}
+                    >
+                      Feito à mão
+                    </span>
+                  </div>
+                  <p
+                    className="text-xs text-[#8B6F5E] leading-snug"
+                    style={{ fontFamily: "'Lora', serif" }}
+                  >
+                    Cada peça costurada com carinho no nosso ateliê
+                  </p>
+                </div>
               </div>
             </div>
 
