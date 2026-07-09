@@ -79,7 +79,7 @@ export default function AdminCustomersList() {
         ]}
       />
 
-      <Card className="mt-4 border-[#E8D5C4] p-3 sm:p-4">
+      <Card className="admin-card mt-4 border-0 p-3 sm:p-4">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8B6F5E]" />
           <Input
@@ -91,7 +91,7 @@ export default function AdminCustomersList() {
         </div>
       </Card>
 
-      <Card className="mt-4 overflow-hidden border-[#E8D5C4]">
+      <Card className="admin-card mt-4 overflow-hidden border-0">
         {isLoading ? (
           <div className="flex items-center justify-center gap-2 p-12 text-[#8B6F5E]">
             <Spinner className="size-5" />

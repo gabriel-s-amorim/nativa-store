@@ -11,9 +11,10 @@ import {
 } from "@/components/ui/sheet";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useAdminNotifications } from "@/contexts/AdminNotificationsContext";
+import "@/styles/admin-theme.css";
 import {
   ChevronLeft,
-  LayoutGrid,
+  LayoutDashboard,
   LogOut,
   MoreHorizontal,
   Package,
@@ -31,15 +32,44 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   disabled?: boolean;
   badgeKey?: "new_order" | "new_customer";
+  match?: (path: string) => boolean;
 }
 
 const navItems: NavItem[] = [
-  { label: "Produtos", href: "/admin/produtos", icon: Package },
+  {
+    label: "Dashboard",
+    href: "/admin/dashboard",
+    icon: LayoutDashboard,
+    match: (path) => path === "/admin/dashboard" || path === "/admin",
+  },
+  {
+    label: "Produtos",
+    href: "/admin/produtos",
+    icon: Package,
+    match: (path) => path.startsWith("/admin/produtos") && path !== "/admin/produtos/importar",
+  },
   { label: "Importar produtos", href: "/admin/produtos/importar", icon: Upload },
-  { label: "Pedidos", href: "/admin/pedidos", icon: ShoppingCart, badgeKey: "new_order" },
-  { label: "Clientes", href: "/admin/clientes", icon: Users, badgeKey: "new_customer" },
+  {
+    label: "Pedidos",
+    href: "/admin/pedidos",
+    icon: ShoppingCart,
+    badgeKey: "new_order",
+    match: (path) => path.startsWith("/admin/pedidos"),
+  },
+  {
+    label: "Clientes",
+    href: "/admin/clientes",
+    icon: Users,
+    badgeKey: "new_customer",
+    match: (path) => path.startsWith("/admin/clientes"),
+  },
   { label: "Configurações", href: "/admin/configuracoes", icon: Settings, disabled: true },
 ];
+
+function isNavActive(item: NavItem, location: string) {
+  if (item.match) return item.match(location);
+  return location === item.href || location.startsWith(`${item.href}/`);
+}
 
 function NavLinks({
   onNavigate,
@@ -53,7 +83,7 @@ function NavLinks({
   return (
     <nav className="flex flex-1 flex-col gap-1 p-3">
       {navItems.map((item) => {
-        const isActive = location === item.href || location.startsWith(`${item.href}/`);
+        const isActive = isNavActive(item, location);
         const Icon = item.icon;
         const badgeCount = item.badgeKey ? unreadByType[item.badgeKey] : 0;
 
@@ -61,12 +91,12 @@ function NavLinks({
           return (
             <div
               key={item.href}
-              className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-[#8B6F5E]/50 cursor-not-allowed"
+              className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-3 text-sm text-[var(--admin-text-muted)]"
               title="Em breve"
             >
               <Icon className="size-4" />
               {item.label}
-              <span className="ml-auto rounded-full bg-[#F5F0E8] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#8B6F5E]">
+              <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--admin-text-muted)]">
                 Em breve
               </span>
             </div>
@@ -80,8 +110,8 @@ function NavLinks({
             onClick={onNavigate}
             className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors ${
               isActive
-                ? "bg-[#C4522A] text-white shadow-sm"
-                : "text-[#3D2B1F] hover:bg-[#F5F0E8]"
+                ? "admin-nav-active shadow-sm"
+                : "text-[var(--admin-text-secondary)] hover:bg-[var(--admin-surface-hover)]"
             }`}
           >
             <Icon className="size-4" />
@@ -89,7 +119,7 @@ function NavLinks({
             {badgeCount > 0 && (
               <span
                 className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  isActive ? "bg-white/20 text-white" : "bg-[#C4522A] text-white"
+                  isActive ? "bg-white/20 text-white" : "bg-[var(--admin-accent)] text-white"
                 }`}
               >
                 {badgeCount > 99 ? "99+" : badgeCount}
@@ -124,19 +154,22 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-[100dvh] bg-[#FAF7F2]" style={{ fontFamily: "'Nunito', sans-serif" }}>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-[#E8D5C4] bg-white lg:flex">
-        <div className="flex items-center gap-2 border-b border-[#E8D5C4] px-4 py-4">
+    <div className="admin-app min-h-[100dvh]">
+      <aside className="admin-sidebar fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r lg:flex">
+        <div className="flex items-center gap-2 border-b border-[var(--admin-border)] px-4 py-4">
           <NativaLogo className="h-9 w-auto" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-[#8B6F5E]">
-            Admin
-          </span>
+          <div>
+            <span className="block text-xs font-semibold uppercase tracking-wide text-[var(--admin-text-muted)]">
+              Nativa
+            </span>
+            <span className="block text-sm font-bold text-[var(--admin-text)]">Painel Admin</span>
+          </div>
         </div>
         <NavLinks unreadByType={unreadByType} />
-        <div className="border-t border-[#E8D5C4] p-3">
+        <div className="border-t border-[var(--admin-border)] p-3">
           <Button
             variant="ghost"
-            className="w-full justify-start gap-3 text-[#3D2B1F] hover:bg-[#F5F0E8]"
+            className="w-full justify-start gap-3 text-[var(--admin-text-secondary)] hover:bg-[var(--admin-surface-hover)]"
             onClick={handleLogout}
           >
             <LogOut className="size-4" />
@@ -147,7 +180,7 @@ export default function AdminLayout({
 
       <div className="lg:pl-64">
         <header
-          className="sticky top-0 z-20 border-b border-[#E8D5C4] bg-white/90 backdrop-blur-md"
+          className="admin-header sticky top-0 z-20 border-b"
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
           <div className="flex items-center justify-between gap-2 px-3 py-2.5 sm:px-6 sm:py-3">
@@ -166,21 +199,21 @@ export default function AdminLayout({
                     </Button>
                   </SheetTrigger>
                   <SheetContent side="bottom" className="max-h-[85dvh] rounded-t-3xl p-0">
-                    <SheetHeader className="border-b border-[#E8D5C4] px-4 py-4">
+                    <SheetHeader className="border-b border-[var(--admin-border)] px-4 py-4">
                       <SheetTitle asChild>
                         <div className="flex items-center gap-2">
                           <NativaLogo className="h-8 w-auto" />
-                          <span className="text-xs font-semibold uppercase tracking-wide text-[#8B6F5E]">
+                          <span className="text-sm font-bold text-[var(--admin-text)]">
                             Menu admin
                           </span>
                         </div>
                       </SheetTitle>
                     </SheetHeader>
                     <NavLinks onNavigate={() => setMenuOpen(false)} unreadByType={unreadByType} />
-                    <div className="border-t border-[#E8D5C4] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+                    <div className="border-t border-[var(--admin-border)] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
                       <Button
                         variant="ghost"
-                        className="h-12 w-full justify-start gap-3 rounded-xl text-[#3D2B1F] hover:bg-[#F5F0E8]"
+                        className="h-12 w-full justify-start gap-3 rounded-xl text-[var(--admin-text-secondary)] hover:bg-[var(--admin-surface-hover)]"
                         onClick={handleLogout}
                       >
                         <LogOut className="size-4" />
@@ -191,15 +224,9 @@ export default function AdminLayout({
                 </Sheet>
               )}
 
-              <div className="flex min-w-0 items-center gap-2">
-                <LayoutGrid className="hidden size-5 shrink-0 text-[#C4522A] sm:block" />
-                <h1
-                  className="truncate text-base font-bold text-[#3D2B1F] sm:text-xl"
-                  style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
-                >
-                  {title}
-                </h1>
-              </div>
+              <h1 className="truncate text-base font-bold tracking-tight text-[var(--admin-text)] sm:text-xl">
+                {title}
+              </h1>
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">

@@ -1,4 +1,5 @@
 import type { AdminCustomerDetail, AdminCustomerSummary } from "@shared/types/customer";
+import type { DashboardPeriod, DashboardStats } from "@shared/types/dashboard";
 import type { AdminNotification } from "@shared/types/notification";
 import type { AdminOrderDetail, AdminOrderSummary, OrderStatus } from "@shared/types/order";
 import type { ProductInput } from "@shared/schemas/product";
@@ -112,6 +113,10 @@ export function bulkImportProducts(products: ProductInput[]) {
     method: "POST",
     body: JSON.stringify({ products }),
   });
+}
+
+export function fetchAdminDashboard(period: DashboardPeriod = "30d") {
+  return request<DashboardStats>(`/api/admin/dashboard?period=${encodeURIComponent(period)}`);
 }
 
 export function fetchAdminOrders() {

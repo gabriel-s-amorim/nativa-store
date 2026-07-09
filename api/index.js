@@ -3,7 +3,7 @@ import cookieParser from "cookie-parser";
 import express from "express";
 
 // server/routes/admin.ts
-import { Router as Router4 } from "express";
+import { Router as Router5 } from "express";
 
 // server/lib/adminAuth.ts
 import crypto from "node:crypto";
@@ -394,8 +394,328 @@ router.get("/:id", requireAdmin, async (req, res) => {
 });
 var adminCustomers_default = router;
 
-// server/routes/adminNotifications.ts
+// server/routes/adminDashboard.ts
 import { Router as Router2 } from "express";
+
+// shared/const/analytics.ts
+var VISITOR_SESSION_COOKIE = "nativa_visitor_session";
+var VISITOR_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+var ABANDONED_CART_HOURS = 24;
+
+// shared/lib/orderLabels.ts
+var ORDER_STATUS_LABELS = {
+  pending: "Pendente",
+  paid: "Confirmado",
+  canceled: "Cancelado"
+};
+var PAYMENT_METHOD_LABELS = {
+  pix: "Pix",
+  credit_card: "Cart\xE3o de cr\xE9dito",
+  boleto: "Boleto"
+};
+
+// server/services/adminDashboard.ts
+var MS_DAY = 24 * 60 * 60 * 1e3;
+function periodToDays(period) {
+  if (period === "7d") return 7;
+  if (period === "30d") return 30;
+  if (period === "90d") return 90;
+  return null;
+}
+function startDateForPeriod(period) {
+  const days = periodToDays(period);
+  if (days === null) return null;
+  return new Date(Date.now() - days * MS_DAY);
+}
+function previousStartDateForPeriod(period) {
+  const days = periodToDays(period);
+  if (days === null) return null;
+  return new Date(Date.now() - days * 2 * MS_DAY);
+}
+function pctChange(current, previous) {
+  if (previous === 0) return current > 0 ? 100 : null;
+  return Math.round((current - previous) / previous * 1e3) / 10;
+}
+function toDateKey(iso) {
+  return iso.slice(0, 10);
+}
+function buildDateRange(start, end) {
+  const keys = [];
+  const cursor = new Date(start);
+  cursor.setHours(0, 0, 0, 0);
+  const endDay = new Date(end);
+  endDay.setHours(0, 0, 0, 0);
+  while (cursor <= endDay) {
+    keys.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys;
+}
+function inRange(iso, start, end) {
+  const time = new Date(iso).getTime();
+  if (start && time < start.getTime()) return false;
+  if (end && time >= end.getTime()) return false;
+  return true;
+}
+async function fetchOrdersRows() {
+  const { data, error } = await supabase.from("orders").select("id, customer_id, status, total_amount, payment_method, created_at").order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+async function fetchCustomerProfiles() {
+  const { data, error } = await supabase.from("customer_profiles").select("id, full_name, created_at");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+async function fetchPageViews() {
+  const { data, error } = await supabase.from("store_page_views").select("session_id, path, created_at").order("created_at", { ascending: false });
+  if (error) {
+    if (error.message.includes("store_page_views")) return [];
+    throw new Error(error.message);
+  }
+  return data ?? [];
+}
+async function fetchAbandonedCarts() {
+  const staleBefore = new Date(Date.now() - ABANDONED_CART_HOURS * 60 * 60 * 1e3).toISOString();
+  const { data: carts, error } = await supabase.from("carts").select("id, updated_at").eq("status", "active").lt("updated_at", staleBefore);
+  if (error) throw new Error(error.message);
+  if (!carts?.length) return { count: 0, value: 0 };
+  const cartIds = carts.map((c) => c.id);
+  const { data: items, error: itemsError } = await supabase.from("cart_items").select("cart_id, quantity, unit_price").in("cart_id", cartIds);
+  if (itemsError) throw new Error(itemsError.message);
+  const valueByCart = /* @__PURE__ */ new Map();
+  for (const item of items ?? []) {
+    const current = valueByCart.get(item.cart_id) ?? 0;
+    valueByCart.set(item.cart_id, current + Number(item.quantity) * Number(item.unit_price));
+  }
+  let count = 0;
+  let value = 0;
+  for (const cart of carts) {
+    const cartValue = valueByCart.get(cart.id) ?? 0;
+    if (cartValue <= 0) continue;
+    count += 1;
+    value += cartValue;
+  }
+  return { count, value };
+}
+async function fetchCartConversion() {
+  const { data, error } = await supabase.from("carts").select("status");
+  if (error) throw new Error(error.message);
+  const converted = (data ?? []).filter((c) => c.status === "converted").length;
+  const { count: abandoned } = await fetchAbandonedCarts();
+  const denominator = converted + abandoned;
+  const rate = denominator === 0 ? 0 : Math.round(converted / denominator * 1e3) / 10;
+  return rate;
+}
+async function fetchTopProducts(start) {
+  const { data: orders, error } = await supabase.from("orders").select("id, status, created_at").eq("status", "paid");
+  if (error) throw new Error(error.message);
+  const orderIds = (orders ?? []).filter((o) => inRange(o.created_at, start)).map((o) => o.id);
+  if (!orderIds.length) return [];
+  const { data: items, error: itemsError } = await supabase.from("order_items").select("product_slug, name, quantity, price").in("order_id", orderIds);
+  if (itemsError) throw new Error(itemsError.message);
+  const map = /* @__PURE__ */ new Map();
+  for (const item of items ?? []) {
+    const key = item.product_slug;
+    const current = map.get(key) ?? {
+      slug: item.product_slug,
+      name: item.name,
+      units: 0,
+      revenue: 0
+    };
+    current.units += Number(item.quantity);
+    current.revenue += Number(item.quantity) * Number(item.price);
+    map.set(key, current);
+  }
+  return [...map.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+}
+async function fetchProductStockCounts() {
+  const { data, error } = await supabase.from("products").select("in_stock, stock_count");
+  if (error) throw new Error(error.message);
+  let inStock = 0;
+  let outOfStock = 0;
+  for (const row of data ?? []) {
+    if (row.in_stock && Number(row.stock_count) > 0) inStock += 1;
+    else outOfStock += 1;
+  }
+  return { inStock, outOfStock };
+}
+function computeOverview(period, orders, customers, pageViews, abandoned, cartConversionRate, stock) {
+  const start = startDateForPeriod(period);
+  const prevStart = previousStartDateForPeriod(period);
+  const prevEnd = start;
+  const paidInPeriod = orders.filter(
+    (o) => o.status === "paid" && inRange(o.created_at, start)
+  );
+  const paidPrevPeriod = orders.filter(
+    (o) => o.status === "paid" && inRange(o.created_at, prevStart, prevEnd)
+  );
+  const revenue = paidInPeriod.reduce((s, o) => s + Number(o.total_amount), 0);
+  const revenuePrev = paidPrevPeriod.reduce((s, o) => s + Number(o.total_amount), 0);
+  const ordersCount = paidInPeriod.length;
+  const ordersPrev = paidPrevPeriod.length;
+  const viewsInPeriod = pageViews.filter((v) => inRange(v.created_at, start));
+  const viewsPrevPeriod = pageViews.filter(
+    (v) => inRange(v.created_at, prevStart, prevEnd)
+  );
+  const uniqueSessions = new Set(viewsInPeriod.map((v) => v.session_id)).size;
+  const uniqueSessionsPrev = new Set(viewsPrevPeriod.map((v) => v.session_id)).size;
+  const newCustomers = customers.filter((c) => inRange(c.created_at, start)).length;
+  const newCustomersPrev = customers.filter(
+    (c) => inRange(c.created_at, prevStart, prevEnd)
+  ).length;
+  return {
+    revenue,
+    revenueChange: prevStart ? pctChange(revenue, revenuePrev) : null,
+    orders: ordersCount,
+    ordersChange: prevStart ? pctChange(ordersCount, ordersPrev) : null,
+    averageOrderValue: ordersCount === 0 ? 0 : revenue / ordersCount,
+    visits: uniqueSessions,
+    visitsChange: prevStart ? pctChange(uniqueSessions, uniqueSessionsPrev) : null,
+    pageViews: viewsInPeriod.length,
+    newCustomers,
+    newCustomersChange: prevStart ? pctChange(newCustomers, newCustomersPrev) : null,
+    abandonedCarts: abandoned.count,
+    abandonedCartsValue: abandoned.value,
+    cartConversionRate,
+    productsInStock: stock.inStock,
+    productsOutOfStock: stock.outOfStock
+  };
+}
+function buildTimeSeries(period, orders, pageViews) {
+  const days = periodToDays(period) ?? 30;
+  const end = /* @__PURE__ */ new Date();
+  const start = startDateForPeriod(period) ?? new Date(Date.now() - days * MS_DAY);
+  const keys = buildDateRange(start, end);
+  const revenueByDay = /* @__PURE__ */ new Map();
+  const ordersByDay = /* @__PURE__ */ new Map();
+  const visitsByDay = /* @__PURE__ */ new Map();
+  const pageViewsByDay = /* @__PURE__ */ new Map();
+  for (const key of keys) {
+    revenueByDay.set(key, 0);
+    ordersByDay.set(key, 0);
+    visitsByDay.set(key, /* @__PURE__ */ new Set());
+    pageViewsByDay.set(key, 0);
+  }
+  for (const order of orders) {
+    if (order.status !== "paid") continue;
+    const key = toDateKey(order.created_at);
+    if (!revenueByDay.has(key)) continue;
+    revenueByDay.set(key, (revenueByDay.get(key) ?? 0) + Number(order.total_amount));
+    ordersByDay.set(key, (ordersByDay.get(key) ?? 0) + 1);
+  }
+  for (const view of pageViews) {
+    const key = toDateKey(view.created_at);
+    if (!visitsByDay.has(key)) continue;
+    visitsByDay.get(key).add(view.session_id);
+    pageViewsByDay.set(key, (pageViewsByDay.get(key) ?? 0) + 1);
+  }
+  return keys.map((date) => ({
+    date,
+    revenue: revenueByDay.get(date) ?? 0,
+    orders: ordersByDay.get(date) ?? 0,
+    visits: visitsByDay.get(date)?.size ?? 0,
+    pageViews: pageViewsByDay.get(date) ?? 0
+  }));
+}
+function buildStatusSlices(period, orders) {
+  const start = startDateForPeriod(period);
+  const filtered = orders.filter((o) => inRange(o.created_at, start));
+  const counts = /* @__PURE__ */ new Map();
+  for (const order of filtered) {
+    const status = order.status;
+    counts.set(status, (counts.get(status) ?? 0) + 1);
+  }
+  return ["paid", "pending", "canceled"].map((status) => ({
+    status,
+    label: ORDER_STATUS_LABELS[status],
+    count: counts.get(status) ?? 0
+  }));
+}
+function buildPaymentSlices(period, orders) {
+  const start = startDateForPeriod(period);
+  const filtered = orders.filter((o) => o.status === "paid" && inRange(o.created_at, start));
+  const map = /* @__PURE__ */ new Map();
+  for (const order of filtered) {
+    const method = order.payment_method;
+    const current = map.get(method) ?? { count: 0, revenue: 0 };
+    current.count += 1;
+    current.revenue += Number(order.total_amount);
+    map.set(method, current);
+  }
+  return ["pix", "credit_card", "boleto"].map((method) => ({
+    method,
+    label: PAYMENT_METHOD_LABELS[method],
+    count: map.get(method)?.count ?? 0,
+    revenue: map.get(method)?.revenue ?? 0
+  }));
+}
+async function buildRecentOrders(orders, customers) {
+  const nameMap = new Map(customers.map((c) => [c.id, String(c.full_name ?? "")]));
+  return orders.slice(0, 6).map((order) => ({
+    id: order.id,
+    customerName: order.customer_id ? nameMap.get(order.customer_id) || null : null,
+    totalAmount: Number(order.total_amount),
+    status: order.status,
+    createdAt: order.created_at
+  }));
+}
+async function getDashboardStats(period) {
+  const [
+    orders,
+    customers,
+    pageViews,
+    abandoned,
+    cartConversionRate,
+    stock,
+    topProducts
+  ] = await Promise.all([
+    fetchOrdersRows(),
+    fetchCustomerProfiles(),
+    fetchPageViews(),
+    fetchAbandonedCarts(),
+    fetchCartConversion(),
+    fetchProductStockCounts(),
+    fetchTopProducts(startDateForPeriod(period))
+  ]);
+  return {
+    period,
+    overview: computeOverview(
+      period,
+      orders,
+      customers,
+      pageViews,
+      abandoned,
+      cartConversionRate,
+      stock
+    ),
+    timeSeries: buildTimeSeries(period, orders, pageViews),
+    ordersByStatus: buildStatusSlices(period, orders),
+    paymentMethods: buildPaymentSlices(period, orders),
+    topProducts,
+    recentOrders: await buildRecentOrders(orders, customers)
+  };
+}
+
+// server/routes/adminDashboard.ts
+var router2 = Router2();
+var VALID_PERIODS = /* @__PURE__ */ new Set(["7d", "30d", "90d", "all"]);
+router2.get("/", requireAdmin, async (req, res) => {
+  try {
+    const raw = typeof req.query.period === "string" ? req.query.period : "30d";
+    const period = VALID_PERIODS.has(raw) ? raw : "30d";
+    const stats = await getDashboardStats(period);
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao carregar dashboard"
+    });
+  }
+});
+var adminDashboard_default = router2;
+
+// server/routes/adminNotifications.ts
+import { Router as Router3 } from "express";
 
 // server/services/adminNotifications.ts
 function mapNotificationRow(row) {
@@ -445,8 +765,8 @@ async function getUnreadCountByType() {
 }
 
 // server/routes/adminNotifications.ts
-var router2 = Router2();
-router2.get("/", requireAdmin, async (_req, res) => {
+var router3 = Router3();
+router3.get("/", requireAdmin, async (_req, res) => {
   try {
     const notifications = await listAdminNotifications();
     res.json(notifications);
@@ -456,7 +776,7 @@ router2.get("/", requireAdmin, async (_req, res) => {
     });
   }
 });
-router2.get("/unread-count", requireAdmin, async (_req, res) => {
+router3.get("/unread-count", requireAdmin, async (_req, res) => {
   try {
     const [count, byType] = await Promise.all([
       getUnreadNotificationCount(),
@@ -469,7 +789,7 @@ router2.get("/unread-count", requireAdmin, async (_req, res) => {
     });
   }
 });
-router2.patch("/read-all", requireAdmin, async (_req, res) => {
+router3.patch("/read-all", requireAdmin, async (_req, res) => {
   try {
     await markAllNotificationsAsRead();
     res.json({ success: true });
@@ -479,7 +799,7 @@ router2.patch("/read-all", requireAdmin, async (_req, res) => {
     });
   }
 });
-router2.patch("/:id/read", requireAdmin, async (req, res) => {
+router3.patch("/:id/read", requireAdmin, async (req, res) => {
   try {
     const notification = await markNotificationAsRead(req.params.id);
     res.json(notification);
@@ -489,7 +809,7 @@ router2.patch("/:id/read", requireAdmin, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-var adminNotifications_default = router2;
+var adminNotifications_default = router3;
 
 // shared/schemas/order.ts
 import { z as z2 } from "zod";
@@ -524,7 +844,7 @@ var orderStatusUpdateSchema = z2.object({
 });
 
 // server/routes/adminOrders.ts
-import { Router as Router3 } from "express";
+import { Router as Router4 } from "express";
 
 // shared/const/cart.ts
 var FREE_SHIPPING_THRESHOLD = 299;
@@ -677,8 +997,8 @@ async function updateOrderStatus(orderId, status) {
 }
 
 // server/routes/adminOrders.ts
-var router3 = Router3();
-router3.get("/", requireAdmin, async (_req, res) => {
+var router4 = Router4();
+router4.get("/", requireAdmin, async (_req, res) => {
   try {
     const orders = await listAllOrders();
     res.json(orders);
@@ -688,7 +1008,7 @@ router3.get("/", requireAdmin, async (_req, res) => {
     });
   }
 });
-router3.get("/:id", requireAdmin, async (req, res) => {
+router4.get("/:id", requireAdmin, async (req, res) => {
   try {
     const order = await getOrderById(req.params.id);
     res.json(order);
@@ -698,7 +1018,7 @@ router3.get("/:id", requireAdmin, async (req, res) => {
     res.status(status).json({ error: "Pedido n\xE3o encontrado" });
   }
 });
-router3.patch("/:id/status", requireAdmin, async (req, res) => {
+router4.patch("/:id/status", requireAdmin, async (req, res) => {
   try {
     const parsed = orderStatusUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -713,10 +1033,10 @@ router3.patch("/:id/status", requireAdmin, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-var adminOrders_default = router3;
+var adminOrders_default = router4;
 
 // server/routes/admin.ts
-var router4 = Router4();
+var router5 = Router5();
 function handleSingleImageUpload(req, res, next) {
   upload.single("file")(req, res, (error) => {
     if (error) {
@@ -727,7 +1047,7 @@ function handleSingleImageUpload(req, res, next) {
     next();
   });
 }
-router4.post("/login", (req, res) => {
+router5.post("/login", (req, res) => {
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!password) {
     res.status(400).json({ error: "Informe a senha" });
@@ -756,17 +1076,18 @@ router4.post("/login", (req, res) => {
   });
   res.json({ authenticated: true });
 });
-router4.post("/logout", (_req, res) => {
+router5.post("/logout", (_req, res) => {
   res.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
   res.json({ authenticated: false });
 });
-router4.get("/me", requireAdmin, (_req, res) => {
+router5.get("/me", requireAdmin, (_req, res) => {
   res.json({ authenticated: true });
 });
-router4.use("/orders", adminOrders_default);
-router4.use("/customers", adminCustomers_default);
-router4.use("/notifications", adminNotifications_default);
-router4.post("/uploads", requireAdmin, handleSingleImageUpload, async (req, res) => {
+router5.use("/orders", adminOrders_default);
+router5.use("/customers", adminCustomers_default);
+router5.use("/notifications", adminNotifications_default);
+router5.use("/dashboard", adminDashboard_default);
+router5.post("/uploads", requireAdmin, handleSingleImageUpload, async (req, res) => {
   try {
     if (!req.file) {
       res.status(400).json({ error: "Nenhum arquivo enviado" });
@@ -780,7 +1101,66 @@ router4.post("/uploads", requireAdmin, handleSingleImageUpload, async (req, res)
     });
   }
 });
-var admin_default = router4;
+var admin_default = router5;
+
+// server/routes/analytics.ts
+import { Router as Router6 } from "express";
+
+// server/lib/visitorSession.ts
+import crypto2 from "node:crypto";
+function generateVisitorSessionId() {
+  return crypto2.randomUUID();
+}
+function getVisitorSessionFromCookie(cookies) {
+  const value = cookies[VISITOR_SESSION_COOKIE];
+  if (!value || typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+function setVisitorSessionCookie(res, sessionId) {
+  const isProduction = process.env.NODE_ENV === "production";
+  res.cookie(VISITOR_SESSION_COOKIE, sessionId, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "lax",
+    maxAge: VISITOR_SESSION_MAX_AGE_MS,
+    path: "/"
+  });
+}
+
+// server/services/analytics.ts
+async function recordPageView(sessionId, path) {
+  const normalizedPath = path.split("?")[0].slice(0, 500) || "/";
+  const { error } = await supabase.from("store_page_views").insert({
+    session_id: sessionId,
+    path: normalizedPath
+  });
+  if (error) throw new Error(error.message);
+}
+
+// server/routes/analytics.ts
+var router6 = Router6();
+router6.post("/page-view", async (req, res) => {
+  try {
+    const path = typeof req.body?.path === "string" ? req.body.path : "/";
+    if (path.startsWith("/admin")) {
+      res.status(204).send();
+      return;
+    }
+    let sessionId = getVisitorSessionFromCookie(req.cookies ?? {});
+    if (!sessionId) {
+      sessionId = generateVisitorSessionId();
+      setVisitorSessionCookie(res, sessionId);
+    }
+    await recordPageView(sessionId, path);
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao registrar visita"
+    });
+  }
+});
+var analytics_default = router6;
 
 // shared/schemas/cart.ts
 import { z as z3 } from "zod";
@@ -798,7 +1178,7 @@ var cartApplyCouponSchema = z3.object({
 });
 
 // server/routes/cart.ts
-import { Router as Router5 } from "express";
+import { Router as Router7 } from "express";
 
 // shared/lib/cartMapper.ts
 function toNumber2(value) {
@@ -1308,9 +1688,9 @@ async function mergeGuestCartIntoCustomer(customerId, guestSessionId) {
 }
 
 // server/lib/cartSession.ts
-import crypto2 from "node:crypto";
+import crypto3 from "node:crypto";
 function generateCartSessionId() {
-  return crypto2.randomUUID();
+  return crypto3.randomUUID();
 }
 function getCartSessionFromCookie(cookies) {
   const value = cookies[CART_SESSION_COOKIE];
@@ -1394,9 +1774,9 @@ async function requireCustomerForMerge(req, res, next) {
 }
 
 // server/routes/cart.ts
-var router5 = Router5();
-router5.use(resolveCartIdentity);
-router5.get("/", async (req, res) => {
+var router7 = Router7();
+router7.use(resolveCartIdentity);
+router7.get("/", async (req, res) => {
   try {
     const cart = await getCart(req.cartIdentity);
     res.json(cart);
@@ -1406,7 +1786,7 @@ router5.get("/", async (req, res) => {
     });
   }
 });
-router5.post("/items", async (req, res) => {
+router7.post("/items", async (req, res) => {
   try {
     const parsed = cartAddItemSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1421,7 +1801,7 @@ router5.post("/items", async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router5.patch("/items/:itemId", async (req, res) => {
+router7.patch("/items/:itemId", async (req, res) => {
   try {
     const parsed = cartUpdateItemSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1436,7 +1816,7 @@ router5.patch("/items/:itemId", async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router5.delete("/items/:itemId", async (req, res) => {
+router7.delete("/items/:itemId", async (req, res) => {
   try {
     const cart = await removeCartItem(req.cartIdentity, req.params.itemId);
     res.json(cart);
@@ -1446,7 +1826,7 @@ router5.delete("/items/:itemId", async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router5.delete("/", async (req, res) => {
+router7.delete("/", async (req, res) => {
   try {
     const cart = await clearCart(req.cartIdentity);
     res.json(cart);
@@ -1456,7 +1836,7 @@ router5.delete("/", async (req, res) => {
     });
   }
 });
-router5.patch("/coupon", async (req, res) => {
+router7.patch("/coupon", async (req, res) => {
   try {
     const parsed = cartApplyCouponSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1471,7 +1851,7 @@ router5.patch("/coupon", async (req, res) => {
     });
   }
 });
-router5.post("/merge", requireCustomerForMerge, async (req, res) => {
+router7.post("/merge", requireCustomerForMerge, async (req, res) => {
   try {
     const customerId = req.cartIdentity.customerId;
     const guestSessionId = req.cartIdentity.sessionId;
@@ -1484,7 +1864,7 @@ router5.post("/merge", requireCustomerForMerge, async (req, res) => {
     });
   }
 });
-var cart_default = router5;
+var cart_default = router7;
 
 // shared/lib/phoneBr.ts
 function digitsOnly(value) {
@@ -1508,7 +1888,7 @@ var customerProfileUpdateSchema = z4.object({
 });
 
 // server/routes/customers.ts
-import { Router as Router6 } from "express";
+import { Router as Router8 } from "express";
 
 // server/middleware/requireCustomer.ts
 function getBearerToken2(req) {
@@ -1535,7 +1915,7 @@ async function requireCustomer(req, res, next) {
 }
 
 // server/routes/customers.ts
-var router6 = Router6();
+var router8 = Router8();
 function getMetadataName(user) {
   const metadata = user.user_metadata ?? {};
   return String(metadata.full_name ?? metadata.fullName ?? "").trim();
@@ -1576,7 +1956,7 @@ async function ensureProfileFromMetadata(userId, user, row) {
   }
   return data;
 }
-router6.get("/me", requireCustomer, async (req, res) => {
+router8.get("/me", requireCustomer, async (req, res) => {
   try {
     const userId = req.customerUserId;
     const user = req.customerUser;
@@ -1607,7 +1987,7 @@ router6.get("/me", requireCustomer, async (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : "Erro ao carregar perfil" });
   }
 });
-router6.put("/me", requireCustomer, async (req, res) => {
+router8.put("/me", requireCustomer, async (req, res) => {
   try {
     const userId = req.customerUserId;
     const user = req.customerUser;
@@ -1641,7 +2021,7 @@ router6.put("/me", requireCustomer, async (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : "Erro ao atualizar perfil" });
   }
 });
-router6.get("/me/addresses", requireCustomer, async (req, res) => {
+router8.get("/me/addresses", requireCustomer, async (req, res) => {
   try {
     const addresses = await listCustomerAddresses(req.customerUserId);
     res.json(addresses);
@@ -1651,7 +2031,7 @@ router6.get("/me/addresses", requireCustomer, async (req, res) => {
     });
   }
 });
-router6.post("/me/addresses", requireCustomer, async (req, res) => {
+router8.post("/me/addresses", requireCustomer, async (req, res) => {
   try {
     const parsed = customerAddressSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1666,7 +2046,7 @@ router6.post("/me/addresses", requireCustomer, async (req, res) => {
     });
   }
 });
-router6.put("/me/addresses/:id", requireCustomer, async (req, res) => {
+router8.put("/me/addresses/:id", requireCustomer, async (req, res) => {
   try {
     const parsed = customerAddressUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1685,7 +2065,7 @@ router6.put("/me/addresses/:id", requireCustomer, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router6.patch("/me/addresses/:id/default", requireCustomer, async (req, res) => {
+router8.patch("/me/addresses/:id/default", requireCustomer, async (req, res) => {
   try {
     const address = await setDefaultCustomerAddress(req.customerUserId, req.params.id);
     res.json(address);
@@ -1695,7 +2075,7 @@ router6.patch("/me/addresses/:id/default", requireCustomer, async (req, res) => 
     res.status(status).json({ error: message });
   }
 });
-router6.delete("/me/addresses/:id", requireCustomer, async (req, res) => {
+router8.delete("/me/addresses/:id", requireCustomer, async (req, res) => {
   try {
     await deleteCustomerAddress(req.customerUserId, req.params.id);
     res.status(204).send();
@@ -1705,12 +2085,12 @@ router6.delete("/me/addresses/:id", requireCustomer, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-var customers_default = router6;
+var customers_default = router8;
 
 // server/routes/orders.ts
-import { Router as Router7 } from "express";
-var router7 = Router7();
-router7.get("/me", requireCustomer, async (req, res) => {
+import { Router as Router9 } from "express";
+var router9 = Router9();
+router9.get("/me", requireCustomer, async (req, res) => {
   try {
     const orders = await listCustomerOrders(req.customerUserId);
     res.json(orders);
@@ -1720,7 +2100,7 @@ router7.get("/me", requireCustomer, async (req, res) => {
     });
   }
 });
-router7.get("/:id", requireCustomer, async (req, res) => {
+router9.get("/:id", requireCustomer, async (req, res) => {
   try {
     const order = await getCustomerOrder(req.customerUserId, req.params.id);
     res.json(order);
@@ -1730,7 +2110,7 @@ router7.get("/:id", requireCustomer, async (req, res) => {
     res.status(status).json({ error: "Pedido n\xE3o encontrado" });
   }
 });
-router7.post("/checkout", requireCustomer, async (req, res) => {
+router9.post("/checkout", requireCustomer, async (req, res) => {
   try {
     const parsed = checkoutSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1745,7 +2125,7 @@ router7.post("/checkout", requireCustomer, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-var orders_default = router7;
+var orders_default = router9;
 
 // shared/schemas/product.ts
 import { z as z5 } from "zod";
@@ -1796,9 +2176,9 @@ var productSchema = z5.object({
 });
 
 // server/routes/products.ts
-import { Router as Router8 } from "express";
-var router8 = Router8();
-router8.get("/", async (req, res) => {
+import { Router as Router10 } from "express";
+var router10 = Router10();
+router10.get("/", async (req, res) => {
   try {
     const category = typeof req.query.category === "string" ? req.query.category : void 0;
     const products = await listProducts(category);
@@ -1809,7 +2189,7 @@ router8.get("/", async (req, res) => {
     });
   }
 });
-router8.get("/:slug", async (req, res) => {
+router10.get("/:slug", async (req, res) => {
   try {
     const product = await getProductBySlug(req.params.slug);
     if (!product) {
@@ -1823,7 +2203,7 @@ router8.get("/:slug", async (req, res) => {
     });
   }
 });
-router8.post("/", requireAdmin, async (req, res) => {
+router10.post("/", requireAdmin, async (req, res) => {
   try {
     const parsed = productSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1843,7 +2223,7 @@ router8.post("/", requireAdmin, async (req, res) => {
     });
   }
 });
-router8.post("/bulk", requireAdmin, async (req, res) => {
+router10.post("/bulk", requireAdmin, async (req, res) => {
   try {
     const items = Array.isArray(req.body?.products) ? req.body.products : null;
     if (!items) {
@@ -1872,7 +2252,7 @@ router8.post("/bulk", requireAdmin, async (req, res) => {
     });
   }
 });
-router8.put("/:slug", requireAdmin, async (req, res) => {
+router10.put("/:slug", requireAdmin, async (req, res) => {
   try {
     const parsed = productSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1897,7 +2277,7 @@ router8.put("/:slug", requireAdmin, async (req, res) => {
     });
   }
 });
-router8.delete("/:slug", requireAdmin, async (req, res) => {
+router10.delete("/:slug", requireAdmin, async (req, res) => {
   try {
     const deleted = await deleteProduct(req.params.slug);
     if (!deleted) {
@@ -1911,7 +2291,7 @@ router8.delete("/:slug", requireAdmin, async (req, res) => {
     });
   }
 });
-var products_default = router8;
+var products_default = router10;
 
 // server/app.ts
 function createApiApp() {
@@ -1919,6 +2299,7 @@ function createApiApp() {
   app2.use(express.json());
   app2.use(cookieParser());
   app2.use("/api/admin", admin_default);
+  app2.use("/api/analytics", analytics_default);
   app2.use("/api/cart", cart_default);
   app2.use("/api/customers", customers_default);
   app2.use("/api/orders", orders_default);

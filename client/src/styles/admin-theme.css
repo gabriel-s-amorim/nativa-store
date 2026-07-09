@@ -1,0 +1,140 @@
+/* Painel admin — visual profissional separado da loja */
+
+.admin-app {
+  --admin-bg: #eef1f6;
+  --admin-bg-subtle: #e4e9f0;
+  --admin-surface: #ffffff;
+  --admin-surface-hover: #f8fafc;
+  --admin-border: #e2e8f0;
+  --admin-border-strong: #cbd5e1;
+  --admin-text: #0f172a;
+  --admin-text-secondary: #475569;
+  --admin-text-muted: #94a3b8;
+  --admin-accent: #c4522a;
+  --admin-accent-soft: rgba(196, 82, 42, 0.1);
+  --admin-success: #059669;
+  --admin-success-soft: rgba(5, 150, 105, 0.1);
+  --admin-warning: #d97706;
+  --admin-warning-soft: rgba(217, 119, 6, 0.1);
+  --admin-danger: #dc2626;
+  --admin-danger-soft: rgba(220, 38, 38, 0.08);
+  --admin-sidebar: #ffffff;
+  --admin-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --admin-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --admin-radius: 0.875rem;
+  --admin-radius-lg: 1.125rem;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  color: var(--admin-text);
+  background: var(--admin-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.admin-app h1,
+.admin-app h2,
+.admin-app h3 {
+  font-family: "Inter", system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.admin-card {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-lg);
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-card-muted {
+  background: var(--admin-surface-hover);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+}
+
+.admin-kpi {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-lg);
+  box-shadow: var(--admin-shadow);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.admin-kpi:hover {
+  box-shadow: var(--admin-shadow-md);
+}
+
+.admin-input {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  border-radius: var(--admin-radius);
+}
+
+.admin-input:focus-visible {
+  border-color: var(--admin-accent);
+  ring-color: var(--admin-accent-soft);
+}
+
+.admin-period-pill {
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  transition: all 0.15s ease;
+}
+
+.admin-period-pill-active {
+  background: var(--admin-text);
+  color: white;
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-period-pill-inactive {
+  background: var(--admin-surface);
+  color: var(--admin-text-secondary);
+  border: 1px solid var(--admin-border);
+}
+
+.admin-period-pill-inactive:hover {
+  background: var(--admin-surface-hover);
+  border-color: var(--admin-border-strong);
+}
+
+.admin-nav-active {
+  background: var(--admin-text) !important;
+  color: white !important;
+}
+
+.admin-bottom-nav {
+  background: rgba(255, 255, 255, 0.92);
+  border-top: 1px solid var(--admin-border);
+  backdrop-filter: blur(12px);
+}
+
+.admin-sidebar {
+  background: var(--admin-sidebar);
+  border-color: var(--admin-border);
+}
+
+.admin-header {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: var(--admin-border);
+  backdrop-filter: blur(12px);
+}
+
+.admin-login-bg {
+  background: linear-gradient(145deg, #eef1f6 0%, #e4e9f0 50%, #dce3ec 100%);
+}
+
+.admin-chart-grid line {
+  stroke: var(--admin-border);
+}
+
+.admin-trend-up {
+  color: var(--admin-success);
+}
+
+.admin-trend-down {
+  color: var(--admin-danger);
+}
+
+.admin-trend-neutral {
+  color: var(--admin-text-muted);
+}

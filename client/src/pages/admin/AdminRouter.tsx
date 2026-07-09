@@ -5,6 +5,7 @@ import NotFound from "@/pages/NotFound";
 import { Redirect, Route, Switch } from "wouter";
 import AdminCustomerDetail from "./AdminCustomerDetail";
 import AdminCustomersList from "./AdminCustomersList";
+import AdminDashboard from "./AdminDashboard";
 import AdminLogin from "./AdminLogin";
 import AdminOrderDetail from "./AdminOrderDetail";
 import AdminOrdersList from "./AdminOrdersList";
@@ -27,7 +28,12 @@ export default function AdminRouter() {
       <Switch>
         <Route path="/admin/login" component={AdminLogin} />
         <Route path="/admin">
-          <Redirect to="/admin/produtos" />
+          <Redirect to="/admin/dashboard" />
+        </Route>
+        <Route path="/admin/dashboard">
+          <ProtectedAdmin>
+            <AdminDashboard />
+          </ProtectedAdmin>
         </Route>
         <Route path="/admin/produtos">
           <ProtectedAdmin>

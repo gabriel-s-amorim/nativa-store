@@ -10,6 +10,7 @@ import { upload } from "../lib/upload";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { uploadProductImage } from "../services/uploads";
 import adminCustomersRouter from "./adminCustomers";
+import adminDashboardRouter from "./adminDashboard";
 import adminNotificationsRouter from "./adminNotifications";
 import adminOrdersRouter from "./adminOrders";
 
@@ -75,6 +76,7 @@ router.get("/me", requireAdmin, (_req, res) => {
 router.use("/orders", adminOrdersRouter);
 router.use("/customers", adminCustomersRouter);
 router.use("/notifications", adminNotificationsRouter);
+router.use("/dashboard", adminDashboardRouter);
 
 router.post("/uploads", requireAdmin, handleSingleImageUpload, async (req, res) => {
   try {

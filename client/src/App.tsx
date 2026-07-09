@@ -1,4 +1,5 @@
 import AuthHashRouter from "@/components/auth/AuthHashRouter";
+import StorePageViewTracker from "@/components/analytics/StorePageViewTracker";
 import { Spinner } from "@/components/ui/spinner";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -27,8 +28,8 @@ const AdminRouter = lazy(() => import("./pages/admin/AdminRouter"));
 
 function AdminFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F5F0E8]">
-      <Spinner className="size-8 text-[#C4522A]" />
+    <div className="flex min-h-screen items-center justify-center admin-login-bg">
+      <Spinner className="size-8 text-[#475569]" />
     </div>
   );
 }
@@ -82,6 +83,7 @@ function App() {
             <AuthHashRouter />
             <TooltipProvider>
               <Toaster />
+              <StorePageViewTracker />
               <CartDrawer />
               <Router />
             </TooltipProvider>

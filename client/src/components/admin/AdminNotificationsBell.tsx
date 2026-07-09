@@ -117,7 +117,7 @@ export default function AdminNotificationsBell() {
   }
 
   const triggerButton = (
-    <Button variant="outline" size="icon-sm" className="relative border-[#E8D5C4] sm:size-9">
+        <Button variant="outline" size="icon-sm" className="relative border-[var(--admin-border)] sm:size-9">
       <Bell className="size-4" />
       {unreadCount > 0 && (
         <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#C4522A] px-1 text-[9px] font-bold text-white">
