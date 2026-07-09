@@ -138,49 +138,56 @@ function CustomerAccountContent() {
 
   return (
     <AuthPageShell centered={false}>
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="mx-auto w-full max-w-3xl min-w-0">
         {/* Hero do perfil */}
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#C4522A] via-[#D4653A] to-[#E8821A] px-6 py-8 text-white shadow-[0_24px_60px_-20px_rgba(196,82,42,0.55)] md:px-8 md:py-10">
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#C4522A] via-[#D4653A] to-[#E8821A] px-4 py-6 text-white shadow-[0_24px_60px_-20px_rgba(196,82,42,0.55)] sm:rounded-3xl sm:px-6 sm:py-8 md:px-8 md:py-10">
           <div className="pointer-events-none absolute -right-8 -top-8 size-40 rounded-full bg-white/10 blur-2xl" aria-hidden />
           <div className="pointer-events-none absolute -bottom-10 left-1/4 size-32 rounded-full bg-[#2D6A4F]/20 blur-2xl" aria-hidden />
 
-          <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
               <div
-                className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-xl font-bold backdrop-blur-sm ring-1 ring-white/30"
+                className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-lg font-bold backdrop-blur-sm ring-1 ring-white/30 sm:size-16 sm:text-xl"
                 style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
               >
                 {getInitials(displayName)}
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p
-                  className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80"
+                  className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 sm:text-xs"
                   style={{ fontFamily: "'Nunito', sans-serif" }}
                 >
                   Minha conta
                 </p>
                 <h1
-                  className="mt-1 text-2xl font-bold md:text-3xl"
+                  className="mt-1 break-words text-xl font-bold leading-tight sm:text-2xl md:text-3xl"
                   style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
                 >
                   {displayName}
                 </h1>
-                <p className="mt-1 text-sm text-white/85" style={{ fontFamily: "'Nunito', sans-serif" }}>
+                <p
+                  className="mt-1 truncate text-sm text-white/85"
+                  style={{ fontFamily: "'Nunito', sans-serif" }}
+                  title={profile?.email ?? user?.email ?? ""}
+                >
                   {profile?.email ?? user?.email ?? ""}
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2">
                   {profile?.emailVerified ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium backdrop-blur-sm">
-                      <BadgeCheck className="size-3.5" />
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm sm:px-2.5 sm:py-1 sm:text-xs">
+                      <BadgeCheck className="size-3 sm:size-3.5" />
                       E-mail confirmado
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-black/15 px-2.5 py-1 text-xs font-medium">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-black/15 px-2 py-0.5 text-[10px] font-medium sm:px-2.5 sm:py-1 sm:text-xs">
                       Confirme seu e-mail
                     </span>
                   )}
                   {memberSince && (
-                    <span className="text-xs text-white/75" style={{ fontFamily: "'Nunito', sans-serif" }}>
+                    <span
+                      className="text-[10px] text-white/75 sm:text-xs"
+                      style={{ fontFamily: "'Nunito', sans-serif" }}
+                    >
                       Cliente desde {memberSince}
                     </span>
                   )}
@@ -192,7 +199,7 @@ function CustomerAccountContent() {
               variant="outline"
               onClick={handleLogout}
               disabled={loadingProfile}
-              className="shrink-0 rounded-xl border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              className="w-full shrink-0 rounded-xl border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white sm:w-auto"
             >
               <LogOut className="mr-2 size-4" />
               Sair
@@ -200,42 +207,42 @@ function CustomerAccountContent() {
           </div>
         </section>
 
-        {/* Abas */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8 gap-6">
-          <TabsList className="h-auto w-full justify-start gap-1 rounded-2xl border border-[#E8D5C4] bg-white/80 p-1.5 shadow-sm">
+        {/* Abas — grid 2×2 no mobile; linha única a partir de lg */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6 gap-5 sm:mt-8 sm:gap-6">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-[#E8D5C4] bg-white/80 p-1.5 shadow-sm lg:inline-flex lg:w-full lg:justify-start lg:gap-1">
             <TabsTrigger
               value="profile"
-              className="flex-1 rounded-xl px-4 py-2.5 data-[state=active]:bg-[#C4522A] data-[state=active]:text-white data-[state=active]:shadow-md sm:flex-none"
+              className="flex min-h-11 w-full flex-none items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold sm:gap-2 sm:px-4 sm:text-sm lg:flex-none data-[state=active]:bg-[#C4522A] data-[state=active]:text-white data-[state=active]:shadow-md"
             >
-              <UserCircle className="size-4" />
-              Meus dados
+              <UserCircle className="size-4 shrink-0" />
+              <span>Meus dados</span>
             </TabsTrigger>
             <TabsTrigger
               value="addresses"
-              className="flex-1 rounded-xl px-4 py-2.5 data-[state=active]:bg-[#C4522A] data-[state=active]:text-white data-[state=active]:shadow-md sm:flex-none"
+              className="flex min-h-11 w-full flex-none items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold sm:gap-2 sm:px-4 sm:text-sm lg:flex-none data-[state=active]:bg-[#C4522A] data-[state=active]:text-white data-[state=active]:shadow-md"
             >
-              <MapPin className="size-4" />
-              Endereços
+              <MapPin className="size-4 shrink-0" />
+              <span>Endereços</span>
             </TabsTrigger>
             <TabsTrigger
               value="orders"
-              className="flex-1 rounded-xl px-4 py-2.5 data-[state=active]:bg-[#C4522A] data-[state=active]:text-white data-[state=active]:shadow-md sm:flex-none"
+              className="flex min-h-11 w-full flex-none items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold sm:gap-2 sm:px-4 sm:text-sm lg:flex-none data-[state=active]:bg-[#C4522A] data-[state=active]:text-white data-[state=active]:shadow-md"
             >
-              <Package className="size-4" />
-              Pedidos
+              <Package className="size-4 shrink-0" />
+              <span>Pedidos</span>
             </TabsTrigger>
             <TabsTrigger
               value="security"
-              className="flex-1 rounded-xl px-4 py-2.5 data-[state=active]:bg-[#C4522A] data-[state=active]:text-white data-[state=active]:shadow-md sm:flex-none"
+              className="flex min-h-11 w-full flex-none items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold sm:gap-2 sm:px-4 sm:text-sm lg:flex-none data-[state=active]:bg-[#C4522A] data-[state=active]:text-white data-[state=active]:shadow-md"
             >
-              <Shield className="size-4" />
-              Segurança
+              <Shield className="size-4 shrink-0" />
+              <span>Segurança</span>
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile">
             <Card className="border-[#E8D5C4]/90 bg-white/95 shadow-lg">
-              <CardContent className="p-6 md:p-8">
+              <CardContent className="p-4 sm:p-6 md:p-8">
                 {loadingProfile ? (
                   <div className="flex items-center justify-center py-16">
                     <Spinner className="size-7 text-[#C4522A]" />
@@ -297,7 +304,7 @@ function CustomerAccountContent() {
                     <div className="flex flex-col gap-3 border-t border-[#E8D5C4]/80 pt-5 sm:flex-row sm:items-center">
                       <Button
                         type="submit"
-                        className="nativa-btn-primary rounded-xl px-8"
+                        className="nativa-btn-primary w-full rounded-xl px-8 sm:w-auto"
                         disabled={savingProfile || !fullName.trim() || phoneInvalid}
                       >
                         {savingProfile ? <Spinner className="size-4" /> : "Salvar dados"}
@@ -316,7 +323,7 @@ function CustomerAccountContent() {
 
           <TabsContent value="addresses">
             <Card className="border-[#E8D5C4]/90 bg-white/95 shadow-lg">
-              <CardContent className="p-6 md:p-8">
+              <CardContent className="p-4 sm:p-6 md:p-8">
                 <div className="mb-6">
                   <h2
                     className="text-lg font-semibold text-[#3D2B1F]"
@@ -338,7 +345,7 @@ function CustomerAccountContent() {
 
           <TabsContent value="orders">
             <Card className="border-[#E8D5C4]/90 bg-white/95 shadow-lg">
-              <CardContent className="p-6 md:p-8">
+              <CardContent className="p-4 sm:p-6 md:p-8">
                 <div className="mb-6">
                   <h2
                     className="text-lg font-semibold text-[#3D2B1F]"
@@ -362,7 +369,7 @@ function CustomerAccountContent() {
 
           <TabsContent value="security">
             <Card className="border-[#E8D5C4]/90 bg-white/95 shadow-lg">
-              <CardContent className="p-6 md:p-8">
+              <CardContent className="p-4 sm:p-6 md:p-8">
                 <div className="mb-6">
                   <h2
                     className="text-lg font-semibold text-[#3D2B1F]"
@@ -378,7 +385,7 @@ function CustomerAccountContent() {
                   </p>
                 </div>
 
-                <form onSubmit={handleChangePassword} className="flex max-w-md flex-col gap-4">
+                <form onSubmit={handleChangePassword} className="flex w-full max-w-md flex-col gap-4">
                   <AuthInputField
                     id="customer-new-password"
                     label="Nova senha"
@@ -412,7 +419,7 @@ function CustomerAccountContent() {
                   <Button
                     type="submit"
                     variant="outline"
-                    className="w-fit rounded-xl border-[#C4522A]/30 px-6 text-[#C4522A] hover:bg-[#C4522A]/5"
+                    className="w-full rounded-xl border-[#C4522A]/30 px-6 text-[#C4522A] hover:bg-[#C4522A]/5 sm:w-fit"
                     disabled={
                       savingPassword ||
                       !newPassword ||

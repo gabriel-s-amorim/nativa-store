@@ -170,7 +170,7 @@ export default function CustomerAddressesSection({ token }: CustomerAddressesSec
           <Button
             type="button"
             onClick={openCreateForm}
-            className="nativa-btn-primary shrink-0 rounded-xl"
+            className="nativa-btn-primary w-full shrink-0 rounded-xl sm:w-auto"
           >
             <Plus className="mr-2 size-4" />
             Novo endereço
@@ -181,7 +181,7 @@ export default function CustomerAddressesSection({ token }: CustomerAddressesSec
       {showForm && (
         <form
           onSubmit={handleSubmit}
-          className="rounded-2xl border border-[#E8D5C4] bg-[#FFFCF8] p-5 md:p-6"
+          className="rounded-2xl border border-[#E8D5C4] bg-[#FFFCF8] p-4 sm:p-5 md:p-6"
         >
           <h3
             className="mb-4 text-lg font-semibold text-[#3D2B1F]"
@@ -199,11 +199,11 @@ export default function CustomerAddressesSection({ token }: CustomerAddressesSec
             disabled={saving}
           />
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button type="submit" disabled={saving} className="nativa-btn-primary rounded-xl">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Button type="submit" disabled={saving} className="nativa-btn-primary w-full rounded-xl sm:w-auto">
               {saving ? <Spinner className="size-4" /> : editingId ? "Salvar alterações" : "Salvar endereço"}
             </Button>
-            <Button type="button" variant="outline" onClick={closeForm} className="rounded-xl">
+            <Button type="button" variant="outline" onClick={closeForm} className="w-full rounded-xl sm:w-auto">
               Cancelar
             </Button>
           </div>
@@ -224,7 +224,7 @@ export default function CustomerAddressesSection({ token }: CustomerAddressesSec
           <p className="mx-auto mt-2 max-w-sm text-sm text-[#8B6F5E]" style={{ fontFamily: "'Nunito', sans-serif" }}>
             Cadastre seu endereço para agilizar o checkout nas próximas compras.
           </p>
-          <Button type="button" onClick={openCreateForm} className="nativa-btn-primary mt-6 rounded-xl">
+          <Button type="button" onClick={openCreateForm} className="nativa-btn-primary mt-6 w-full rounded-xl sm:w-auto">
             <Plus className="mr-2 size-4" />
             Cadastrar endereço
           </Button>
@@ -234,7 +234,7 @@ export default function CustomerAddressesSection({ token }: CustomerAddressesSec
           {addresses.map((address) => (
             <article
               key={address.id}
-              className={`relative rounded-2xl border bg-white p-5 shadow-sm transition-shadow hover:shadow-md ${
+              className={`relative rounded-2xl border bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5 ${
                 address.isDefault ? "border-[#C4522A]/40 ring-1 ring-[#C4522A]/10" : "border-[#E8D5C4]"
               }`}
             >
@@ -262,13 +262,13 @@ export default function CustomerAddressesSection({ token }: CustomerAddressesSec
               </p>
               <p className="mt-1 text-xs text-[#8B6F5E]">CEP {formatCepDisplay(address.cep)}</p>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={() => openEditForm(address)}
-                  className="rounded-lg border-[#E8D5C4] text-[#3D2B1F]"
+                  className="col-span-2 rounded-lg border-[#E8D5C4] text-[#3D2B1F] sm:col-span-1"
                 >
                   <Pencil className="mr-1.5 size-3.5" />
                   Editar

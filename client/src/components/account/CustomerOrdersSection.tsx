@@ -182,7 +182,7 @@ function OrderCard({
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-start gap-4 p-5 text-left"
+        className="flex w-full items-start gap-3 p-4 text-left sm:gap-4 sm:p-5"
       >
         <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#C4522A]/12 to-[#E8821A]/10">
           <Package className="size-5 text-[#C4522A]" />
@@ -220,7 +220,7 @@ function OrderCard({
       </button>
 
       {isOpen && (
-        <div className="px-5 pb-5">
+        <div className="px-4 pb-4 sm:px-5 sm:pb-5">
           {loadingDetail ? (
             <div className="flex justify-center py-8">
               <Spinner className="size-6 text-[#C4522A]" />
