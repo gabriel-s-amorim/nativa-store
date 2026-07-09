@@ -3,6 +3,7 @@ import express from "express";
 import adminRouter from "./routes/admin";
 import cartRouter from "./routes/cart";
 import customersRouter from "./routes/customers";
+import ordersRouter from "./routes/orders";
 import productsRouter from "./routes/products";
 
 export function createApiApp() {
@@ -13,6 +14,7 @@ export function createApiApp() {
   app.use("/api/admin", adminRouter);
   app.use("/api/cart", cartRouter);
   app.use("/api/customers", customersRouter);
+  app.use("/api/orders", ordersRouter);
   app.use("/api/products", productsRouter);
 
   return app;
