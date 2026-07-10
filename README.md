@@ -159,13 +159,25 @@ Outras notas de engenharia: admin carregado com **lazy route** (não infla o bun
 
 ## Screenshots
 
-> Substitua pelos prints reais do deploy — recrutadores abrem o README e param nos visuais.
+<p align="center"><b>Home</b> — banner de destaque e vitrine de produtos</p>
+<p align="center">
+  <img src="docs/screenshots/Home-Banner.webp" alt="Home da loja Nativa Store" width="850" />
+</p>
 
-| Loja | Admin |
-|------|-------|
-| ![Home](docs/screenshots/Home-Banner.webp) | ![Dashboard](docs/screenshots/admin-dashboard.webp) |
-| ![Produto](docs/screenshots/produto.webp) | ![Pedidos](docs/screenshots/admin-orders.png) |
-| ![Carrinho](docs/screenshots/cart.png) | ![Produtos](docs/screenshots/admin-products.png) |
+<p align="center"><b>Página de produto</b> — galeria, variações e informações do artesão</p>
+<p align="center">
+  <img src="docs/screenshots/produto.webp" alt="Página de produto" width="850" />
+</p>
+
+<p align="center"><b>Painel admin</b> — dashboard com métricas de vendas e gráficos</p>
+<p align="center">
+  <img src="docs/screenshots/admin-dashboard.webp" alt="Dashboard administrativo" width="850" />
+</p>
+
+<p align="center"><b>Painel admin</b> — gestão de pedidos</p>
+<p align="center">
+  <img src="docs/screenshots/admin-orders.webp" alt="Gestão de pedidos no admin" width="850" />
+</p>
 
 ---
 
