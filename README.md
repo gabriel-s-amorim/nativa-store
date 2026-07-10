@@ -17,7 +17,7 @@
 
 ---
 
-## Por que este projeto
+## Por que este projeto?
 
 Diferente de demonstrações simplificadas, este projeto foi desenvolvido para representar uma operação real de e-commerce, incluindo autenticação, persistência de dados, painel administrativo e migração de um catálogo existente — não um CRUD de tutorial.
 
