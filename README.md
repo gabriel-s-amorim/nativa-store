@@ -9,6 +9,7 @@
 
 <p align="center">
   <img alt="Status" src="https://img.shields.io/badge/status-em%20desenvolvimento-yellow">
+  <a href="docs/importacao-em-massa.md"><img alt="Documentação" src="https://img.shields.io/badge/Documentação-Guias-blue?logo=readthedocs&logoColor=white"></a>
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white"></a>
   <a href="https://react.dev/"><img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black"></a>
   <a href="https://vitejs.dev/"><img alt="Vite" src="https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white"></a>
@@ -22,7 +23,6 @@
 <p align="center">
   <a href="https://nativa-store.vercel.app"><img alt="Demo" src="https://img.shields.io/badge/Demo-Online-4CAF50?logo=vercel&logoColor=white"></a>
   <a href="https://github.com/gabrielweweewe/nativa-store"><img alt="Repositório" src="https://img.shields.io/badge/Repositório-GitHub-181717?logo=github&logoColor=white"></a>
-  <a href="AGENTS.md"><img alt="Documentação" src="https://img.shields.io/badge/Documentação-AGENTS.md-blue?logo=readthedocs&logoColor=white"></a>
 </p>
 
 <p align="center"><b>Projeto inspirado na operação da marca:</b> <a href="https://www.nativa.art.br">nativa.art.br</a></p>
@@ -265,7 +265,7 @@ pnpm dev             # client :3000 + API :3001
 | `pnpm migrate:nuvemshop` | Reimporta catálogo a partir do CSV Nuvemshop |
 | `pnpm seed` | Insere produtos de exemplo |
 
-Detalhes de variáveis e armadilhas: ver [`.env.example`](.env.example) e [`AGENTS.md`](AGENTS.md).
+Detalhes de variáveis e armadilhas: ver [`.env.example`](.env.example).
 
 ---
 
@@ -310,7 +310,6 @@ Detalhes de variáveis e armadilhas: ver [`.env.example`](.env.example) e [`AGEN
 
 | Arquivo | Conteúdo |
 |---------|----------|
-| [`AGENTS.md`](AGENTS.md) | Onboarding técnico completo (API, SQL, convenções) |
 | [`docs/importacao-em-massa.md`](docs/importacao-em-massa.md) | Guia da importação CSV/XLSX |
 | [`ideas.md`](ideas.md) | Direção de design da marca |
 
