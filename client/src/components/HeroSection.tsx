@@ -35,7 +35,7 @@ const feathers = [
 ];
 
 const IMAGE_CLASS =
-  "w-full h-[50vh] max-h-[330px] sm:h-[52vh] sm:max-h-[380px] md:h-auto md:max-h-[min(72vh,720px)] object-cover block select-none";
+  "w-full h-[50vh] max-h-[330px] sm:h-[52vh] sm:max-h-[380px] md:h-auto md:max-h-none object-cover block select-none";
 
 const AUTOPLAY_MS = 5500;
 
