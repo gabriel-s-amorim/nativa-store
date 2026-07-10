@@ -108,7 +108,7 @@ export default function AdminOrdersList() {
       <Card className="admin-card mt-4 border-0 p-3 sm:p-4">
         <div className="flex flex-col gap-3">
           <div className="relative w-full">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8B6F5E]" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--admin-text-muted)]" />
             <Input
               placeholder="Buscar pedido, cliente ou e-mail..."
               value={search}
@@ -146,7 +146,7 @@ export default function AdminOrdersList() {
 
       <Card className="admin-card mt-4 overflow-hidden border-0">
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 p-12 text-[#8B6F5E]">
+          <div className="flex items-center justify-center gap-2 p-12 text-[var(--admin-text-muted)]">
             <Spinner className="size-5" />
             Carregando pedidos...
           </div>
@@ -163,13 +163,13 @@ export default function AdminOrdersList() {
                 <AdminMobileCard key={order.id} href={`/admin/pedidos/${order.id}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-semibold text-[#C4522A]">
+                      <p className="font-semibold text-[var(--admin-accent)]">
                         #{formatOrderShortId(order.id)}
                       </p>
-                      <p className="mt-0.5 truncate text-sm font-medium text-[#3D2B1F]">
+                      <p className="mt-0.5 truncate text-sm font-medium text-[var(--admin-text)]">
                         {order.customerName || "Cliente removido"}
                       </p>
-                      <p className="truncate text-xs text-[#8B6F5E]">
+                      <p className="truncate text-xs text-[var(--admin-text-muted)]">
                         {new Date(order.createdAt).toLocaleDateString("pt-BR")} ·{" "}
                         {PAYMENT_METHOD_LABELS[order.paymentMethod]} · {order.itemCount}{" "}
                         {order.itemCount === 1 ? "item" : "itens"}
@@ -177,8 +177,7 @@ export default function AdminOrdersList() {
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-2">
                       <p
-                        className="text-base font-bold text-[#3D2B1F]"
-                        style={{ fontFamily: "'Playfair Display', serif" }}
+                        className="text-base font-bold text-[var(--admin-text)]"
                       >
                         {formatPrice(order.totalAmount)}
                       </p>
@@ -209,29 +208,29 @@ export default function AdminOrdersList() {
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order) => (
-                    <TableRow key={order.id} className="cursor-pointer hover:bg-[#FAF7F2]/80">
+                    <TableRow key={order.id} className="cursor-pointer hover:bg-[var(--admin-surface-hover)]">
                       <TableCell>
                         <Link
                           href={`/admin/pedidos/${order.id}`}
-                          className="font-semibold text-[#C4522A] hover:underline"
+                          className="font-semibold text-[var(--admin-accent)] hover:underline"
                         >
                           #{formatOrderShortId(order.id)}
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium text-[#3D2B1F]">
+                        <div className="font-medium text-[var(--admin-text)]">
                           {order.customerName || "Cliente removido"}
                         </div>
-                        <div className="text-xs text-[#8B6F5E]">{order.customerEmail || "—"}</div>
+                        <div className="text-xs text-[var(--admin-text-muted)]">{order.customerEmail || "—"}</div>
                       </TableCell>
-                      <TableCell className="text-[#8B6F5E]">
+                      <TableCell className="text-[var(--admin-text-muted)]">
                         {new Date(order.createdAt).toLocaleDateString("pt-BR")}
                       </TableCell>
                       <TableCell>{order.itemCount}</TableCell>
-                      <TableCell className="font-medium text-[#3D2B1F]">
+                      <TableCell className="font-medium text-[var(--admin-text)]">
                         {formatPrice(order.totalAmount)}
                       </TableCell>
-                      <TableCell className="text-[#8B6F5E]">
+                      <TableCell className="text-[var(--admin-text-muted)]">
                         {PAYMENT_METHOD_LABELS[order.paymentMethod]}
                       </TableCell>
                       <TableCell>

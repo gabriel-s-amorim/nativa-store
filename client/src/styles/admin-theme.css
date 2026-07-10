@@ -227,6 +227,21 @@
   color: var(--admin-text-muted);
 }
 
+.admin-btn-primary {
+  background: var(--admin-text) !important;
+  color: white !important;
+  border: none;
+  font-weight: 600;
+}
+
+.admin-btn-primary:hover {
+  background: #1e293b !important;
+}
+
+.admin-btn-primary:disabled {
+  opacity: 0.6;
+}
+
 /* Formulário de produto — abas scrolláveis no mobile */
 .admin-product-tabs-list {
   scrollbar-width: none;

@@ -15,8 +15,8 @@ export default function RequireAdminAuth({ children }: { children: ReactNode }) 
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F5F0E8]">
-        <Spinner className="size-8 text-[#C4522A]" />
+      <div className="flex min-h-screen items-center justify-center bg-[var(--admin-surface-hover)]">
+        <Spinner className="size-8 text-[var(--admin-accent)]" />
       </div>
     );
   }

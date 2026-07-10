@@ -81,7 +81,7 @@ export default function AdminCustomersList() {
 
       <Card className="admin-card mt-4 border-0 p-3 sm:p-4">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8B6F5E]" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--admin-text-muted)]" />
           <Input
             placeholder="Buscar nome, e-mail ou telefone..."
             value={search}
@@ -93,7 +93,7 @@ export default function AdminCustomersList() {
 
       <Card className="admin-card mt-4 overflow-hidden border-0">
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 p-12 text-[#8B6F5E]">
+          <div className="flex items-center justify-center gap-2 p-12 text-[var(--admin-text-muted)]">
             <Spinner className="size-5" />
             Carregando clientes...
           </div>
@@ -110,11 +110,11 @@ export default function AdminCustomersList() {
                 <AdminMobileCard key={customer.id} href={`/admin/clientes/${customer.id}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[#3D2B1F]">
+                      <p className="truncate text-sm font-semibold text-[var(--admin-text)]">
                         {customer.fullName || "Sem nome"}
                       </p>
-                      <p className="truncate text-xs text-[#8B6F5E]">{customer.email || "—"}</p>
-                      <p className="mt-1 text-xs text-[#8B6F5E]">
+                      <p className="truncate text-xs text-[var(--admin-text-muted)]">{customer.email || "—"}</p>
+                      <p className="mt-1 text-xs text-[var(--admin-text-muted)]">
                         {customer.orderCount} {customer.orderCount === 1 ? "pedido" : "pedidos"} ·{" "}
                         Cadastro{" "}
                         {new Date(customer.createdAt).toLocaleDateString("pt-BR", {
@@ -124,15 +124,15 @@ export default function AdminCustomersList() {
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-2">
-                      <p className="text-sm font-bold text-[#C4522A]">
+                      <p className="text-sm font-bold text-[var(--admin-accent)]">
                         {formatPrice(customer.totalSpent)}
                       </p>
                       <Badge
                         variant="outline"
                         className={
                           customer.emailVerified
-                            ? "border-0 bg-[#2D6A4F]/10 text-[#2D6A4F]"
-                            : "border-0 bg-[#E8821A]/10 text-[#B86A12]"
+? "border-0 bg-[var(--admin-success-soft)] text-[var(--admin-success)]"
+                  : "border-0 bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]"
                         }
                       >
                         {customer.emailVerified ? "Verificado" : "Pendente"}
@@ -158,22 +158,22 @@ export default function AdminCustomersList() {
                 </TableHeader>
                 <TableBody>
                   {filteredCustomers.map((customer) => (
-                    <TableRow key={customer.id} className="cursor-pointer hover:bg-[#FAF7F2]/80">
+                    <TableRow key={customer.id} className="cursor-pointer hover:bg-[var(--admin-surface-hover)]">
                       <TableCell>
                         <Link
                           href={`/admin/clientes/${customer.id}`}
-                          className="font-medium text-[#3D2B1F] hover:text-[#C4522A]"
+                          className="font-medium text-[var(--admin-text)] hover:text-[var(--admin-accent)]"
                         >
                           {customer.fullName || "Sem nome"}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-[#8B6F5E]">{customer.email || "—"}</TableCell>
-                      <TableCell className="text-[#8B6F5E]">{customer.phone || "—"}</TableCell>
+                      <TableCell className="text-[var(--admin-text-muted)]">{customer.email || "—"}</TableCell>
+                      <TableCell className="text-[var(--admin-text-muted)]">{customer.phone || "—"}</TableCell>
                       <TableCell>{customer.orderCount}</TableCell>
-                      <TableCell className="font-medium text-[#3D2B1F]">
+                      <TableCell className="font-medium text-[var(--admin-text)]">
                         {formatPrice(customer.totalSpent)}
                       </TableCell>
-                      <TableCell className="text-[#8B6F5E]">
+                      <TableCell className="text-[var(--admin-text-muted)]">
                         {new Date(customer.createdAt).toLocaleDateString("pt-BR")}
                       </TableCell>
                       <TableCell>
@@ -181,8 +181,8 @@ export default function AdminCustomersList() {
                           variant="outline"
                           className={
                             customer.emailVerified
-                              ? "border-0 bg-[#2D6A4F]/10 text-[#2D6A4F]"
-                              : "border-0 bg-[#E8821A]/10 text-[#B86A12]"
+? "border-0 bg-[var(--admin-success-soft)] text-[var(--admin-success)]"
+                  : "border-0 bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]"
                           }
                         >
                           {customer.emailVerified ? "Verificado" : "Pendente"}

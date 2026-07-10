@@ -97,13 +97,13 @@ export default function AdminProductsList() {
       title="Produtos"
       actions={
         <>
-          <Button variant="outline" asChild className="border-[#C4522A]/40 text-[#C4522A] hover:bg-[#C4522A]/10">
+          <Button variant="outline" asChild className="border-[var(--admin-accent)]/40 text-[var(--admin-accent)] hover:bg-[var(--admin-accent-soft)]">
             <Link href="/admin/produtos/importar">
               <Upload className="size-4" />
               Importar em massa
             </Link>
           </Button>
-          <Button asChild className="nativa-btn-primary">
+          <Button asChild className="admin-btn-primary">
             <Link href="/admin/produtos/novo">
               <Plus className="size-4" />
               Novo produto
@@ -112,10 +112,10 @@ export default function AdminProductsList() {
         </>
       }
     >
-      <Card className="border-[#E8D5C4] p-3 sm:p-4">
+      <Card className="border-[var(--admin-border)] p-3 sm:p-4">
         <div className="flex flex-col gap-3">
           <div className="relative w-full sm:max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8B6F5E]" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--admin-text-muted)]" />
             <Input
               placeholder="Buscar por nome, SKU ou slug..."
               value={search}
@@ -139,9 +139,9 @@ export default function AdminProductsList() {
         </div>
       </Card>
 
-      <Card className="mt-4 overflow-hidden border-[#E8D5C4]">
+      <Card className="mt-4 overflow-hidden border-[var(--admin-border)]">
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 p-12 text-[#8B6F5E]">
+          <div className="flex items-center justify-center gap-2 p-12 text-[var(--admin-text-muted)]">
             <Spinner className="size-5" />
             Carregando produtos...
           </div>
@@ -157,33 +157,33 @@ export default function AdminProductsList() {
               {filteredProducts.map((product) => (
                 <div
                   key={product.id}
-                  className="flex items-center gap-3 rounded-2xl border border-[#E8D5C4] bg-white p-3 shadow-sm"
+                  className="flex items-center gap-3 rounded-2xl border border-[var(--admin-border)] bg-white p-3 shadow-sm"
                 >
                   <Link
                     href={`/admin/produtos/${product.slug}/editar`}
                     className="flex min-w-0 flex-1 items-center gap-3 active:opacity-80"
                   >
-                    <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E8D5C4] bg-[#F5F0E8]">
+                    <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)]">
                       {product.image ? (
                         <img src={product.image} alt={product.name} className="size-full object-cover" />
                       ) : (
-                        <ImageOff className="size-4 text-[#8B6F5E]" />
+                        <ImageOff className="size-4 text-[var(--admin-text-muted)]" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <p className="truncate font-semibold text-[#3D2B1F]">{product.name}</p>
-                        {product.featured && <Sparkles className="size-3.5 shrink-0 text-[#E8821A]" />}
+                        <p className="truncate font-semibold text-[var(--admin-text)]">{product.name}</p>
+                        {product.featured && <Sparkles className="size-3.5 shrink-0 text-amber-500" />}
                       </div>
-                      <p className="truncate text-xs text-[#8B6F5E]">{product.sku || product.slug}</p>
+                      <p className="truncate text-xs text-[var(--admin-text-muted)]">{product.sku || product.slug}</p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-bold text-[#C4522A]">{formatPrice(product.price)}</span>
-                        <Badge variant="outline" className="border-[#E8D5C4] text-[10px] text-[#3D2B1F]">
+                        <span className="text-sm font-bold text-[var(--admin-accent)]">{formatPrice(product.price)}</span>
+                        <Badge variant="outline" className="border-[var(--admin-border)] text-[10px] text-[var(--admin-text)]">
                           {product.category}
                         </Badge>
                         <Badge
                           variant={product.inStock ? "secondary" : "destructive"}
-                          className={`text-[10px] ${product.inStock ? "bg-[#2D6A4F]/10 text-[#2D6A4F]" : ""}`}
+                          className={`text-[10px] ${product.inStock ? "bg-[var(--admin-success-soft)] text-[var(--admin-success)]" : ""}`}
                         >
                           {product.inStock ? "Em estoque" : "Sem estoque"}
                         </Badge>
@@ -227,30 +227,30 @@ export default function AdminProductsList() {
               {filteredProducts.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>
-                    <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border border-[#E8D5C4] bg-[#F5F0E8]">
+                    <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border border-[var(--admin-border)] bg-[var(--admin-surface-hover)]">
                       {product.image ? (
                         <img src={product.image} alt={product.name} className="size-full object-cover" />
                       ) : (
-                        <ImageOff className="size-4 text-[#8B6F5E]" />
+                        <ImageOff className="size-4 text-[var(--admin-text-muted)]" />
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="max-w-[240px]">
-                    <div className="flex items-center gap-1.5 truncate font-medium text-[#3D2B1F]">
+                    <div className="flex items-center gap-1.5 truncate font-medium text-[var(--admin-text)]">
                       {product.name}
-                      {product.featured && <Sparkles className="size-3.5 shrink-0 text-[#E8821A]" />}
+                      {product.featured && <Sparkles className="size-3.5 shrink-0 text-amber-500" />}
                     </div>
-                    <div className="truncate text-xs text-[#8B6F5E]">{product.sku || product.slug}</div>
+                    <div className="truncate text-xs text-[var(--admin-text-muted)]">{product.sku || product.slug}</div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="border-[#E8D5C4] text-[#3D2B1F]">
+                    <Badge variant="outline" className="border-[var(--admin-border)] text-[var(--admin-text)]">
                       {product.category}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium text-[#3D2B1F]">{formatPrice(product.price)}</div>
+                    <div className="font-medium text-[var(--admin-text)]">{formatPrice(product.price)}</div>
                     {product.originalPrice && (
-                      <div className="text-xs text-[#8B6F5E] line-through">
+                      <div className="text-xs text-[var(--admin-text-muted)] line-through">
                         {formatPrice(product.originalPrice)}
                       </div>
                     )}
@@ -259,7 +259,7 @@ export default function AdminProductsList() {
                   <TableCell>
                     <Badge
                       variant={product.inStock ? "secondary" : "destructive"}
-                      className={product.inStock ? "bg-[#2D6A4F]/10 text-[#2D6A4F]" : ""}
+                      className={product.inStock ? "bg-[var(--admin-success-soft)] text-[var(--admin-success)]" : ""}
                     >
                       {product.inStock ? "Em estoque" : "Sem estoque"}
                     </Badge>
@@ -293,7 +293,7 @@ export default function AdminProductsList() {
 
       <Button
         asChild
-        className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-30 size-14 rounded-full shadow-lg lg:hidden nativa-btn-primary"
+        className="admin-btn-primary fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-30 size-14 rounded-full shadow-lg lg:hidden"
       >
         <Link href="/admin/produtos/novo" aria-label="Novo produto">
           <Plus className="size-6" />

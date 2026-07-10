@@ -38,7 +38,7 @@ export default function TagsInput({ value, onChange, placeholder }: TagsInputPro
   return (
     <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-input bg-transparent p-1.5 dark:bg-input/30">
       {value.map((tag) => (
-        <Badge key={tag} variant="secondary" className="gap-1 bg-[#F5F0E8] text-[#3D2B1F]">
+        <Badge key={tag} variant="secondary" className="gap-1 bg-[var(--admin-surface-hover)] text-[var(--admin-text)]">
           {tag}
           <button
             type="button"

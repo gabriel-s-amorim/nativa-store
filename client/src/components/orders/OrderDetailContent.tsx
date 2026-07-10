@@ -14,43 +14,82 @@ function PaymentIcon({ method }: { method: PaymentMethod }) {
 interface OrderDetailContentProps {
   order: Order;
   productLinkPrefix?: string;
+  /** "admin" usa o tema slate do painel; "store" mantém a estética da loja. */
+  variant?: "store" | "admin";
 }
 
 export default function OrderDetailContent({
   order,
   productLinkPrefix = "/produto",
+  variant = "store",
 }: OrderDetailContentProps) {
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const isAdmin = variant === "admin";
+
+  const panel = isAdmin
+    ? "rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-4"
+    : "rounded-xl bg-[#FAF7F2] p-4";
+  const title = isAdmin
+    ? "mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--admin-text)]"
+    : "mb-2 flex items-center gap-2 text-sm font-semibold text-[#3D2B1F]";
+  const body = isAdmin
+    ? "text-sm leading-relaxed text-[var(--admin-text-secondary)]"
+    : "text-sm leading-relaxed text-[#8B6F5E]";
+  const muted = isAdmin ? "text-xs text-[var(--admin-text-muted)]" : "text-xs text-[#8B6F5E]";
+  const iconAccent = isAdmin ? "text-[var(--admin-accent)]" : "text-[#C4522A]";
+  const itemCard = isAdmin
+    ? "flex gap-3 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)] p-3 shadow-sm"
+    : "flex gap-3 rounded-xl border border-[#E8D5C4]/80 bg-white p-3";
+  const itemImg = isAdmin
+    ? "h-16 w-14 shrink-0 rounded-xl border border-[var(--admin-border)] object-cover"
+    : "h-16 w-14 shrink-0 rounded-lg border border-[#E8D5C4] object-cover";
+  const itemName = isAdmin
+    ? "block truncate font-semibold text-[var(--admin-text)] hover:text-[var(--admin-accent)]"
+    : "block truncate font-semibold text-[#3D2B1F] hover:text-[#C4522A]";
+  const itemMeta = isAdmin
+    ? "text-xs text-[var(--admin-text-muted)]"
+    : "text-xs text-[#8B6F5E]";
+  const itemPrice = isAdmin
+    ? "mt-1 text-sm font-semibold text-[var(--admin-accent)]"
+    : "mt-1 text-sm font-semibold text-[#C4522A]";
+  const totals = isAdmin
+    ? "rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)] p-4 text-sm shadow-sm"
+    : "rounded-xl border border-[#E8D5C4] bg-[#FFFCF8] p-4 text-sm";
+  const totalsMuted = isAdmin ? "text-[var(--admin-text-secondary)]" : "text-[#8B6F5E]";
+  const totalsStrong = isAdmin
+    ? "mt-3 flex justify-between border-t border-[var(--admin-border)] pt-3 font-semibold text-[var(--admin-text)]"
+    : "mt-3 flex justify-between border-t border-[#E8D5C4] pt-3 font-semibold text-[#3D2B1F]";
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-xl bg-[#FAF7F2] p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#3D2B1F]">
-            <MapPin size={15} className="text-[#C4522A]" />
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+        <div className={panel}>
+          <div className={title}>
+            <MapPin size={15} className={iconAccent} />
             Endereço de entrega
           </div>
-          <p
-            className="text-sm leading-relaxed text-[#8B6F5E]"
-            style={{ fontFamily: "'Nunito', sans-serif" }}
-          >
+          <p className={body} style={isAdmin ? undefined : { fontFamily: "'Nunito', sans-serif" }}>
             {formatAddressLine(order.shippingAddress)}
           </p>
-          <p className="mt-1 text-xs text-[#8B6F5E]">
-            CEP {formatCepDisplay(order.shippingAddress.cep)}
-          </p>
+          <p className={`mt-1 ${muted}`}>CEP {formatCepDisplay(order.shippingAddress.cep)}</p>
         </div>
 
-        <div className="rounded-xl bg-[#FAF7F2] p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#3D2B1F]">
-            <PaymentIcon method={order.paymentMethod} />
+        <div className={panel}>
+          <div className={title}>
+            <span className={iconAccent}>
+              <PaymentIcon method={order.paymentMethod} />
+            </span>
             Pagamento
           </div>
-          <p className="text-sm text-[#8B6F5E]" style={{ fontFamily: "'Nunito', sans-serif" }}>
+          <p className={body} style={isAdmin ? undefined : { fontFamily: "'Nunito', sans-serif" }}>
             {PAYMENT_METHOD_LABELS[order.paymentMethod]}
           </p>
           {order.couponCode && (
-            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-[#C4522A]">
+            <p
+              className={`mt-2 text-xs font-semibold uppercase tracking-wide ${
+                isAdmin ? "text-[var(--admin-accent)]" : "text-[#C4522A]"
+              }`}
+            >
               Cupom: {order.couponCode}
             </p>
           )}
@@ -59,61 +98,53 @@ export default function OrderDetailContent({
 
       <div>
         <p
-          className="mb-3 text-sm font-semibold text-[#3D2B1F]"
-          style={{ fontFamily: "'Nunito', sans-serif" }}
+          className={
+            isAdmin
+              ? "mb-3 text-sm font-semibold text-[var(--admin-text)]"
+              : "mb-3 text-sm font-semibold text-[#3D2B1F]"
+          }
+          style={isAdmin ? undefined : { fontFamily: "'Nunito', sans-serif" }}
         >
           Itens do pedido
         </p>
         <ul className="space-y-3">
           {order.items.map((item) => (
-            <li
-              key={item.id}
-              className="flex gap-3 rounded-xl border border-[#E8D5C4]/80 bg-white p-3"
-            >
-              <img
-                src={item.image}
-                alt={item.name}
-                className="h-16 w-14 shrink-0 rounded-lg border border-[#E8D5C4] object-cover"
-              />
+            <li key={item.id} className={itemCard}>
+              <img src={item.image} alt={item.name} className={itemImg} />
               <div className="min-w-0 flex-1">
                 <Link
                   href={`${productLinkPrefix}/${item.productSlug}`}
-                  className="block truncate font-semibold text-[#3D2B1F] hover:text-[#C4522A]"
-                  style={{ fontFamily: "'Playfair Display', serif" }}
+                  className={itemName}
+                  style={isAdmin ? undefined : { fontFamily: "'Playfair Display', serif" }}
                 >
                   {item.name}
                 </Link>
-                <p className="text-xs text-[#8B6F5E]" style={{ fontFamily: "'Nunito', sans-serif" }}>
+                <p className={itemMeta} style={isAdmin ? undefined : { fontFamily: "'Nunito', sans-serif" }}>
                   {item.quantity}x · {item.size}
                   {item.color ? ` · ${item.color}` : ""}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-[#C4522A]">
-                  {formatPrice(item.price * item.quantity)}
-                </p>
+                <p className={itemPrice}>{formatPrice(item.price * item.quantity)}</p>
               </div>
             </li>
           ))}
         </ul>
       </div>
 
-      <div
-        className="rounded-xl border border-[#E8D5C4] bg-[#FFFCF8] p-4 text-sm"
-        style={{ fontFamily: "'Nunito', sans-serif" }}
-      >
-        <div className="flex justify-between text-[#8B6F5E]">
+      <div className={totals} style={isAdmin ? undefined : { fontFamily: "'Nunito', sans-serif" }}>
+        <div className={`flex justify-between ${totalsMuted}`}>
           <span>Subtotal</span>
           <span>{formatPrice(subtotal)}</span>
         </div>
-        <div className="mt-2 flex justify-between text-[#8B6F5E]">
+        <div className={`mt-2 flex justify-between ${totalsMuted}`}>
           <span className="flex items-center gap-1">
             <Truck size={14} />
             Frete
           </span>
           <span>{order.shippingAmount === 0 ? "Grátis" : formatPrice(order.shippingAmount)}</span>
         </div>
-        <div className="mt-3 flex justify-between border-t border-[#E8D5C4] pt-3 font-semibold text-[#3D2B1F]">
+        <div className={totalsStrong}>
           <span>Total pago</span>
-          <span style={{ fontFamily: "'Playfair Display', serif" }}>
+          <span style={isAdmin ? undefined : { fontFamily: "'Playfair Display', serif" }}>
             {formatPrice(order.totalAmount)}
           </span>
         </div>

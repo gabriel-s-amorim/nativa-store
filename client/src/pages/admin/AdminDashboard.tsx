@@ -218,7 +218,7 @@ export default function AdminDashboard() {
             <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700" />
             <div className="absolute inset-0 opacity-30">
               <div className="absolute -right-8 -top-8 size-40 rounded-full bg-white/10 blur-2xl" />
-              <div className="absolute -bottom-10 left-1/3 size-32 rounded-full bg-[#C4522A]/20 blur-2xl" />
+              <div className="absolute -bottom-10 left-1/3 size-32 rounded-full bg-[var(--admin-accent)]/20 blur-2xl" />
             </div>
             <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>

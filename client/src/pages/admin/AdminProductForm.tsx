@@ -60,8 +60,8 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <Card className="overflow-hidden border-[var(--admin-border)] shadow-[var(--admin-shadow)] lg:border-[#E8D5C4] lg:shadow-sm">
-      <CardHeader className="space-y-1 border-b border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3.5 sm:px-6 sm:py-4 lg:border-[#E8D5C4]/">
+    <Card className="overflow-hidden border-[var(--admin-border)] shadow-[var(--admin-shadow)]">
+      <CardHeader className="space-y-1 border-b border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3.5 sm:px-6 sm:py-4">
         <CardTitle className="text-base font-bold tracking-tight text-[var(--admin-text)] sm:text-lg">
           {title}
         </CardTitle>
@@ -171,7 +171,7 @@ export default function AdminProductForm() {
       <Button
         type="submit"
         disabled={isSaving}
-        className="nativa-btn-primary h-11 flex-[1.4] rounded-xl lg:h-9 lg:flex-none lg:rounded-md"
+        className="admin-btn-primary h-11 flex-[1.4] rounded-xl lg:h-9 lg:flex-none lg:rounded-md"
       >
         {isSaving ? <Spinner className="size-4" /> : <Save className="size-4" />}
         {isEditing ? "Salvar" : "Criar"}
@@ -334,7 +334,7 @@ export default function AdminProductForm() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3.5 sm:col-span-2 lg:rounded-lg lg:border-[#E8D5C4] lg:bg-transparent">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3.5 sm:col-span-2 lg:rounded-xl">
                   <div className="min-w-0">
                     <Label htmlFor="featured">Produto em destaque</Label>
                     <p className="text-xs text-[var(--admin-text-muted)]">
@@ -400,7 +400,7 @@ export default function AdminProductForm() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3.5 lg:rounded-lg lg:border-[#E8D5C4] lg:bg-transparent">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3.5 lg:rounded-xl">
                   <Label htmlFor="inStock">Disponível para venda</Label>
                   <Controller
                     control={control}
@@ -659,7 +659,7 @@ export default function AdminProductForm() {
                   {faqArray.fields.map((field, index) => (
                     <div
                       key={field.id}
-                      className="flex flex-col gap-2 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3 lg:rounded-lg lg:border-[#E8D5C4] lg:bg-transparent"
+                      className="flex flex-col gap-2 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3 lg:rounded-xl"
                     >
                       <div className="flex items-center gap-2">
                         <Input
@@ -707,7 +707,7 @@ export default function AdminProductForm() {
         </div>
 
         {/* Desktop: barra inferior padrão */}
-        <div className="fixed inset-x-0 bottom-0 z-20 hidden border-t border-[#E8D5C4] bg-white/95 p-3 backdrop-blur-sm lg:block lg:pl-64">
+        <div className="fixed inset-x-0 bottom-0 z-20 hidden border-t border-[var(--admin-border)] bg-white/95 p-3 backdrop-blur-sm lg:block lg:pl-64">
           <div className="flex items-center justify-end gap-2 px-3">{actionButtons}</div>
         </div>
       </form>

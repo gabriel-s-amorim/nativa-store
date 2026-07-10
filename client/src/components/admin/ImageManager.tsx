@@ -79,7 +79,7 @@ export default function ImageManager({ value, onChange }: ImageManagerProps) {
   return (
     <div className="flex flex-col gap-4">
       {value.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#E8D5C4] bg-[#F5F0E8]/50 p-8 text-center text-[#8B6F5E]">
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[var(--admin-border)] bg-[var(--admin-surface-hover)]/50 p-8 text-center text-[var(--admin-text-muted)]">
           <ImageOff className="size-6 opacity-60" />
           <p className="text-sm">Nenhuma imagem adicionada ainda</p>
         </div>
@@ -92,12 +92,12 @@ export default function ImageManager({ value, onChange }: ImageManagerProps) {
               onDragStart={() => setDragIndex(index)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(index)}
-              className="group relative aspect-square cursor-grab overflow-hidden rounded-lg border border-[#E8D5C4] bg-[#F5F0E8]"
+              className="group relative aspect-square cursor-grab overflow-hidden rounded-lg border border-[var(--admin-border)] bg-[var(--admin-surface-hover)]"
             >
               <img src={url} alt={`Imagem ${index + 1}`} className="size-full object-cover" />
 
               {index === 0 && (
-                <span className="absolute left-1.5 top-1.5 z-10 flex items-center gap-1 rounded-full bg-[#C4522A] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+                <span className="absolute left-1.5 top-1.5 z-10 flex items-center gap-1 rounded-full bg-[var(--admin-accent)] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
                   <Star className="size-3 fill-current" />
                   Capa
                 </span>
@@ -181,7 +181,7 @@ export default function ImageManager({ value, onChange }: ImageManagerProps) {
         <Button
           type="button"
           variant="outline"
-          className="border-[#C4522A]/40 text-[#C4522A] hover:bg-[#C4522A]/10"
+          className="border-[var(--admin-accent)]/40 text-[var(--admin-accent)] hover:bg-[var(--admin-accent-soft)]"
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
         >
@@ -197,7 +197,7 @@ export default function ImageManager({ value, onChange }: ImageManagerProps) {
           onChange={(e) => handleFilesSelected(e.target.files)}
         />
       </div>
-      <p className="text-xs text-[#8B6F5E]">
+      <p className="text-xs text-[var(--admin-text-muted)]">
         Arraste as imagens para reordenar. A primeira imagem é usada como capa do produto. Formatos aceitos: JPG, PNG, WEBP (até 4MB cada).
       </p>
     </div>

@@ -140,13 +140,13 @@ export default function AdminProductImport() {
           </AlertDescription>
         </Alert>
 
-        <Card className="border-[#E8D5C4]">
+        <Card className="border-[var(--admin-border)]">
           <CardHeader>
             <CardTitle>1. Baixe o modelo e envie sua planilha</CardTitle>
             <CardDescription>Colunas aceitas: nome, categoria, preco, imagens (separadas por |), entre outras.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button variant="outline" asChild className="border-[#C4522A]/40 text-[#C4522A] hover:bg-[#C4522A]/10">
+            <Button variant="outline" asChild className="border-[var(--admin-accent)]/40 text-[var(--admin-accent)] hover:bg-[var(--admin-accent-soft)]">
               <a href="/templates/modelo-importacao-produtos.csv" download>
                 <Download className="size-4" />
                 Baixar modelo CSV
@@ -155,7 +155,7 @@ export default function AdminProductImport() {
 
             <Button
               type="button"
-              className="nativa-btn-primary"
+              className="admin-btn-primary"
               onClick={() => fileInputRef.current?.click()}
               disabled={isParsing}
             >
@@ -164,7 +164,7 @@ export default function AdminProductImport() {
             </Button>
 
             {fileName && (
-              <div className="flex items-center gap-2 text-sm text-[#8B6F5E]">
+              <div className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)]">
                 <FileSpreadsheet className="size-4" />
                 {fileName}
                 <Button type="button" variant="ghost" size="icon-sm" onClick={handleReset} title="Remover">
@@ -185,7 +185,7 @@ export default function AdminProductImport() {
 
         {rows.length > 0 && (
           <>
-            <Card className="border-[#E8D5C4]">
+            <Card className="border-[var(--admin-border)]">
               <CardHeader>
                 <CardTitle>2. Revise a pré-visualização</CardTitle>
                 <CardDescription>
@@ -193,19 +193,19 @@ export default function AdminProductImport() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="flex items-center justify-between rounded-lg border border-[#E8D5C4] p-3">
+                <div className="flex items-center justify-between rounded-lg border border-[var(--admin-border)] p-3">
                   <div>
-                    <p className="text-sm font-medium text-[#3D2B1F]">
+                    <p className="text-sm font-medium text-[var(--admin-text)]">
                       Atualizar produtos existentes (mesmo slug)
                     </p>
-                    <p className="text-xs text-[#8B6F5E]">
+                    <p className="text-xs text-[var(--admin-text-muted)]">
                       Se desligado, linhas que já existem na loja serão ignoradas na importação.
                     </p>
                   </div>
                   <Switch checked={updateExisting} onCheckedChange={setUpdateExisting} />
                 </div>
 
-                <div className="max-h-[420px] overflow-y-auto rounded-lg border border-[#E8D5C4]">
+                <div className="max-h-[420px] overflow-y-auto rounded-lg border border-[var(--admin-border)]">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -225,7 +225,7 @@ export default function AdminProductImport() {
                         return (
                           <TableRow key={row.row} className={!willImport ? "opacity-60" : ""}>
                             <TableCell>{row.row}</TableCell>
-                            <TableCell className="max-w-[220px] truncate font-medium text-[#3D2B1F]">
+                            <TableCell className="max-w-[220px] truncate font-medium text-[var(--admin-text)]">
                               {row.data?.name ?? "—"}
                             </TableCell>
                             <TableCell>{row.data?.category ?? "—"}</TableCell>
@@ -240,7 +240,7 @@ export default function AdminProductImport() {
                                 </Badge>
                               )}
                               {row.status === "novo" && (
-                                <Badge className="gap-1 bg-[#2D6A4F] text-white">
+                                <Badge className="gap-1 bg-[var(--admin-success)] text-white">
                                   <CheckCircle2 className="size-3" />
                                   Novo
                                 </Badge>
@@ -248,14 +248,14 @@ export default function AdminProductImport() {
                               {row.status === "atualizacao" && (
                                 <Badge
                                   variant="outline"
-                                  className="gap-1 border-[#E8821A] text-[#E8821A]"
+                                  className="gap-1 border-amber-500 text-amber-600"
                                 >
                                   <RefreshCcw className="size-3" />
                                   {updateExisting ? "Atualização" : "Ignorado (existe)"}
                                 </Badge>
                               )}
                             </TableCell>
-                            <TableCell className="max-w-[280px] text-xs text-[#8B6F5E]">
+                            <TableCell className="max-w-[280px] text-xs text-[var(--admin-text-muted)]">
                               {row.errors.length > 0 ? row.errors.join(" · ") : "—"}
                             </TableCell>
                           </TableRow>
@@ -267,7 +267,7 @@ export default function AdminProductImport() {
               </CardContent>
             </Card>
 
-            <Card className="border-[#E8D5C4]">
+            <Card className="border-[var(--admin-border)]">
               <CardHeader>
                 <CardTitle>3. Confirmar importação</CardTitle>
                 <CardDescription>
@@ -282,7 +282,7 @@ export default function AdminProductImport() {
                 <Button
                   onClick={handleImport}
                   disabled={importableRows.length === 0 || isImporting}
-                  className="nativa-btn-primary w-fit"
+                  className="admin-btn-primary w-fit"
                 >
                   {isImporting ? <Spinner className="size-4" /> : <Upload className="size-4" />}
                   Importar {importableRows.length} produto(s)
