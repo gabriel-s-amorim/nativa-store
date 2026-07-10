@@ -1,6 +1,6 @@
 # Nativa Store
 
-**E-commerce full-stack de artesanato brasileiro** — da vitrine ao painel administrativo, com carrinho persistente, checkout, autenticação de clientes e migração real a partir da Nuvemshop.
+**Plataforma completa de e-commerce construída para uma operação real de artesanato brasileiro** — loja pública, painel administrativo, autenticação de clientes, carrinho persistente, checkout, migração de catálogo a partir da Nuvemshop e deploy serverless na Vercel.
 
 > *Liberdade em cada detalhe* — marca Nativa / Quintiluz
 
@@ -19,13 +19,13 @@
 
 ## Por que este projeto
 
-Não é um tutorial de carrinho em `localStorage`. É uma **loja virtual completa**, pensada para operação real:
+Diferente de demonstrações simplificadas, este projeto foi desenvolvido para representar uma operação real de e-commerce, incluindo autenticação, persistência de dados, painel administrativo e migração de um catálogo existente — não um CRUD de tutorial.
 
-- Catálogo migrado de uma loja Nuvemshop existente (CSV + scraping de imagens)
-- API REST com regras de negócio no servidor (não no client)
+- Catálogo migrado de uma loja Nuvemshop existente, via parser de CSV e extração controlada de imagens
+- A arquitetura foi desenhada para manter toda a regra de negócio no backend, evitando lógica crítica no cliente e permitindo futura evolução para múltiplos frontends
 - Painel admin com dashboard, pedidos, clientes, notificações e importação em massa
-- Carrinho que une visitante anônimo e cliente autenticado
-- Deploy serverless na Vercel com frontend + API no mesmo repositório
+- Carrinho híbrido: uma sessão anônima por cookie é unificada ao histórico do cliente no momento do login
+- Deploy serverless na Vercel, com frontend e API no mesmo repositório
 
 Ideal para demonstrar domínio de **produto end-to-end**: UX de e-commerce, arquitetura modular, autenticação, persistência e operação de loja.
 
@@ -56,34 +56,45 @@ Ideal para demonstrar domínio de **produto end-to-end**: UX de e-commerce, arqu
 | Notificações | Sino in-app para novos pedidos e cadastros (polling) |
 | Auth admin | Senha única + JWT em cookie `httpOnly` (adequado a serverless) |
 
-### Engenharia
+---
 
-- Validação compartilhada com **Zod** (client + server)
-- Tipos e mappers em `shared/` (snake_case DB ↔ camelCase TS)
-- Admin carregado com **lazy route** (não infla o bundle da loja pública)
-- Scripts de seed, migração Nuvemshop e setup de storage
-- Analytics leve de page views por sessão de visitante
+## Principais desafios
+
+- Importar milhares de produtos de uma loja Nuvemshop existente, preservando variações e imagens, a partir de um CSV em `latin1` multilinha
+- Unificar o carrinho de visitantes anônimos com o de clientes autenticados, sem duplicar ou perder itens no momento do login
+- Compartilhar validação e tipos entre client e server sem duplicar schemas (Zod + mappers em `shared/`)
+- Manter o backend stateless para funcionar em ambiente serverless (Vercel), sem sessão em memória
+- Entregar um painel administrativo completo (dashboard, pedidos, clientes, notificações) sem inflar o bundle da loja pública
 
 ---
 
 ## Stack
 
-| Camada | Tecnologia |
-|--------|------------|
-| Frontend | React 19, TypeScript, Vite 7, Tailwind CSS 4, Wouter, Framer Motion |
-| UI | Radix UI / shadcn-style, Recharts, Sonner, Fancybox |
-| Backend | Node.js, Express 4, TypeScript (`tsx` em dev) |
-| Dados | Supabase (PostgreSQL + Auth + Storage) |
-| Validação | Zod |
-| Deploy | Vercel (SPA + serverless API) |
+| Área | Tecnologia |
+|------|------------|
+| Linguagem | TypeScript |
+| Frontend | React 19, Vite 7 |
+| Estilo / UI | Tailwind CSS 4, Radix UI, shadcn-style, Framer Motion |
+| Roteamento | Wouter |
+| Gráficos | Recharts |
+| Backend | Node.js, Express 4 |
+| Banco de dados | PostgreSQL (Supabase) |
+| Autenticação | Supabase Auth |
+| Armazenamento | Supabase Storage |
+| Validação | Zod (compartilhada entre client e server) |
+| Deploy | Vercel (SPA + API serverless) |
 | Package manager | pnpm |
 
 ```
-Browser  →  Vite (dev) / estáticos (prod)
-                ↓  /api/*
-            Express
-                ↓
-            Supabase (PostgreSQL · Auth · Storage)
+             React (Loja + Admin)
+                     │
+                     ▼
+              Express REST API
+                     │
+      ┌──────────────┼──────────────┐
+      ▼              ▼              ▼
+ PostgreSQL       Auth          Storage
+ (Supabase)    (Supabase)     (Supabase)
 ```
 
 ---
@@ -104,11 +115,56 @@ nativa-store/
 
 **Princípio:** o React não acessa o banco. Toda escrita passa pela API com service role no servidor.
 
+### Arquitetura de domínio (backend)
+
+```
+server/routes/     → validação de entrada (Zod) e parsing da request
+        ↓
+server/services/   → regras de negócio
+        ↓
+server/lib/        → acesso ao Supabase, sessão, auth, upload
+        ↓
+Supabase           → PostgreSQL + Auth + Storage
+```
+
+---
+
+## Decisões de arquitetura
+
+- Validação compartilhada com **Zod** (client + server), evitando drift entre formulário e API
+- Tipos e mappers em `shared/` (snake_case DB ↔ camelCase TS)
+- Admin carregado com **lazy route** (não infla o bundle da loja pública)
+- API única no servidor: o client nunca acessa o Supabase diretamente
+- Scripts de seed, migração Nuvemshop e setup de storage
+- Analytics leve de page views por sessão de visitante
+
+---
+
+## Segurança
+
+- Cookies `httpOnly` para sessão de admin e identidade de carrinho — inacessíveis via JavaScript no navegador
+- Validação de entrada com Zod em toda rota da API, antes de qualquer regra de negócio
+- Service Role do Supabase usada apenas no servidor — nunca é exposta ao client
+- Row Level Security (RLS) habilitada nas tabelas sensíveis do Supabase (perfis, endereços, pedidos)
+- Normalização de inputs (trim, formato de telefone/CEP) antes da validação
+
+---
+
+## Métricas do projeto
+
+- 129 arquivos de componentes e páginas React
+- 38 endpoints REST, organizados em 10 grupos de rotas
+- 9 tabelas no Supabase, com RLS habilitado
+- 100% TypeScript (client, server e shared)
+- Validação compartilhada com Zod entre client e server
+- Deploy automático via Vercel (push → build → produção)
+
 ---
 
 ## Screenshots
 
 > Substitua pelos prints reais do deploy — recrutadores abrem o README e param nos visuais.
+> Um GIF curto (10-15s) mostrando o fluxo Home → Produto → Carrinho → Checkout → Admin costuma chamar mais atenção do que vários prints estáticos.
 
 | Loja | Admin |
 |------|-------|
@@ -153,13 +209,16 @@ Detalhes de variáveis e armadilhas: ver [`.env.example`](.env.example) e [`AGEN
 
 ---
 
-## Destaques técnicos (para entrevista)
+## Decisões técnicas
 
-1. **Migração de plataforma** — parser de CSV Tiendanube (latin1, multilinha) + extração de imagens da loja publicada, não só “dados mock”.
-2. **Carrinho híbrido** — sessão anônima (cookie) + merge idempotente ao autenticar.
-3. **Admin serverless-friendly** — JWT em cookie `httpOnly`, sem sessão em memória.
-4. **Código compartilhado** — schemas Zod e tipos únicos evitam drift entre formulário e API.
-5. **Operação de loja** — importação em massa, notificações, dashboard e gestão de pedidos/clientes.
+| Problema | Solução |
+|----------|---------|
+| Compartilhar validação entre client e server | Zod compartilhado em `shared/schemas` |
+| Evitar lógica crítica no frontend | API Express centraliza as regras de negócio; o client só consome `/api` |
+| Carrinho persistente entre visitante e cliente | Cookie de sessão para anônimo + merge idempotente ao autenticar |
+| Compatibilidade com ambiente serverless | API stateless, com JWT em cookie `httpOnly` em vez de sessão em memória |
+| Migração de plataforma (Nuvemshop → Supabase) | Parser de CSV `latin1` multilinha + extração controlada de imagens da loja publicada |
+| Consistência entre banco (snake_case) e TS (camelCase) | Mappers dedicados em `shared/lib` (`productMapper`, `orderMapper`, `cartMapper`, `addressMapper`) |
 
 ---
 
