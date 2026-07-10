@@ -17,7 +17,7 @@
 </p>
 
 <!-- Substitua pela URL do deploy -->
-<p align="center"><b>Demo:</b> <i>adicione a URL do deploy aqui</i> · <b>Loja de referência:</b> <a href="https://www.nativa.art.br">nativa.art.br</a></p>
+<p align="center"><b>Demo:</b> <i>https://nativa-store.vercel.app</i> · <b>Loja de referência:</b> <a href="https://www.nativa.art.br">nativa.art.br</a></p>
 
 **Plataforma completa de e-commerce construída para uma operação real de artesanato brasileiro** — loja pública, painel administrativo, autenticação de clientes, carrinho persistente, checkout, migração de catálogo a partir da Nuvemshop e deploy na Vercel.
 
