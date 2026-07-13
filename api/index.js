@@ -1793,11 +1793,20 @@ async function createMercadoPagoOrder(params) {
     payer,
     transactions: { payments: [payment] }
   };
-  const raw = await mercadoPagoRequest("/v1/orders", settings, {
+  let raw = await mercadoPagoRequest("/v1/orders", settings, {
     method: "POST",
     headers: { "X-Idempotency-Key": params.checkout.idempotencyKey },
     body: JSON.stringify(payload)
   });
+  if (params.checkout.paymentMethod !== "credit_card" && raw?.id && !normalizeInstructions(raw)) {
+    for (let attempt = 0; attempt < 3 && !normalizeInstructions(raw); attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      raw = await mercadoPagoRequest(
+        `/v1/orders/${encodeURIComponent(String(raw.id))}`,
+        settings
+      );
+    }
+  }
   const mpPayment = firstPayment(raw);
   const paymentStatus = normalizeMercadoPagoStatus(
     mpPayment?.status ?? raw?.status
@@ -2102,7 +2111,37 @@ async function listCustomerOrders(customerId) {
   );
 }
 async function getCustomerOrder(customerId, orderId) {
-  return fetchOrderWithItems(orderId, customerId);
+  let order = await fetchOrderWithItems(orderId, customerId);
+  if (!order.paymentInstructions && (order.paymentStatus === "pending" || order.paymentStatus === "processing")) {
+    const { data: row } = await supabase.from("orders").select("mercado_pago_order_id").eq("id", orderId).eq("customer_id", customerId).maybeSingle();
+    if (row?.mercado_pago_order_id) {
+      try {
+        const { data: attempt } = await supabase.from("payment_attempts").select("environment").eq("order_id", orderId).maybeSingle();
+        const payload = await getMercadoPagoOrder(
+          row.mercado_pago_order_id,
+          attempt?.environment
+        );
+        const identity = mercadoPagoOrderIdentity(payload);
+        await supabase.rpc("reconcile_mercado_pago_payment", {
+          p_mercado_pago_order_id: identity.orderId,
+          p_mercado_pago_payment_id: identity.paymentId,
+          p_payment_status: identity.status,
+          p_status_detail: identity.statusDetail,
+          p_response: payload
+        });
+        if (identity.instructions) {
+          await supabase.from("orders").update({
+            payment_instructions: identity.instructions,
+            payment_expires_at: identity.instructions.expirationDate ?? null
+          }).eq("id", orderId);
+        }
+        order = await fetchOrderWithItems(orderId, customerId);
+      } catch (error) {
+        console.error("Erro ao atualizar pagamento pendente:", error);
+      }
+    }
+  }
+  return order;
 }
 async function createOrderFromCheckout(customerId, input) {
   const { data: existingAttempt, error: attemptError } = await supabase.from("payment_attempts").select(
@@ -3513,6 +3552,13 @@ router15.post("/", async (req, res) => {
       p_response: payload
     });
     if (error) throw new Error(error.message);
+    if (identity.instructions) {
+      const { error: instructionsError } = await supabase.from("orders").update({
+        payment_instructions: identity.instructions,
+        payment_expires_at: identity.instructions.expirationDate ?? null
+      }).eq("mercado_pago_order_id", identity.orderId);
+      if (instructionsError) throw new Error(instructionsError.message);
+    }
     res.status(200).json({ received: true });
   } catch (error) {
     console.error("Erro no webhook Mercado Pago:", error);

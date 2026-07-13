@@ -44,6 +44,16 @@ router.post("/", async (req, res) => {
       p_response: payload,
     });
     if (error) throw new Error(error.message);
+    if (identity.instructions) {
+      const { error: instructionsError } = await supabase
+        .from("orders")
+        .update({
+          payment_instructions: identity.instructions,
+          payment_expires_at: identity.instructions.expirationDate ?? null,
+        })
+        .eq("mercado_pago_order_id", identity.orderId);
+      if (instructionsError) throw new Error(instructionsError.message);
+    }
 
     res.status(200).json({ received: true });
   } catch (error) {

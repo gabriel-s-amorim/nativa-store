@@ -379,11 +379,28 @@ export async function createMercadoPagoOrder(params: {
     transactions: { payments: [payment] },
   };
 
-  const raw = await mercadoPagoRequest<any>("/v1/orders", settings, {
+  let raw = await mercadoPagoRequest<any>("/v1/orders", settings, {
     method: "POST",
     headers: { "X-Idempotency-Key": params.checkout.idempotencyKey },
     body: JSON.stringify(payload),
   });
+  if (
+    params.checkout.paymentMethod !== "credit_card" &&
+    raw?.id &&
+    !normalizeInstructions(raw)
+  ) {
+    for (
+      let attempt = 0;
+      attempt < 3 && !normalizeInstructions(raw);
+      attempt++
+    ) {
+      await new Promise(resolve => setTimeout(resolve, 400));
+      raw = await mercadoPagoRequest<any>(
+        `/v1/orders/${encodeURIComponent(String(raw.id))}`,
+        settings
+      );
+    }
+  }
   const mpPayment = firstPayment(raw);
   const paymentStatus = normalizeMercadoPagoStatus(
     mpPayment?.status ?? raw?.status

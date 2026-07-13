@@ -24,6 +24,7 @@ import { supabase } from "../lib/supabase";
 import {
   createMercadoPagoOrder,
   getActiveMercadoPagoEnvironment,
+  getMercadoPagoOrder,
   mercadoPagoOrderIdentity,
 } from "./mercadoPago";
 
@@ -143,7 +144,52 @@ export async function getCustomerOrder(
   customerId: string,
   orderId: string
 ): Promise<Order> {
-  return fetchOrderWithItems(orderId, customerId);
+  let order = await fetchOrderWithItems(orderId, customerId);
+  if (
+    !order.paymentInstructions &&
+    (order.paymentStatus === "pending" || order.paymentStatus === "processing")
+  ) {
+    const { data: row } = await supabase
+      .from("orders")
+      .select("mercado_pago_order_id")
+      .eq("id", orderId)
+      .eq("customer_id", customerId)
+      .maybeSingle();
+    if (row?.mercado_pago_order_id) {
+      try {
+        const { data: attempt } = await supabase
+          .from("payment_attempts")
+          .select("environment")
+          .eq("order_id", orderId)
+          .maybeSingle();
+        const payload = await getMercadoPagoOrder(
+          row.mercado_pago_order_id,
+          attempt?.environment as "test" | "production" | undefined
+        );
+        const identity = mercadoPagoOrderIdentity(payload);
+        await supabase.rpc("reconcile_mercado_pago_payment", {
+          p_mercado_pago_order_id: identity.orderId,
+          p_mercado_pago_payment_id: identity.paymentId,
+          p_payment_status: identity.status,
+          p_status_detail: identity.statusDetail,
+          p_response: payload,
+        });
+        if (identity.instructions) {
+          await supabase
+            .from("orders")
+            .update({
+              payment_instructions: identity.instructions,
+              payment_expires_at: identity.instructions.expirationDate ?? null,
+            })
+            .eq("id", orderId);
+        }
+        order = await fetchOrderWithItems(orderId, customerId);
+      } catch (error) {
+        console.error("Erro ao atualizar pagamento pendente:", error);
+      }
+    }
+  }
+  return order;
 }
 
 export async function createOrderFromCheckout(
