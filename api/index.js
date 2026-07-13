@@ -1004,7 +1004,7 @@ import { Router as Router4 } from "express";
 
 // shared/const/cart.ts
 var FREE_SHIPPING_THRESHOLD = 299;
-var STANDARD_SHIPPING_COST = 15;
+var STANDARD_SHIPPING_COST = 0;
 function calculateShippingAmount(subtotal) {
   return subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_COST;
 }
