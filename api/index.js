@@ -1564,7 +1564,9 @@ function validateMercadoPagoSignature(params) {
     })
   );
   if (!parts.ts || !parts.v1) return false;
-  if (Math.abs((params.now ?? Date.now()) - Number(parts.ts)) > 5 * 60 * 1e3)
+  const timestampRaw = Number(parts.ts);
+  const timestampMs = timestampRaw < 1e12 ? timestampRaw * 1e3 : timestampRaw;
+  if (!Number.isFinite(timestampMs) || Math.abs((params.now ?? Date.now()) - timestampMs) > 5 * 60 * 1e3)
     return false;
   let manifest = params.dataId ? `id:${params.dataId.toLowerCase()};` : "";
   if (params.requestId) manifest += `request-id:${params.requestId};`;

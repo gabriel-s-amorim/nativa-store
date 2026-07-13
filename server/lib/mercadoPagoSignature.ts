@@ -15,7 +15,13 @@ export function validateMercadoPagoSignature(params: {
     })
   );
   if (!parts.ts || !parts.v1) return false;
-  if (Math.abs((params.now ?? Date.now()) - Number(parts.ts)) > 5 * 60 * 1000)
+  const timestampRaw = Number(parts.ts);
+  const timestampMs =
+    timestampRaw < 1_000_000_000_000 ? timestampRaw * 1000 : timestampRaw;
+  if (
+    !Number.isFinite(timestampMs) ||
+    Math.abs((params.now ?? Date.now()) - timestampMs) > 5 * 60 * 1000
+  )
     return false;
   let manifest = params.dataId ? `id:${params.dataId.toLowerCase()};` : "";
   if (params.requestId) manifest += `request-id:${params.requestId};`;

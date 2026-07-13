@@ -44,4 +44,20 @@ describe("validateMercadoPagoSignature", () => {
       })
     ).toBe(true);
   });
+
+  it("aceita timestamp do simulador expresso em segundos", () => {
+    const ts = 1_750_000_000;
+    const secret = "webhook-secret";
+    const manifest = `id:ord123;request-id:req-seconds;ts:${ts};`;
+    const hash = createHmac("sha256", secret).update(manifest).digest("hex");
+    expect(
+      validateMercadoPagoSignature({
+        dataId: "ORD123",
+        requestId: "req-seconds",
+        signature: `ts=${ts},v1=${hash}`,
+        secret,
+        now: ts * 1000,
+      })
+    ).toBe(true);
+  });
 });
