@@ -256,8 +256,11 @@ async function mercadoPagoRequest<T>(
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    const details = body?.errors?.[0]?.details;
     const message =
-      body?.errors?.[0]?.message ??
+      (Array.isArray(details) && details.length > 0
+        ? details.join("; ")
+        : body?.errors?.[0]?.message) ??
       body?.message ??
       body?.error ??
       `Mercado Pago respondeu HTTP ${response.status}`;
@@ -336,11 +339,17 @@ export async function createMercadoPagoOrder(params: {
     settings.environment === "test"
       ? "comprador_nativa@testuser.com"
       : params.payer.email;
+  const nameParts = (params.payer.firstName?.trim() || "Cliente Nativa")
+    .split(/\s+/)
+    .filter(Boolean);
+  const firstName = nameParts[0];
+  const lastName = nameParts.slice(1).join(" ") || "Nativa";
   const payer =
     params.checkout.paymentMethod === "boleto"
       ? {
           email: payerEmail,
-          first_name: params.payer.firstName,
+          first_name: firstName,
+          last_name: lastName,
           identification: {
             type: "CPF",
             number: params.checkout.payer.identificationNumber,
