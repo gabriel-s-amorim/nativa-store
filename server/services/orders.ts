@@ -145,9 +145,11 @@ export async function getCustomerOrder(
   orderId: string
 ): Promise<Order> {
   let order = await fetchOrderWithItems(orderId, customerId);
+  // Reconcilia mesmo com instruções (Pix/boleto), senão o polling do checkout
+  // nunca detecta o pagamento aprovado quando o webhook falha.
   if (
-    !order.paymentInstructions &&
-    (order.paymentStatus === "pending" || order.paymentStatus === "processing")
+    order.paymentStatus === "pending" ||
+    order.paymentStatus === "processing"
   ) {
     const { data: row } = await supabase
       .from("orders")

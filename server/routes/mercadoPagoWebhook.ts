@@ -10,7 +10,18 @@ import {
 const router = Router();
 
 router.post("/", async (req, res) => {
-  const dataId = String(req.query["data.id"] ?? req.body?.data?.id ?? "");
+  const nestedDataId =
+    req.query.data &&
+    typeof req.query.data === "object" &&
+    "id" in req.query.data &&
+    typeof req.query.data.id === "string"
+      ? req.query.data.id
+      : undefined;
+  const signatureDataId =
+    typeof req.query["data.id"] === "string"
+      ? req.query["data.id"]
+      : nestedDataId;
+  const orderId = signatureDataId ?? String(req.body?.data?.id ?? "");
   const requestId = req.header("x-request-id") ?? undefined;
   const signature = req.header("x-signature") ?? undefined;
 
@@ -18,13 +29,13 @@ router.post("/", async (req, res) => {
     const { data: attempt } = await supabase
       .from("payment_attempts")
       .select("environment")
-      .eq("mercado_pago_order_id", dataId)
+      .eq("mercado_pago_order_id", orderId)
       .maybeSingle();
     const environment = attempt?.environment as
       | MercadoPagoEnvironment
       | undefined;
     const valid = await verifyMercadoPagoSignature({
-      dataId,
+      dataId: signatureDataId,
       requestId,
       signature,
       environment,
@@ -33,8 +44,12 @@ router.post("/", async (req, res) => {
       res.status(401).json({ error: "Assinatura inválida" });
       return;
     }
+    if (!attempt || !orderId) {
+      res.status(200).json({ received: true, ignored: true });
+      return;
+    }
 
-    const payload = await getMercadoPagoOrder(dataId, environment);
+    const payload = await getMercadoPagoOrder(orderId, environment);
     const identity = mercadoPagoOrderIdentity(payload);
     const { error } = await supabase.rpc("reconcile_mercado_pago_payment", {
       p_mercado_pago_order_id: identity.orderId,

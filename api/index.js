@@ -1556,7 +1556,7 @@ function decryptSecret(value) {
 // server/lib/mercadoPagoSignature.ts
 import { createHmac, timingSafeEqual } from "node:crypto";
 function validateMercadoPagoSignature(params) {
-  if (!params.signature || !params.dataId || !params.secret) return false;
+  if (!params.signature || !params.secret) return false;
   const parts = Object.fromEntries(
     params.signature.split(",").map((part) => {
       const [key, value] = part.trim().split("=", 2);
@@ -1566,7 +1566,7 @@ function validateMercadoPagoSignature(params) {
   if (!parts.ts || !parts.v1) return false;
   if (Math.abs((params.now ?? Date.now()) - Number(parts.ts)) > 5 * 60 * 1e3)
     return false;
-  let manifest = `id:${params.dataId.toLowerCase()};`;
+  let manifest = params.dataId ? `id:${params.dataId.toLowerCase()};` : "";
   if (params.requestId) manifest += `request-id:${params.requestId};`;
   manifest += `ts:${parts.ts};`;
   const expected = createHmac("sha256", params.secret).update(manifest).digest("hex");
@@ -1842,7 +1842,7 @@ function mercadoPagoOrderIdentity(payload) {
   };
 }
 async function verifyMercadoPagoSignature(params) {
-  if (!params.signature || !params.dataId) return false;
+  if (!params.signature) return false;
   const settings = params.environment ? await getEnvironmentSettings(params.environment) : await getActiveSettings();
   return validateMercadoPagoSignature({
     ...params,
@@ -2112,7 +2112,7 @@ async function listCustomerOrders(customerId) {
 }
 async function getCustomerOrder(customerId, orderId) {
   let order = await fetchOrderWithItems(orderId, customerId);
-  if (!order.paymentInstructions && (order.paymentStatus === "pending" || order.paymentStatus === "processing")) {
+  if (order.paymentStatus === "pending" || order.paymentStatus === "processing") {
     const { data: row } = await supabase.from("orders").select("mercado_pago_order_id").eq("id", orderId).eq("customer_id", customerId).maybeSingle();
     if (row?.mercado_pago_order_id) {
       try {
@@ -3526,14 +3526,16 @@ var mercadoPago_default = router14;
 import { Router as Router15 } from "express";
 var router15 = Router15();
 router15.post("/", async (req, res) => {
-  const dataId = String(req.query["data.id"] ?? req.body?.data?.id ?? "");
+  const nestedDataId = req.query.data && typeof req.query.data === "object" && "id" in req.query.data && typeof req.query.data.id === "string" ? req.query.data.id : void 0;
+  const signatureDataId = typeof req.query["data.id"] === "string" ? req.query["data.id"] : nestedDataId;
+  const orderId = signatureDataId ?? String(req.body?.data?.id ?? "");
   const requestId = req.header("x-request-id") ?? void 0;
   const signature = req.header("x-signature") ?? void 0;
   try {
-    const { data: attempt } = await supabase.from("payment_attempts").select("environment").eq("mercado_pago_order_id", dataId).maybeSingle();
+    const { data: attempt } = await supabase.from("payment_attempts").select("environment").eq("mercado_pago_order_id", orderId).maybeSingle();
     const environment = attempt?.environment;
     const valid = await verifyMercadoPagoSignature({
-      dataId,
+      dataId: signatureDataId,
       requestId,
       signature,
       environment
@@ -3542,7 +3544,11 @@ router15.post("/", async (req, res) => {
       res.status(401).json({ error: "Assinatura inv\xE1lida" });
       return;
     }
-    const payload = await getMercadoPagoOrder(dataId, environment);
+    if (!attempt || !orderId) {
+      res.status(200).json({ received: true, ignored: true });
+      return;
+    }
+    const payload = await getMercadoPagoOrder(orderId, environment);
     const identity = mercadoPagoOrderIdentity(payload);
     const { error } = await supabase.rpc("reconcile_mercado_pago_payment", {
       p_mercado_pago_order_id: identity.orderId,

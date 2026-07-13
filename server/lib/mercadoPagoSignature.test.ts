@@ -29,4 +29,19 @@ describe("validateMercadoPagoSignature", () => {
       })
     ).toBe(false);
   });
+
+  it("omite o ID do manifesto quando ele não veio na URL", () => {
+    const ts = 1_750_000_000_000;
+    const secret = "webhook-secret";
+    const manifest = `request-id:req-simulator;ts:${ts};`;
+    const hash = createHmac("sha256", secret).update(manifest).digest("hex");
+    expect(
+      validateMercadoPagoSignature({
+        requestId: "req-simulator",
+        signature: `ts=${ts},v1=${hash}`,
+        secret,
+        now: ts,
+      })
+    ).toBe(true);
+  });
 });

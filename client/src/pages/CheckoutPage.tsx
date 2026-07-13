@@ -186,12 +186,41 @@ function CheckoutPageContent() {
     ) {
       return;
     }
+
+    const token = session.access_token;
+    const orderId = completedOrder.id;
+    let cancelled = false;
+
+    async function pollPaymentStatus() {
+      try {
+        const order = await fetchCustomerOrder(token, orderId);
+        if (cancelled) return;
+        setCompletedOrder(prev => {
+          if (
+            prev &&
+            prev.paymentStatus !== "approved" &&
+            order.paymentStatus === "approved"
+          ) {
+            toast.success("Pagamento confirmado!", {
+              description: "Seu pedido foi aprovado com sucesso.",
+            });
+          }
+          return order;
+        });
+      } catch {
+        // Mantém a tela de aguardo; tenta de novo no próximo ciclo
+      }
+    }
+
+    void pollPaymentStatus();
     const timer = window.setInterval(() => {
-      fetchCustomerOrder(session.access_token, completedOrder.id)
-        .then(order => setCompletedOrder(order))
-        .catch(() => undefined);
-    }, 5000);
-    return () => window.clearInterval(timer);
+      void pollPaymentStatus();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [
     completedOrder?.id,
     completedOrder?.paymentStatus,

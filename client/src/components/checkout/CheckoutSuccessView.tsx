@@ -6,10 +6,12 @@ import {
   Copy,
   ExternalLink,
   Home,
+  LoaderCircle,
   Package,
 } from "lucide-react";
 import { formatPrice } from "@/lib/products";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
 
 interface CheckoutSuccessViewProps {
   order: Order;
@@ -20,6 +22,16 @@ export default function CheckoutSuccessView({
 }: CheckoutSuccessViewProps) {
   const approved = order.paymentStatus === "approved";
   const instructions = order.paymentInstructions;
+  const awaitingPix =
+    !approved && order.paymentMethod === "pix" && Boolean(instructions);
+  const [justApproved, setJustApproved] = useState(false);
+
+  useEffect(() => {
+    if (!approved) return;
+    setJustApproved(true);
+    const timer = window.setTimeout(() => setJustApproved(false), 1200);
+    return () => window.clearTimeout(timer);
+  }, [approved]);
 
   async function copy(value: string, label: string) {
     try {
@@ -33,7 +45,11 @@ export default function CheckoutSuccessView({
   return (
     <div className="mx-auto max-w-lg text-center">
       <div className="relative mb-8">
-        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[#2D6A4F]/15 to-[#1B7A8C]/10 ring-1 ring-[#2D6A4F]/20">
+        <div
+          className={`mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[#2D6A4F]/15 to-[#1B7A8C]/10 ring-1 ring-[#2D6A4F]/20 transition-transform duration-500 ${
+            justApproved ? "scale-110" : "scale-100"
+          }`}
+        >
           {approved ? (
             <CheckCircle2
               size={48}
@@ -43,18 +59,6 @@ export default function CheckoutSuccessView({
           ) : (
             <Clock3 size={48} className="text-[#C4522A]" strokeWidth={1.5} />
           )}
-        </div>
-        <div
-          className="pointer-events-none absolute -right-2 top-0 text-3xl opacity-40"
-          aria-hidden
-        >
-          🪶
-        </div>
-        <div
-          className="pointer-events-none absolute -left-4 bottom-0 text-2xl opacity-30"
-          aria-hidden
-        >
-          🌿
         </div>
       </div>
 
@@ -83,10 +87,22 @@ export default function CheckoutSuccessView({
         foi registrado com sucesso.{" "}
         {approved
           ? "Em breve você receberá mais detalhes sobre a entrega."
-          : "Conclua o pagamento abaixo; esta página será atualizada quando ele for confirmado."}
+          : "Conclua o pagamento abaixo; esta página atualiza sozinha quando ele for confirmado."}
       </p>
 
-      {!approved && order.paymentMethod === "pix" && instructions && (
+      {awaitingPix && (
+        <div
+          className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#2D6A4F]/25 bg-[#2D6A4F]/8 px-4 py-2 text-sm font-semibold text-[#2D6A4F]"
+          style={{ fontFamily: "'Nunito', sans-serif" }}
+          role="status"
+          aria-live="polite"
+        >
+          <LoaderCircle className="size-4 animate-spin" aria-hidden />
+          Aguardando confirmação do Pix…
+        </div>
+      )}
+
+      {awaitingPix && instructions && (
         <div className="mb-8 rounded-2xl border border-[#2D6A4F]/30 bg-white p-5">
           <h2 className="mb-3 font-bold text-[#3D2B1F]">Pague com Pix</h2>
           {instructions.qrCodeBase64 && (
@@ -113,6 +129,10 @@ export default function CheckoutSuccessView({
               </button>
             </>
           )}
+          <p className="mt-4 text-xs text-[#8B6F5E]">
+            Assim que o pagamento for identificado, esta tela muda
+            automaticamente para “Pagamento aprovado”.
+          </p>
         </div>
       )}
 
@@ -163,6 +183,14 @@ export default function CheckoutSuccessView({
             {formatPrice(order.totalAmount)}
           </strong>
         </p>
+        {approved && (
+          <p
+            className="mt-2 text-sm font-semibold text-[#2D6A4F]"
+            style={{ fontFamily: "'Nunito', sans-serif" }}
+          >
+            Status: pagamento confirmado
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">

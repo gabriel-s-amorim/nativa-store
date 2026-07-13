@@ -455,12 +455,12 @@ export function mercadoPagoOrderIdentity(payload: any): {
 }
 
 export async function verifyMercadoPagoSignature(params: {
-  dataId: string;
+  dataId?: string;
   requestId?: string;
   signature?: string;
   environment?: MercadoPagoEnvironment;
 }): Promise<boolean> {
-  if (!params.signature || !params.dataId) return false;
+  if (!params.signature) return false;
   const settings = params.environment
     ? await getEnvironmentSettings(params.environment)
     : await getActiveSettings();
