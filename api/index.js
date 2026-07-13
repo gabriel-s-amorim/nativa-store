@@ -338,6 +338,9 @@ var adminBanners_default = router;
 // server/routes/adminCustomers.ts
 import { Router as Router2 } from "express";
 
+// shared/const/order.ts
+var VISIBLE_ORDER_FILTER = "and(mercado_pago_order_id.not.is.null,payment_status.neq.rejected),status.eq.paid";
+
 // shared/lib/orderMapper.ts
 function toNumber(value) {
   if (typeof value === "number") return value;
@@ -520,11 +523,14 @@ async function fetchAuthUsersByIds(ids) {
 }
 async function fetchOrderStatsByCustomer() {
   const stats = /* @__PURE__ */ new Map();
-  const { data, error } = await supabase.from("orders").select("customer_id, total_amount, status").not("customer_id", "is", null);
+  const { data, error } = await supabase.from("orders").select("customer_id, total_amount, status").or(VISIBLE_ORDER_FILTER).not("customer_id", "is", null);
   if (error) throw new Error(error.message);
   for (const row of data ?? []) {
     if (!row.customer_id || row.status === "canceled") continue;
-    const current = stats.get(row.customer_id) ?? { orderCount: 0, totalSpent: 0 };
+    const current = stats.get(row.customer_id) ?? {
+      orderCount: 0,
+      totalSpent: 0
+    };
     current.orderCount += 1;
     current.totalSpent += Number(row.total_amount);
     stats.set(row.customer_id, current);
@@ -532,8 +538,13 @@ async function fetchOrderStatsByCustomer() {
   return stats;
 }
 async function listAllCustomers() {
-  const [profiles, orderStats] = await Promise.all([fetchAllProfiles(), fetchOrderStatsByCustomer()]);
-  const authUsers = await fetchAuthUsersByIds(profiles.map((profile) => String(profile.id)));
+  const [profiles, orderStats] = await Promise.all([
+    fetchAllProfiles(),
+    fetchOrderStatsByCustomer()
+  ]);
+  const authUsers = await fetchAuthUsersByIds(
+    profiles.map((profile) => String(profile.id))
+  );
   return profiles.map((profile) => {
     const id = String(profile.id);
     const authUser = authUsers.get(id);
@@ -554,12 +565,14 @@ async function getCustomerById(customerId) {
   const { data: profile, error } = await supabase.from("customer_profiles").select("*").eq("id", customerId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!profile) throw new Error("Cliente n\xE3o encontrado");
-  const [{ data: authData }, addresses, orders, orderStats] = await Promise.all([
-    supabase.auth.admin.getUserById(customerId),
-    listCustomerAddresses(customerId),
-    listCustomerOrdersForAdmin(customerId),
-    fetchOrderStatsByCustomer()
-  ]);
+  const [{ data: authData }, addresses, orders, orderStats] = await Promise.all(
+    [
+      supabase.auth.admin.getUserById(customerId),
+      listCustomerAddresses(customerId),
+      listCustomerOrdersForAdmin(customerId),
+      fetchOrderStatsByCustomer()
+    ]
+  );
   const stats = orderStats.get(customerId) ?? { orderCount: 0, totalSpent: 0 };
   return {
     id: customerId,
@@ -576,7 +589,7 @@ async function getCustomerById(customerId) {
   };
 }
 async function listCustomerOrdersForAdmin(customerId) {
-  const { data: orderRows, error } = await supabase.from("orders").select("*").eq("customer_id", customerId).order("created_at", { ascending: false });
+  const { data: orderRows, error } = await supabase.from("orders").select("*").eq("customer_id", customerId).or(VISIBLE_ORDER_FILTER).order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   if (!orderRows?.length) return [];
   const orderIds = orderRows.map((row) => row.id);
@@ -680,7 +693,7 @@ function inRange(iso, start, end) {
   return true;
 }
 async function fetchOrdersRows() {
-  const { data, error } = await supabase.from("orders").select("id, customer_id, status, total_amount, payment_method, created_at").order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("orders").select("id, customer_id, status, total_amount, payment_method, created_at").or(VISIBLE_ORDER_FILTER).order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return data ?? [];
 }
@@ -698,7 +711,9 @@ async function fetchPageViews() {
   return data ?? [];
 }
 async function fetchAbandonedCarts() {
-  const staleBefore = new Date(Date.now() - ABANDONED_CART_HOURS * 60 * 60 * 1e3).toISOString();
+  const staleBefore = new Date(
+    Date.now() - ABANDONED_CART_HOURS * 60 * 60 * 1e3
+  ).toISOString();
   const { data: carts, error } = await supabase.from("carts").select("id, updated_at").eq("status", "active").lt("updated_at", staleBefore);
   if (error) throw new Error(error.message);
   if (!carts?.length) return { count: 0, value: 0 };
@@ -708,7 +723,10 @@ async function fetchAbandonedCarts() {
   const valueByCart = /* @__PURE__ */ new Map();
   for (const item of items ?? []) {
     const current = valueByCart.get(item.cart_id) ?? 0;
-    valueByCart.set(item.cart_id, current + Number(item.quantity) * Number(item.unit_price));
+    valueByCart.set(
+      item.cart_id,
+      current + Number(item.quantity) * Number(item.unit_price)
+    );
   }
   let count = 0;
   let value = 0;
@@ -773,7 +791,10 @@ function computeOverview(period, orders, customers, pageViews, abandoned, cartCo
     (o) => o.status === "paid" && inRange(o.created_at, prevStart, prevEnd)
   );
   const revenue = paidInPeriod.reduce((s, o) => s + Number(o.total_amount), 0);
-  const revenuePrev = paidPrevPeriod.reduce((s, o) => s + Number(o.total_amount), 0);
+  const revenuePrev = paidPrevPeriod.reduce(
+    (s, o) => s + Number(o.total_amount),
+    0
+  );
   const ordersCount = paidInPeriod.length;
   const ordersPrev = paidPrevPeriod.length;
   const viewsInPeriod = pageViews.filter((v) => inRange(v.created_at, start));
@@ -782,7 +803,9 @@ function computeOverview(period, orders, customers, pageViews, abandoned, cartCo
   );
   const uniqueSessions = new Set(viewsInPeriod.map((v) => v.session_id)).size;
   const uniqueSessionsPrev = new Set(viewsPrevPeriod.map((v) => v.session_id)).size;
-  const newCustomers = customers.filter((c) => inRange(c.created_at, start)).length;
+  const newCustomers = customers.filter(
+    (c) => inRange(c.created_at, start)
+  ).length;
   const newCustomersPrev = customers.filter(
     (c) => inRange(c.created_at, prevStart, prevEnd)
   ).length;
@@ -823,7 +846,10 @@ function buildTimeSeries(period, orders, pageViews) {
     if (order.status !== "paid") continue;
     const key = toDateKey(order.created_at);
     if (!revenueByDay.has(key)) continue;
-    revenueByDay.set(key, (revenueByDay.get(key) ?? 0) + Number(order.total_amount));
+    revenueByDay.set(
+      key,
+      (revenueByDay.get(key) ?? 0) + Number(order.total_amount)
+    );
     ordersByDay.set(key, (ordersByDay.get(key) ?? 0) + 1);
   }
   for (const view of pageViews) {
@@ -856,7 +882,9 @@ function buildStatusSlices(period, orders) {
 }
 function buildPaymentSlices(period, orders) {
   const start = startDateForPeriod(period);
-  const filtered = orders.filter((o) => o.status === "paid" && inRange(o.created_at, start));
+  const filtered = orders.filter(
+    (o) => o.status === "paid" && inRange(o.created_at, start)
+  );
   const map = /* @__PURE__ */ new Map();
   for (const order of filtered) {
     const method = order.payment_method;
@@ -873,7 +901,9 @@ function buildPaymentSlices(period, orders) {
   }));
 }
 async function buildRecentOrders(orders, customers) {
-  const nameMap = new Map(customers.map((c) => [c.id, String(c.full_name ?? "")]));
+  const nameMap = new Map(
+    customers.map((c) => [c.id, String(c.full_name ?? "")])
+  );
   return orders.slice(0, 6).map((order) => ({
     id: order.id,
     customerName: order.customer_id ? nameMap.get(order.customer_id) || null : null,
@@ -1671,12 +1701,14 @@ function firstPayment(payload) {
 function normalizeInstructions(payload) {
   const payment = firstPayment(payload);
   const transactionData = payment?.payment_method?.transaction_data ?? payment?.point_of_interaction?.transaction_data ?? payload?.point_of_interaction?.transaction_data ?? {};
+  const expirationCandidate = payment?.date_of_expiration ?? transactionData.expiration_date;
+  const expirationDate = typeof expirationCandidate === "string" && !expirationCandidate.startsWith("P") && !Number.isNaN(Date.parse(expirationCandidate)) ? expirationCandidate : void 0;
   const instructions = {
     qrCode: transactionData.qr_code ?? payment?.payment_method?.qr_code,
     qrCodeBase64: transactionData.qr_code_base64 ?? payment?.payment_method?.qr_code_base64,
     ticketUrl: transactionData.ticket_url ?? payment?.payment_method?.ticket_url ?? payment?.transaction_details?.external_resource_url,
     barcode: payment?.payment_method?.digitable_line ?? payment?.payment_method?.barcode_content ?? payment?.payment_method?.barcode?.content ?? payment?.barcode?.content,
-    expirationDate: payment?.expiration_time ?? payment?.date_of_expiration ?? transactionData.expiration_date
+    expirationDate
   };
   return Object.values(instructions).some(Boolean) ? instructions : null;
 }
@@ -2054,7 +2086,7 @@ async function fetchOrderWithItems(orderId, customerId) {
   return mapOrderRowToOrder(orderRow, items);
 }
 async function listCustomerOrders(customerId) {
-  const { data: orderRows, error } = await supabase.from("orders").select("*").eq("customer_id", customerId).order("created_at", { ascending: false });
+  const { data: orderRows, error } = await supabase.from("orders").select("*").eq("customer_id", customerId).or(VISIBLE_ORDER_FILTER).order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   if (!orderRows?.length) return [];
   const orderIds = orderRows.map((row) => row.id);
@@ -2230,7 +2262,7 @@ async function buildItemCountMap(orderIds) {
   return countMap;
 }
 async function listAllOrders() {
-  const { data: orderRows, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
+  const { data: orderRows, error } = await supabase.from("orders").select("*").or(VISIBLE_ORDER_FILTER).order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   if (!orderRows?.length) return [];
   const orderIds = orderRows.map((row) => row.id);

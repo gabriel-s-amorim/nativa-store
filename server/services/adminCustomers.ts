@@ -1,4 +1,8 @@
-import type { AdminCustomerDetail, AdminCustomerSummary } from "@shared/types/customer";
+import type {
+  AdminCustomerDetail,
+  AdminCustomerSummary,
+} from "@shared/types/customer";
+import { VISIBLE_ORDER_FILTER } from "@shared/const/order";
 import type { OrderSummary } from "@shared/types/order";
 import { mapOrderRowToSummary, type OrderRow } from "@shared/lib/orderMapper";
 import { listCustomerAddresses } from "./addresses";
@@ -19,7 +23,7 @@ async function fetchAuthUsersByIds(ids: string[]) {
   if (!ids.length) return users;
 
   await Promise.all(
-    ids.map(async (id) => {
+    ids.map(async id => {
       const { data } = await supabase.auth.admin.getUserById(id);
       if (data?.user) {
         users.set(id, {
@@ -27,7 +31,7 @@ async function fetchAuthUsersByIds(ids: string[]) {
           emailVerified: Boolean(data.user.email_confirmed_at),
         });
       }
-    }),
+    })
   );
 
   return users;
@@ -39,6 +43,7 @@ async function fetchOrderStatsByCustomer() {
   const { data, error } = await supabase
     .from("orders")
     .select("customer_id, total_amount, status")
+    .or(VISIBLE_ORDER_FILTER)
     .not("customer_id", "is", null);
 
   if (error) throw new Error(error.message);
@@ -46,7 +51,10 @@ async function fetchOrderStatsByCustomer() {
   for (const row of data ?? []) {
     if (!row.customer_id || row.status === "canceled") continue;
 
-    const current = stats.get(row.customer_id) ?? { orderCount: 0, totalSpent: 0 };
+    const current = stats.get(row.customer_id) ?? {
+      orderCount: 0,
+      totalSpent: 0,
+    };
     current.orderCount += 1;
     current.totalSpent += Number(row.total_amount);
     stats.set(row.customer_id, current);
@@ -56,10 +64,15 @@ async function fetchOrderStatsByCustomer() {
 }
 
 export async function listAllCustomers(): Promise<AdminCustomerSummary[]> {
-  const [profiles, orderStats] = await Promise.all([fetchAllProfiles(), fetchOrderStatsByCustomer()]);
-  const authUsers = await fetchAuthUsersByIds(profiles.map((profile) => String(profile.id)));
+  const [profiles, orderStats] = await Promise.all([
+    fetchAllProfiles(),
+    fetchOrderStatsByCustomer(),
+  ]);
+  const authUsers = await fetchAuthUsersByIds(
+    profiles.map(profile => String(profile.id))
+  );
 
-  return profiles.map((profile) => {
+  return profiles.map(profile => {
     const id = String(profile.id);
     const authUser = authUsers.get(id);
     const stats = orderStats.get(id) ?? { orderCount: 0, totalSpent: 0 };
@@ -77,7 +90,9 @@ export async function listAllCustomers(): Promise<AdminCustomerSummary[]> {
   });
 }
 
-export async function getCustomerById(customerId: string): Promise<AdminCustomerDetail> {
+export async function getCustomerById(
+  customerId: string
+): Promise<AdminCustomerDetail> {
   const { data: profile, error } = await supabase
     .from("customer_profiles")
     .select("*")
@@ -87,12 +102,14 @@ export async function getCustomerById(customerId: string): Promise<AdminCustomer
   if (error) throw new Error(error.message);
   if (!profile) throw new Error("Cliente não encontrado");
 
-  const [{ data: authData }, addresses, orders, orderStats] = await Promise.all([
-    supabase.auth.admin.getUserById(customerId),
-    listCustomerAddresses(customerId),
-    listCustomerOrdersForAdmin(customerId),
-    fetchOrderStatsByCustomer(),
-  ]);
+  const [{ data: authData }, addresses, orders, orderStats] = await Promise.all(
+    [
+      supabase.auth.admin.getUserById(customerId),
+      listCustomerAddresses(customerId),
+      listCustomerOrdersForAdmin(customerId),
+      fetchOrderStatsByCustomer(),
+    ]
+  );
 
   const stats = orderStats.get(customerId) ?? { orderCount: 0, totalSpent: 0 };
 
@@ -111,17 +128,20 @@ export async function getCustomerById(customerId: string): Promise<AdminCustomer
   };
 }
 
-export async function listCustomerOrdersForAdmin(customerId: string): Promise<OrderSummary[]> {
+export async function listCustomerOrdersForAdmin(
+  customerId: string
+): Promise<OrderSummary[]> {
   const { data: orderRows, error } = await supabase
     .from("orders")
     .select("*")
     .eq("customer_id", customerId)
+    .or(VISIBLE_ORDER_FILTER)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
   if (!orderRows?.length) return [];
 
-  const orderIds = orderRows.map((row) => row.id);
+  const orderIds = orderRows.map(row => row.id);
   const { data: itemRows, error: itemsError } = await supabase
     .from("order_items")
     .select("order_id, quantity")
@@ -135,7 +155,7 @@ export async function listCustomerOrdersForAdmin(customerId: string): Promise<Or
     countMap.set(item.order_id, current + Number(item.quantity));
   }
 
-  return orderRows.map((row) =>
-    mapOrderRowToSummary(row as OrderRow, countMap.get(row.id) ?? 0),
+  return orderRows.map(row =>
+    mapOrderRowToSummary(row as OrderRow, countMap.get(row.id) ?? 0)
   );
 }

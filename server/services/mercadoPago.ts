@@ -220,6 +220,14 @@ function normalizeInstructions(payload: any): PaymentInstructions | null {
     payment?.point_of_interaction?.transaction_data ??
     payload?.point_of_interaction?.transaction_data ??
     {};
+  const expirationCandidate =
+    payment?.date_of_expiration ?? transactionData.expiration_date;
+  const expirationDate =
+    typeof expirationCandidate === "string" &&
+    !expirationCandidate.startsWith("P") &&
+    !Number.isNaN(Date.parse(expirationCandidate))
+      ? expirationCandidate
+      : undefined;
   const instructions: PaymentInstructions = {
     qrCode: transactionData.qr_code ?? payment?.payment_method?.qr_code,
     qrCodeBase64:
@@ -233,10 +241,7 @@ function normalizeInstructions(payload: any): PaymentInstructions | null {
       payment?.payment_method?.barcode_content ??
       payment?.payment_method?.barcode?.content ??
       payment?.barcode?.content,
-    expirationDate:
-      payment?.expiration_time ??
-      payment?.date_of_expiration ??
-      transactionData.expiration_date,
+    expirationDate,
   };
   return Object.values(instructions).some(Boolean) ? instructions : null;
 }

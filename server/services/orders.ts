@@ -2,6 +2,7 @@ import {
   calculateShippingAmount,
   CART_STATUS_ACTIVE,
 } from "@shared/const/cart";
+import { VISIBLE_ORDER_FILTER } from "@shared/const/order";
 import type { CartItemRow, CartRow } from "@shared/lib/cartMapper";
 import {
   mapCartItemToOrderItemPayload,
@@ -113,6 +114,7 @@ export async function listCustomerOrders(
     .from("orders")
     .select("*")
     .eq("customer_id", customerId)
+    .or(VISIBLE_ORDER_FILTER)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -360,6 +362,7 @@ export async function listAllOrders(): Promise<AdminOrderSummary[]> {
   const { data: orderRows, error } = await supabase
     .from("orders")
     .select("*")
+    .or(VISIBLE_ORDER_FILTER)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
