@@ -146,8 +146,8 @@ function SearchPanel({
   inputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative px-1 pb-3">
+    <div className="flex min-h-0 flex-1 flex-col pt-1">
+      <div className="relative px-1 pb-3 pt-1">
         <Search
           size={18}
           className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#8B6F5E]"
@@ -241,15 +241,18 @@ export default function StoreSearch() {
         onOpenChange={(open) => !open && closeSearch()}
         shouldScaleBackground={false}
       >
-        <DrawerContent className="flex max-h-[92vh] flex-col border-[#E8D5C4] bg-[#FAF7F2]">
-          <DrawerHeader className="pb-1 text-left">
+        <DrawerContent className="flex max-h-[92vh] flex-col overflow-hidden border-[#E8D5C4] bg-[#FAF7F2]">
+          <DrawerHeader className="gap-2 pb-2 text-left">
             <DrawerTitle
-              className="text-[#3D2B1F]"
+              className="text-xl leading-snug text-[#3D2B1F]"
               style={{ fontFamily: "'Playfair Display', serif" }}
             >
               Buscar na Nativa
             </DrawerTitle>
-            <DrawerDescription style={{ fontFamily: "'Nunito', sans-serif" }}>
+            <DrawerDescription
+              className="text-sm leading-normal text-[#8B6F5E]"
+              style={{ fontFamily: "'Nunito', sans-serif" }}
+            >
               Encontre peças por nome, categoria ou código
             </DrawerDescription>
           </DrawerHeader>
@@ -265,16 +268,19 @@ export default function StoreSearch() {
     <Dialog open={isSearchOpen} onOpenChange={(open) => !open && closeSearch()}>
       <DialogContent
         showCloseButton
-        className="flex max-h-[min(85vh,640px)] w-full max-w-lg flex-col gap-2 border-[#E8D5C4] bg-[#FAF7F2] p-5 sm:max-w-lg"
+        className="flex max-h-[min(85vh,640px)] w-full max-w-lg flex-col gap-3 overflow-hidden border-[#E8D5C4] bg-[#FAF7F2] p-5 sm:max-w-lg"
       >
-        <DialogHeader className="pr-8 text-left">
+        <DialogHeader className="space-y-2 overflow-visible pr-8 text-left">
           <DialogTitle
-            className="text-[#3D2B1F]"
+            className="text-xl leading-snug text-[#3D2B1F]"
             style={{ fontFamily: "'Playfair Display', serif" }}
           >
             Buscar na Nativa
           </DialogTitle>
-          <DialogDescription style={{ fontFamily: "'Nunito', sans-serif" }}>
+          <DialogDescription
+            className="text-sm leading-normal text-[#8B6F5E]"
+            style={{ fontFamily: "'Nunito', sans-serif" }}
+          >
             Encontre peças por nome, categoria ou código
           </DialogDescription>
         </DialogHeader>
