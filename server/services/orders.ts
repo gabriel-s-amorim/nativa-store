@@ -33,6 +33,7 @@ import {
 } from "./melhorEnvio";
 import {
   dispatchOrderEmail,
+  dispatchOrderCreatedEmails,
   dispatchPaymentStatusEmail,
 } from "./orderEmails";
 
@@ -364,7 +365,7 @@ export async function createOrderFromCheckout(
         }
       );
       if (acceptError) throw new Error(acceptError.message);
-      await dispatchOrderEmail(order.id, "order_received");
+      await dispatchOrderCreatedEmails(order.id);
 
       if (identity.status === "approved") {
         const { error: reconcileError } = await supabase.rpc(

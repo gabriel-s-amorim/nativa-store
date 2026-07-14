@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { brevoNewsletterSchema, brevoTransactionalEmailSchema } from "./brevo";
+import {
+  brevoNewsletterSchema,
+  brevoTemplateTestSchema,
+  brevoTransactionalEmailSchema,
+} from "./brevo";
 
 describe("schemas Brevo", () => {
   it("valida opt-in e preserva o honeypot", () => {
@@ -40,5 +44,20 @@ describe("schemas Brevo", () => {
         templateId: 10,
       }).success
     ).toBe(true);
+  });
+
+  it("permite teste de template de pedido", () => {
+    expect(
+      brevoTemplateTestSchema.safeParse({
+        event: "order_received",
+        email: "loja@example.com",
+      }).success
+    ).toBe(true);
+    expect(
+      brevoTemplateTestSchema.safeParse({
+        event: "order_processing",
+        email: "loja@example.com",
+      }).success
+    ).toBe(false);
   });
 });

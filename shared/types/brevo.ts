@@ -9,8 +9,10 @@ export interface BrevoSettingsInput {
   defaultSenderEmail?: string;
   defaultSenderName?: string;
   replyTo?: string;
+  merchantNotifyEmail?: string;
   defaultListId?: number | null;
   templateOrderReceived?: number | null;
+  templateOrderReceivedMerchant?: number | null;
   templatePaymentApproved?: number | null;
   templatePaymentFailed?: number | null;
   templatePaymentRefunded?: number | null;

@@ -431,8 +431,10 @@ export interface BrevoStatus {
   defaultSenderEmail?: string;
   defaultSenderName?: string;
   replyTo?: string;
+  merchantNotifyEmail?: string;
   defaultListId?: number | null;
   templateOrderReceived?: number | null;
+  templateOrderReceivedMerchant?: number | null;
   templatePaymentApproved?: number | null;
   templatePaymentFailed?: number | null;
   templatePaymentRefunded?: number | null;
@@ -449,8 +451,10 @@ export interface BrevoSettingsInput {
   defaultSenderEmail?: string;
   defaultSenderName?: string;
   replyTo?: string;
+  merchantNotifyEmail?: string;
   defaultListId?: number | null;
   templateOrderReceived?: number | null;
+  templateOrderReceivedMerchant?: number | null;
   templatePaymentApproved?: number | null;
   templatePaymentFailed?: number | null;
   templatePaymentRefunded?: number | null;
@@ -546,6 +550,19 @@ export function testBrevoConnection() {
   return request<{ success: true; account?: unknown }>(
     "/api/admin/brevo/test",
     { method: "POST" }
+  );
+}
+
+export function testBrevoOrderTemplate(input: {
+  event: "order_received" | "order_received_merchant" | "payment_approved";
+  email: string;
+}) {
+  return request<{ messageId?: string }>(
+    "/api/admin/brevo/emails/test-template",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    }
   );
 }
 

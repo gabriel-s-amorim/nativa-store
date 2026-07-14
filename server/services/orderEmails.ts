@@ -7,6 +7,7 @@ import {
 
 export type OrderEmailEvent =
   | "order_received"
+  | "order_received_merchant"
   | "payment_approved"
   | "payment_failed"
   | "payment_refunded"
@@ -38,20 +39,36 @@ function paymentMethodLabel(value: string): string {
   return value;
 }
 
-export async function dispatchOrderEmail(
-  orderId: string,
-  event: OrderEmailEvent
-): Promise<"sent" | "duplicate" | "skipped" | "failed"> {
-  let config: Awaited<ReturnType<typeof getBrevoTransactionalConfig>>;
-  try {
-    config = await getBrevoTransactionalConfig();
-  } catch {
-    return "skipped";
-  }
+export function sampleOrderEmailParams() {
+  const shortId = "TESTE001";
+  return {
+    ORDER_ID: "00000000-0000-0000-0000-000000000001",
+    ORDER_SHORT_ID: shortId,
+    CUSTOMER_NAME: "Cliente Teste",
+    ORDER_URL: `${appUrl()}/conta`,
+    TOTAL: money(189.9),
+    SUBTOTAL: money(159.9),
+    SHIPPING_AMOUNT: money(30),
+    PAYMENT_METHOD: "Pix",
+    PAYMENT_STATUS: "pending",
+    ITEMS: [
+      {
+        name: "Produto de teste",
+        quantity: 1,
+        price: money(159.9),
+        size: "M",
+        color: "Natural",
+      },
+    ],
+    SHIPPING_COMPANY: "Correios",
+    DELIVERY_DAYS: "5",
+    TRACKING_CODE: "",
+    TRACKING_URL: "",
+    ADDRESS: "Rua Exemplo, 100, Centro, São Paulo, SP, 01000-000",
+  };
+}
 
-  const templateId = config.templates[event];
-  if (!templateId) return "skipped";
-
+async function loadOrderEmailContext(orderId: string) {
   const [{ data: order, error: orderError }, { data: items, error: itemsError }] =
     await Promise.all([
       supabase.from("orders").select("*").eq("id", orderId).maybeSingle(),
@@ -61,7 +78,7 @@ export async function dispatchOrderEmail(
         .eq("order_id", orderId)
         .order("id", { ascending: true }),
     ]);
-  if (orderError || itemsError || !order) return "failed";
+  if (orderError || itemsError || !order) return null;
 
   const recipient = (order.shipping_recipient ?? {}) as {
     name?: string;
@@ -81,6 +98,71 @@ export async function dispatchOrderEmail(
     email ||= authResult.data.user?.email?.toLowerCase() ?? "";
     customerName ||= profile?.full_name ?? "";
   }
+
+  const address = (order.shipping_address ?? {}) as Record<string, string>;
+  const itemParams = (items ?? []).map(item => ({
+    name: item.name,
+    quantity: Number(item.quantity),
+    price: money(item.price),
+    size: item.size,
+    color: item.color,
+  }));
+  const shortId = String(order.id).slice(0, 8).toUpperCase();
+  const params = {
+    ORDER_ID: order.id,
+    ORDER_SHORT_ID: shortId,
+    CUSTOMER_NAME: customerName || "Cliente Nativa",
+    ORDER_URL: `${appUrl()}/conta`,
+    TOTAL: money(order.total_amount),
+    SUBTOTAL: money(Number(order.total_amount) - Number(order.shipping_amount)),
+    SHIPPING_AMOUNT: money(order.shipping_amount),
+    PAYMENT_METHOD: paymentMethodLabel(order.payment_method),
+    PAYMENT_STATUS: order.payment_status,
+    ITEMS: itemParams,
+    SHIPPING_COMPANY: order.shipping_company ?? "",
+    DELIVERY_DAYS: order.shipping_delivery_days ?? "",
+    TRACKING_CODE: order.tracking_code ?? "",
+    TRACKING_URL: order.tracking_url ?? "",
+    ADDRESS: [
+      address.rua,
+      address.numero,
+      address.complemento,
+      address.bairro,
+      address.cidade,
+      address.estado,
+      address.cep,
+    ]
+      .filter(Boolean)
+      .join(", "),
+  };
+
+  return { order, email, customerName, params };
+}
+
+export async function dispatchOrderEmail(
+  orderId: string,
+  event: OrderEmailEvent
+): Promise<"sent" | "duplicate" | "skipped" | "failed"> {
+  let config: Awaited<ReturnType<typeof getBrevoTransactionalConfig>>;
+  try {
+    config = await getBrevoTransactionalConfig();
+  } catch {
+    return "skipped";
+  }
+
+  const templateId = config.templates[event];
+  if (!templateId) return "skipped";
+
+  const context = await loadOrderEmailContext(orderId);
+  if (!context) return "failed";
+
+  const isMerchant = event === "order_received_merchant";
+  const email = isMerchant
+    ? config.merchantNotifyEmail.trim().toLowerCase()
+    : context.email;
+  const recipientName = isMerchant
+    ? "Loja Nativa"
+    : context.customerName || undefined;
   if (!email) return "skipped";
 
   const idempotencyKey = `${orderId}:${event}`;
@@ -137,50 +219,13 @@ export async function dispatchOrderEmail(
       .eq("id", delivery.id);
   }
 
-  const address = (order.shipping_address ?? {}) as Record<string, string>;
-  const itemParams = (items ?? []).map(item => ({
-    name: item.name,
-    quantity: Number(item.quantity),
-    price: money(item.price),
-    size: item.size,
-    color: item.color,
-  }));
-  const shortId = String(order.id).slice(0, 8).toUpperCase();
-  const params = {
-    ORDER_ID: order.id,
-    ORDER_SHORT_ID: shortId,
-    CUSTOMER_NAME: customerName || "Cliente Nativa",
-    ORDER_URL: `${appUrl()}/conta`,
-    TOTAL: money(order.total_amount),
-    SUBTOTAL: money(Number(order.total_amount) - Number(order.shipping_amount)),
-    SHIPPING_AMOUNT: money(order.shipping_amount),
-    PAYMENT_METHOD: paymentMethodLabel(order.payment_method),
-    PAYMENT_STATUS: order.payment_status,
-    ITEMS: itemParams,
-    SHIPPING_COMPANY: order.shipping_company ?? "",
-    DELIVERY_DAYS: order.shipping_delivery_days ?? "",
-    TRACKING_CODE: order.tracking_code ?? "",
-    TRACKING_URL: order.tracking_url ?? "",
-    ADDRESS: [
-      address.rua,
-      address.numero,
-      address.complemento,
-      address.bairro,
-      address.cidade,
-      address.estado,
-      address.cep,
-    ]
-      .filter(Boolean)
-      .join(", "),
-  };
-
   try {
     const result = await sendBrevoTransactionalEmail(
       {
-        to: [{ email, name: customerName || undefined }],
+        to: [{ email, name: recipientName }],
         replyTo: config.replyTo ? { email: config.replyTo } : undefined,
         templateId,
-        params,
+        params: context.params,
         tags: ["order", event],
       },
       "transactional",
@@ -209,6 +254,12 @@ export async function dispatchOrderEmail(
       .eq("id", delivery.id);
     return "failed";
   }
+}
+
+export async function dispatchOrderCreatedEmails(orderId: string) {
+  const customer = await dispatchOrderEmail(orderId, "order_received");
+  const merchant = await dispatchOrderEmail(orderId, "order_received_merchant");
+  return { customer, merchant };
 }
 
 export function dispatchPaymentStatusEmail(
@@ -240,4 +291,40 @@ export async function retryOrderEmail(
     .maybeSingle();
   if (error || !data?.event) return "failed";
   return dispatchOrderEmail(orderId, data.event as OrderEmailEvent);
+}
+
+export async function sendOrderTemplateTest(input: {
+  event: "order_received" | "order_received_merchant" | "payment_approved";
+  email: string;
+}) {
+  const config = await getBrevoTransactionalConfig();
+  const templateId = config.templates[input.event];
+  if (!templateId) {
+    throw new Error("Template não configurado para este evento");
+  }
+  const email = input.email.trim().toLowerCase();
+  const params = {
+    ...sampleOrderEmailParams(),
+    ...(input.event === "payment_approved"
+      ? { PAYMENT_STATUS: "approved" }
+      : {}),
+  };
+  return sendBrevoTransactionalEmail(
+    {
+      to: [
+        {
+          email,
+          name:
+            input.event === "order_received_merchant"
+              ? "Loja Nativa"
+              : "Cliente Teste",
+        },
+      ],
+      replyTo: config.replyTo ? { email: config.replyTo } : undefined,
+      templateId,
+      params,
+      tags: ["order", "test", input.event],
+    },
+    "test"
+  );
 }

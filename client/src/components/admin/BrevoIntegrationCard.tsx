@@ -19,6 +19,7 @@ import {
   fetchBrevoStatus,
   fetchBrevoTemplates,
   testBrevoConnection,
+  testBrevoOrderTemplate,
   updateBrevoSettings,
   type BrevoList,
   type BrevoSender,
@@ -37,6 +38,45 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
+type TestEvent =
+  | "order_received"
+  | "order_received_merchant"
+  | "payment_approved";
+
+const PRIMARY_TEMPLATES: Array<{
+  key: string;
+  label: string;
+  help: string;
+  testEvent?: TestEvent;
+}> = [
+  {
+    key: "templateOrderReceived",
+    label: "Pedido criado → cliente",
+    help: "Enviado quando o pedido é aceito no checkout.",
+    testEvent: "order_received",
+  },
+  {
+    key: "templateOrderReceivedMerchant",
+    label: "Pedido criado → loja",
+    help: "Aviso para o e-mail da loja no mesmo momento.",
+    testEvent: "order_received_merchant",
+  },
+  {
+    key: "templatePaymentApproved",
+    label: "Pagamento aprovado → cliente",
+    help: "Enviado quando o Mercado Pago confirma o pagamento.",
+    testEvent: "payment_approved",
+  },
+];
+
+const EXTRA_TEMPLATES: Array<[string, string]> = [
+  ["templatePaymentFailed", "Pagamento recusado/cancelado"],
+  ["templatePaymentRefunded", "Pagamento reembolsado"],
+  ["templateOrderProcessing", "Em preparação"],
+  ["templateOrderShipped", "Pedido enviado"],
+  ["templateOrderDelivered", "Pedido entregue"],
+];
+
 export default function BrevoIntegrationCard() {
   const [status, setStatus] = useState<BrevoStatus | null>(null);
   const [senders, setSenders] = useState<BrevoSender[]>([]);
@@ -48,10 +88,13 @@ export default function BrevoIntegrationCard() {
   const [senderId, setSenderId] = useState("");
   const [listId, setListId] = useState("");
   const [replyTo, setReplyTo] = useState("");
+  const [merchantNotifyEmail, setMerchantNotifyEmail] = useState("");
+  const [testEmail, setTestEmail] = useState("");
   const [templateIds, setTemplateIds] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testingEvent, setTestingEvent] = useState<TestEvent | null>(null);
   const [configuringWebhook, setConfiguringWebhook] = useState(false);
 
   async function load() {
@@ -62,9 +105,21 @@ export default function BrevoIntegrationCard() {
       setEnabled(data.enabled);
       setListId(data.defaultListId ? String(data.defaultListId) : "");
       setReplyTo(data.replyTo ?? "");
+      setMerchantNotifyEmail(data.merchantNotifyEmail ?? "");
+      setTestEmail(
+        current =>
+          current ||
+          data.merchantNotifyEmail ||
+          data.replyTo ||
+          data.defaultSenderEmail ||
+          ""
+      );
       setTemplateIds({
         templateOrderReceived: data.templateOrderReceived
           ? String(data.templateOrderReceived)
+          : "",
+        templateOrderReceivedMerchant: data.templateOrderReceivedMerchant
+          ? String(data.templateOrderReceivedMerchant)
           : "",
         templatePaymentApproved: data.templatePaymentApproved
           ? String(data.templatePaymentApproved)
@@ -132,6 +187,7 @@ export default function BrevoIntegrationCard() {
         defaultSenderEmail: selectedSender?.email ?? status.defaultSenderEmail ?? "",
         defaultSenderName: selectedSender?.name ?? status.defaultSenderName ?? "",
         replyTo: replyTo.trim(),
+        merchantNotifyEmail: merchantNotifyEmail.trim(),
         defaultListId: listId ? Number(listId) : null,
         ...Object.fromEntries(
           Object.entries(templateIds).map(([key, value]) => [
@@ -191,6 +247,27 @@ export default function BrevoIntegrationCard() {
     }
   }
 
+  async function sendTemplateTest(event: TestEvent) {
+    const email = testEmail.trim();
+    if (!email) {
+      toast.error("Informe um e-mail para o teste");
+      return;
+    }
+    setTestingEvent(event);
+    try {
+      await testBrevoOrderTemplate({ event, email });
+      toast.success(`Teste enviado para ${email}`);
+    } catch (error) {
+      toast.error(
+        error instanceof AdminApiError
+          ? error.message
+          : "Não foi possível enviar o teste"
+      );
+    } finally {
+      setTestingEvent(null);
+    }
+  }
+
   if (loading || !status) {
     return (
       <Card className="flex justify-center border-[var(--admin-border)] p-8">
@@ -212,7 +289,7 @@ export default function BrevoIntegrationCard() {
             <div>
               <h2 className="text-lg font-bold text-[var(--admin-text)]">Brevo</h2>
               <p className="mt-1 text-sm text-[var(--admin-text-muted)]">
-                Newsletters, campanhas e contatos sincronizados.
+                E-mails de pedido, pagamento e avisos da loja.
               </p>
             </div>
           </div>
@@ -232,7 +309,7 @@ export default function BrevoIntegrationCard() {
           <div>
             <Label>Habilitar integração</Label>
             <p className="text-xs text-[var(--admin-text-muted)]">
-              Permite inscrições e envios pelo painel.
+              Libera o envio automático dos e-mails da loja.
             </p>
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} />
@@ -299,34 +376,119 @@ export default function BrevoIntegrationCard() {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="brevo-reply-to">E-mail para respostas</Label>
-          <Input
-            id="brevo-reply-to"
-            type="email"
-            value={replyTo}
-            onChange={event => setReplyTo(event.target.value)}
-            placeholder="contato@seudominio.com.br"
-          />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="brevo-reply-to">E-mail para respostas</Label>
+            <Input
+              id="brevo-reply-to"
+              type="email"
+              value={replyTo}
+              onChange={event => setReplyTo(event.target.value)}
+              placeholder="quintiluz@gmail.com"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="brevo-merchant-email">E-mail da loja (avisos)</Label>
+            <Input
+              id="brevo-merchant-email"
+              type="email"
+              value={merchantNotifyEmail}
+              onChange={event => setMerchantNotifyEmail(event.target.value)}
+              placeholder="quintiluz@gmail.com"
+            />
+            <p className="text-xs text-[var(--admin-text-muted)]">
+              Recebe o aviso quando um pedido é criado.
+            </p>
+          </div>
         </div>
 
         <div className="space-y-3">
           <div>
-            <Label>Templates dos pedidos</Label>
+            <Label>E-mails principais</Label>
             <p className="text-xs text-[var(--admin-text-muted)]">
-              Crie e ative os templates transacionais no Brevo antes de selecioná-los.
+              Crie os templates no Brevo e selecione aqui. Depois use o botão de
+              teste.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {PRIMARY_TEMPLATES.map(item => (
+              <div
+                key={item.key}
+                className="space-y-2 rounded-xl border border-[var(--admin-border)] p-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-[var(--admin-text)]">
+                      {item.label}
+                    </p>
+                    <p className="text-xs text-[var(--admin-text-muted)]">
+                      {item.help}
+                    </p>
+                  </div>
+                  {item.testEvent && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        !status.hasApiKey ||
+                        !templateIds[item.key] ||
+                        testingEvent === item.testEvent
+                      }
+                      onClick={() => void sendTemplateTest(item.testEvent!)}
+                      className="gap-1.5"
+                    >
+                      {testingEvent === item.testEvent ? (
+                        <Spinner className="size-3.5" />
+                      ) : (
+                        <TestTube2 className="size-3.5" />
+                      )}
+                      Testar
+                    </Button>
+                  )}
+                </div>
+                <Select
+                  value={templateIds[item.key] || undefined}
+                  onValueChange={value =>
+                    setTemplateIds(current => ({ ...current, [item.key]: value }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Não configurado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map(template => (
+                      <SelectItem key={template.id} value={String(template.id)}>
+                        #{template.id} — {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="brevo-test-email">E-mail para testes</Label>
+            <Input
+              id="brevo-test-email"
+              type="email"
+              value={testEmail}
+              onChange={event => setTestEmail(event.target.value)}
+              placeholder="seu@email.com"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <Label>Templates extras (opcional)</Label>
+            <p className="text-xs text-[var(--admin-text-muted)]">
+              Podem ficar sem configurar por enquanto.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            {[
-              ["templateOrderReceived", "Pedido recebido"],
-              ["templatePaymentApproved", "Pagamento aprovado"],
-              ["templatePaymentFailed", "Pagamento recusado/cancelado"],
-              ["templatePaymentRefunded", "Pagamento reembolsado"],
-              ["templateOrderProcessing", "Em preparação"],
-              ["templateOrderShipped", "Pedido enviado"],
-              ["templateOrderDelivered", "Pedido entregue"],
-            ].map(([key, label]) => (
+            {EXTRA_TEMPLATES.map(([key, label]) => (
               <div key={key} className="space-y-1.5">
                 <Label>{label}</Label>
                 <Select
@@ -369,8 +531,8 @@ export default function BrevoIntegrationCard() {
             </Button>
           </div>
           <p className="text-xs text-[var(--admin-text-muted)]">
-            O botão abaixo registra os eventos de entrega, abertura, clique,
-            bounce e descadastro com autenticação Bearer.
+            Opcional no uso simples. Serve para registrar entrega, bounce e
+            descadastro.
           </p>
         </div>
 

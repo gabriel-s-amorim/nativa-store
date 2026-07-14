@@ -23,8 +23,10 @@ interface BrevoSettingsRow {
   default_sender_email: string;
   default_sender_name: string;
   reply_to: string;
+  merchant_notify_email: string;
   default_list_id: number | null;
   template_order_received: number | null;
+  template_order_received_merchant: number | null;
   template_payment_approved: number | null;
   template_payment_failed: number | null;
   template_payment_refunded: number | null;
@@ -92,8 +94,10 @@ function adminStatus(row: BrevoSettingsRow): BrevoAdminStatus {
     defaultSenderEmail: row.default_sender_email,
     defaultSenderName: row.default_sender_name,
     replyTo: row.reply_to,
+    merchantNotifyEmail: row.merchant_notify_email,
     defaultListId: row.default_list_id,
     templateOrderReceived: row.template_order_received,
+    templateOrderReceivedMerchant: row.template_order_received_merchant,
     templatePaymentApproved: row.template_payment_approved,
     templatePaymentFailed: row.template_payment_failed,
     templatePaymentRefunded: row.template_payment_refunded,
@@ -133,10 +137,14 @@ export async function updateBrevoSettings(
     update.default_sender_name = input.defaultSenderName.trim();
   }
   if (input.replyTo !== undefined) update.reply_to = input.replyTo.trim().toLowerCase();
+  if (input.merchantNotifyEmail !== undefined) {
+    update.merchant_notify_email = input.merchantNotifyEmail.trim().toLowerCase();
+  }
   if (input.defaultListId !== undefined)
     update.default_list_id = input.defaultListId;
   const templateColumns = {
     templateOrderReceived: "template_order_received",
+    templateOrderReceivedMerchant: "template_order_received_merchant",
     templatePaymentApproved: "template_payment_approved",
     templatePaymentFailed: "template_payment_failed",
     templatePaymentRefunded: "template_payment_refunded",
@@ -265,8 +273,10 @@ export async function getBrevoTransactionalConfig() {
   return {
     enabled: settings.enabled,
     replyTo: settings.reply_to,
+    merchantNotifyEmail: settings.merchant_notify_email,
     templates: {
       order_received: settings.template_order_received,
+      order_received_merchant: settings.template_order_received_merchant,
       payment_approved: settings.template_payment_approved,
       payment_failed: settings.template_payment_failed,
       payment_refunded: settings.template_payment_refunded,

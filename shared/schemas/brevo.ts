@@ -14,14 +14,25 @@ export const brevoSettingsSchema = z.object({
   defaultSenderEmail: z.union([z.literal(""), z.email().max(320)]).optional(),
   defaultSenderName: z.string().trim().max(150).optional(),
   replyTo: z.union([z.literal(""), z.email().max(320)]).optional(),
+  merchantNotifyEmail: z.union([z.literal(""), z.email().max(320)]).optional(),
   defaultListId: nullablePositiveInteger.optional(),
   templateOrderReceived: nullablePositiveInteger.optional(),
+  templateOrderReceivedMerchant: nullablePositiveInteger.optional(),
   templatePaymentApproved: nullablePositiveInteger.optional(),
   templatePaymentFailed: nullablePositiveInteger.optional(),
   templatePaymentRefunded: nullablePositiveInteger.optional(),
   templateOrderProcessing: nullablePositiveInteger.optional(),
   templateOrderShipped: nullablePositiveInteger.optional(),
   templateOrderDelivered: nullablePositiveInteger.optional(),
+});
+
+export const brevoTemplateTestSchema = z.object({
+  event: z.enum([
+    "order_received",
+    "order_received_merchant",
+    "payment_approved",
+  ]),
+  email: z.email().max(320),
 });
 
 export const brevoContactSchema = z.object({

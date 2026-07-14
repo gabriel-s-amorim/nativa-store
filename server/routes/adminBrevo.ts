@@ -6,6 +6,7 @@ import {
   brevoListCreateSchema,
   brevoQuickTestSchema,
   brevoSettingsSchema,
+  brevoTemplateTestSchema,
   brevoTransactionalEmailSchema,
 } from "@shared/schemas/brevo";
 import { Router, type Response } from "express";
@@ -36,6 +37,7 @@ import {
   updateBrevoSettings,
   upsertBrevoContact,
 } from "../services/brevo";
+import { sendOrderTemplateTest } from "../services/orderEmails";
 
 const router = Router();
 const paginationSchema = z.object({
@@ -205,6 +207,16 @@ router.post("/emails/test", async (req, res) => {
       );
   } catch (error) {
     failure(res, error, "Erro ao testar e-mail");
+  }
+});
+
+router.post("/emails/test-template", async (req, res) => {
+  const parsed = brevoTemplateTestSchema.safeParse(req.body);
+  if (!parsed.success) return invalid(res, parsed.error.issues);
+  try {
+    res.status(201).json(await sendOrderTemplateTest(parsed.data));
+  } catch (error) {
+    failure(res, error, "Erro ao enviar teste do template");
   }
 });
 
