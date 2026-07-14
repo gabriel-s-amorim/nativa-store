@@ -5,10 +5,12 @@
  */
 
 import { useRegions } from "@/hooks/useRegions";
+import { useRegionsPassport } from "@/hooks/useRegionsPassport";
 import { useMemo, useState } from "react";
 import { FeatherBlue, FeatherGreen, FeatherOrange } from "../NativaDecorations";
 import RegionPanel from "./RegionPanel";
-import RegionSvg, { type RegionId } from "./RegionSvg";
+import RegionsPassport from "./RegionsPassport";
+import RegionSvg, { REGION_IDS, type RegionId } from "./RegionSvg";
 
 const REGION_ID_FALLBACK_LABEL: Record<RegionId, string> = {
   norte: "Norte",
@@ -21,6 +23,7 @@ const REGION_ID_FALLBACK_LABEL: Record<RegionId, string> = {
 export default function MapaOrigens() {
   const { regions, loading, error } = useRegions();
   const [selectedId, setSelectedId] = useState<RegionId | null>(null);
+  const passport = useRegionsPassport(REGION_IDS);
 
   const regionsById = useMemo(() => {
     const map = new Map(regions.map((region) => [region.id, region]));
@@ -35,6 +38,7 @@ export default function MapaOrigens() {
 
   function handleSelect(id: RegionId) {
     setSelectedId((current) => (current === id ? current : id));
+    passport.markVisited(id);
   }
 
   return (
@@ -80,6 +84,17 @@ export default function MapaOrigens() {
             Um mapa vivo das tradições que inspiram nossas estampas
           </p>
         </div>
+
+        <RegionsPassport
+          regionIds={REGION_IDS}
+          visitedSet={passport.visitedSet}
+          visitedCount={passport.visitedCount}
+          totalCount={passport.totalCount}
+          isComplete={passport.isComplete}
+          rewardClaimed={passport.rewardClaimed}
+          onClaimReward={passport.claimReward}
+          getRegionName={getRegionName}
+        />
 
         {loading && (
           <p className="text-center text-[#8B6F5E] py-16" style={{ fontFamily: "'Lora', serif" }}>

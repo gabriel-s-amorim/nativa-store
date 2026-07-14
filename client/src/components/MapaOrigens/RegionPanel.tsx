@@ -73,7 +73,10 @@ export default function RegionPanel({ region }: RegionPanelProps) {
       {!region ? (
         <EmptyState />
       ) : (
-        <div className="flex flex-1 flex-col gap-5 animate-in fade-in duration-300">
+        <div
+          key={region.id}
+          className="flex flex-1 flex-col gap-5 animate-in fade-in slide-in-from-bottom-3 duration-500 ease-out"
+        >
           <div>
             <p
               className="text-xs font-bold uppercase tracking-[0.2em] text-[#1B7A8C]"
