@@ -17,7 +17,7 @@ export function buildWhatsAppUrl(message?: string): string {
 }
 
 export function defaultWhatsAppMessage(): string {
-  return "Olá! Vim pela Nativa Store e gostaria de saber mais. 🌿";
+  return "Olá! Vim pela Nativa Store e gostaria de saber mais.";
 }
 
 export function productInterestWhatsAppMessage(product: {
@@ -32,6 +32,6 @@ export function productInterestWhatsAppMessage(product: {
     `Valor: ${formatPrice(product.price)}`,
     `Link: ${url}`,
     "",
-    "Gostaria de mais informações. 🌿",
+    "Gostaria de mais informações.",
   ].join("\n");
 }

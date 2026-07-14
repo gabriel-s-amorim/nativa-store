@@ -18,7 +18,8 @@ export type InjectMetaOptions = {
   description: string;
   url: string;
   image: string;
-  type?: "website" | "product";
+  /** WhatsApp/Facebook lidam melhor com website do que product */
+  type?: "website" | "product" | "article";
   noIndex?: boolean;
   keywords?: string;
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
@@ -30,10 +31,16 @@ export type InjectMetaOptions = {
   };
 };
 
+export function isSocialCrawler(userAgent: string | undefined): boolean {
+  if (!userAgent) return false;
+  return /whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|pinterest|googlebot|bingbot|duckduckbot|embedly|quora link preview|outbrain|vkshare|w3c_validator|redditbot|applebot|ia_archiver/i.test(
+    userAgent,
+  );
+}
+
 function resolveSpaHtmlPath(): string | null {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
-    // Copiado ao lado do bundle Vercel (api/spa.html)
     path.join(here, "spa.html"),
     path.join(process.cwd(), "api", "spa.html"),
     path.join(process.cwd(), "dist", "public", "index.html"),
@@ -58,6 +65,26 @@ export function loadSpaHtml(): string | null {
   return fs.readFileSync(filePath, "utf8");
 }
 
+/** Busca o index.html estático do deploy (fallback no Vercel). */
+export async function loadSpaHtmlAsync(baseUrl: string): Promise<string | null> {
+  const local = loadSpaHtml();
+  if (local) return local;
+
+  if (!baseUrl) return null;
+
+  try {
+    const origin = baseUrl.replace(/\/$/, "");
+    const response = await fetch(`${origin}/index.html`, {
+      headers: { Accept: "text/html" },
+      redirect: "follow",
+    });
+    if (!response.ok) return null;
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
 function metaName(name: string, content: string) {
   return `<meta name="${escapeHtmlAttr(name)}" content="${escapeHtmlAttr(content)}" />`;
 }
@@ -66,10 +93,11 @@ function metaProperty(property: string, content: string) {
   return `<meta property="${escapeHtmlAttr(property)}" content="${escapeHtmlAttr(content)}" />`;
 }
 
-function buildHeadBlock(options: InjectMetaOptions): string {
+export function buildHeadBlock(options: InjectMetaOptions): string {
   const title = options.title;
   const description = truncateMeta(options.description);
   const image = options.image;
+  // website = preview mais confiável no WhatsApp
   const type = options.type ?? "website";
   const robots = options.noIndex
     ? "noindex, nofollow"
@@ -84,12 +112,13 @@ function buildHeadBlock(options: InjectMetaOptions): string {
     metaName("author", SITE_NAME),
     `<link rel="canonical" href="${escapeHtmlAttr(options.url)}" />`,
     metaProperty("og:locale", SITE_LOCALE),
-    metaProperty("og:type", type),
+    metaProperty("og:type", type === "product" ? "website" : type),
     metaProperty("og:site_name", SITE_NAME),
     metaProperty("og:title", title),
     metaProperty("og:description", description),
     metaProperty("og:url", options.url),
     metaProperty("og:image", image),
+    metaProperty("og:image:secure_url", image),
     metaProperty("og:image:alt", title),
     metaName("twitter:card", "summary_large_image"),
     metaName("twitter:site", SITE_TWITTER_HANDLE),
@@ -97,6 +126,10 @@ function buildHeadBlock(options: InjectMetaOptions): string {
     metaName("twitter:description", description),
     metaName("twitter:image", image),
   ];
+
+  if (image.startsWith("https://")) {
+    tags.push(metaProperty("og:image:type", image.includes(".png") ? "image/png" : "image/jpeg"));
+  }
 
   if (options.keywords) {
     tags.push(metaName("keywords", options.keywords));
@@ -120,9 +153,28 @@ function buildHeadBlock(options: InjectMetaOptions): string {
   return tags.join("\n    ");
 }
 
+/** HTML mínimo só com OG — ideal para crawlers (WhatsApp/Facebook). */
+export function buildStandaloneOgHtml(options: InjectMetaOptions): string {
+  const block = buildHeadBlock(options);
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    ${block}
+  </head>
+  <body>
+    <article>
+      <h1>${escapeHtmlAttr(options.title)}</h1>
+      <p>${escapeHtmlAttr(truncateMeta(options.description))}</p>
+      <p><a href="${escapeHtmlAttr(options.url)}">${escapeHtmlAttr(options.url)}</a></p>
+    </article>
+  </body>
+</html>`;
+}
+
 /**
  * Substitui/insere bloco de SEO no HTML do SPA.
- * Remove title/description/og/twitter/canonical existentes para evitar duplicata.
  */
 export function injectSeoIntoHtml(html: string, options: InjectMetaOptions): string {
   const cleaned = html
@@ -155,8 +207,11 @@ export function defaultSiteMeta(baseUrl: string): InjectMetaOptions {
 }
 
 export function resolvePublicBaseUrl(reqHost?: string | null, proto?: string | null): string {
-  const fromEnv = (process.env.APP_URL || process.env.VITE_APP_URL || "").trim().replace(/\/$/, "");
-  if (fromEnv) return fromEnv;
+  let fromEnv = (process.env.APP_URL || process.env.VITE_APP_URL || "").trim();
+  if (fromEnv) {
+    if (!/^https?:\/\//i.test(fromEnv)) fromEnv = `https://${fromEnv}`;
+    return fromEnv.replace(/\/$/, "");
+  }
   if (reqHost) {
     const scheme = proto === "http" ? "http" : "https";
     return `${scheme}://${reqHost}`;

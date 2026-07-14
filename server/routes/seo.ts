@@ -1,43 +1,71 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { absoluteUrl, stripHtml, truncateMeta } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME } from "@shared/const/site";
 import { getProductBySlug, listProducts } from "../services/products";
 import {
+  buildStandaloneOgHtml,
   injectSeoIntoHtml,
-  loadSpaHtml,
+  isSocialCrawler,
+  loadSpaHtmlAsync,
   resolvePublicBaseUrl,
+  type InjectMetaOptions,
 } from "../lib/seoHtml";
 
 const router = Router();
 
-router.get("/produto/:slug", async (req, res) => {
-  const slug = String(req.params.slug ?? "").trim();
-  const spaHtml = loadSpaHtml();
-
-  if (!spaHtml) {
-    res.status(503).type("text/plain").send("SPA HTML indisponível para injeção de SEO");
-    return;
-  }
-
+function requestBaseUrl(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim();
   const host =
     (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() ||
     req.headers.host;
-  const baseUrl = resolvePublicBaseUrl(host, proto);
+  return resolvePublicBaseUrl(host, proto);
+}
+
+async function sendSeoHtml(req: Request, res: Response, options: InjectMetaOptions, status = 200) {
+  const ua = req.headers["user-agent"];
+  const crawler = isSocialCrawler(typeof ua === "string" ? ua : undefined);
+
+  // Crawlers: HTML mínimo com OG (WhatsApp não executa JS)
+  if (crawler) {
+    res
+      .status(status)
+      .setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600")
+      .type("html")
+      .send(buildStandaloneOgHtml(options));
+    return;
+  }
+
+  const spaHtml = await loadSpaHtmlAsync(requestBaseUrl(req));
+  const html = spaHtml ? injectSeoIntoHtml(spaHtml, options) : buildStandaloneOgHtml(options);
+
+  res
+    .status(status)
+    .setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300")
+    .type("html")
+    .send(html);
+}
+
+router.get("/produto/:slug", async (req, res) => {
+  const slug = String(req.params.slug ?? "").trim();
+  const baseUrl = requestBaseUrl(req);
 
   try {
     const product = slug ? await getProductBySlug(slug) : null;
 
     if (!product) {
-      const html = injectSeoIntoHtml(spaHtml, {
-        title: `Produto não encontrado — ${SITE_NAME}`,
-        description: "Este produto não está disponível na Nativa Store.",
-        url: absoluteUrl(baseUrl, `/produto/${encodeURIComponent(slug)}`),
-        image: absoluteUrl(baseUrl, "/images/bannerNativa.jpg"),
-        type: "website",
-        noIndex: true,
-      });
-      res.status(404).type("html").send(html);
+      await sendSeoHtml(
+        req,
+        res,
+        {
+          title: `Produto não encontrado — ${SITE_NAME}`,
+          description: "Este produto não está disponível na Nativa Store.",
+          url: absoluteUrl(baseUrl, `/produto/${encodeURIComponent(slug)}`),
+          image: absoluteUrl(baseUrl, "/images/bannerNativa.jpg"),
+          type: "website",
+          noIndex: true,
+        },
+        404,
+      );
       return;
     }
 
@@ -74,12 +102,12 @@ router.get("/produto/:slug", async (req, res) => {
       },
     };
 
-    const html = injectSeoIntoHtml(spaHtml, {
+    await sendSeoHtml(req, res, {
       title,
       description,
       url,
       image,
-      type: "product",
+      type: "website",
       keywords: `${product.name}, ${product.category}, ${SITE_KEYWORDS}`,
       product: {
         price: product.price,
@@ -89,24 +117,24 @@ router.get("/produto/:slug", async (req, res) => {
       },
       jsonLd,
     });
-
-    res
-      .status(200)
-      .setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600")
-      .type("html")
-      .send(html);
   } catch (error) {
     console.error("[seo] falha ao montar meta do produto:", error);
-    res.status(200).type("html").send(spaHtml);
+    res
+      .status(200)
+      .type("html")
+      .send(
+        buildStandaloneOgHtml({
+          title: SITE_NAME,
+          description: "Moda artesanal brasileira com alma.",
+          url: absoluteUrl(baseUrl, `/produto/${encodeURIComponent(slug)}`),
+          image: absoluteUrl(baseUrl, "/images/bannerNativa.jpg"),
+        }),
+      );
   }
 });
 
 router.get("/sitemap.xml", async (req, res) => {
-  const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim();
-  const host =
-    (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() ||
-    req.headers.host;
-  const baseUrl = resolvePublicBaseUrl(host, proto).replace(/\/$/, "");
+  const baseUrl = requestBaseUrl(req).replace(/\/$/, "");
 
   try {
     const products = await listProducts();

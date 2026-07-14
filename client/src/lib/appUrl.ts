@@ -4,13 +4,21 @@
  */
 export function getAppUrl(): string {
   const fromEnv = import.meta.env.VITE_APP_URL as string | undefined;
+  let url = "";
+
   if (fromEnv?.trim()) {
-    return fromEnv.trim().replace(/\/$/, "");
+    url = fromEnv.trim();
+  } else if (typeof window !== "undefined") {
+    url = window.location.origin;
   }
-  if (typeof window !== "undefined") {
-    return window.location.origin;
+
+  if (!url) return "";
+
+  if (!/^https?:\/\//i.test(url)) {
+    url = `https://${url}`;
   }
-  return "";
+
+  return url.replace(/\/$/, "");
 }
 
 export function appPath(path: string): string {

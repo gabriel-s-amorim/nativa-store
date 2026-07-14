@@ -4,6 +4,11 @@
   "outputDirectory": "dist/public",
   "installCommand": "pnpm install",
   "framework": null,
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "api/spa.html"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
@@ -11,11 +16,11 @@
     },
     {
       "source": "/produto/:slug",
-      "destination": "/api/seo/produto/:slug"
+      "destination": "/api?nativaSeoProduct=:slug"
     },
     {
       "source": "/sitemap.xml",
-      "destination": "/api/seo/sitemap.xml"
+      "destination": "/api?nativaSeoSitemap=1"
     },
     {
       "source": "/((?!api/).*)",
