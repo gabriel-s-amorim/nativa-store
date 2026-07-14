@@ -6,6 +6,7 @@ import { Tag, Truck } from "lucide-react";
 interface CheckoutOrderSummaryProps {
   items: CartItem[];
   subtotal: number;
+  discountAmount?: number;
   couponCode: string | null;
   shipping: ShippingQuoteOption | null;
   shippingLoading: boolean;
@@ -17,6 +18,7 @@ interface CheckoutOrderSummaryProps {
 export default function CheckoutOrderSummary({
   items,
   subtotal,
+  discountAmount = 0,
   couponCode,
   shipping,
   shippingLoading,
@@ -25,7 +27,8 @@ export default function CheckoutOrderSummary({
   showSubmit = true,
 }: CheckoutOrderSummaryProps) {
   const shippingAmount = shipping?.customPrice ?? 0;
-  const total = subtotal + shippingAmount;
+  const safeDiscount = Math.max(0, Math.min(discountAmount, subtotal));
+  const total = subtotal - safeDiscount + shippingAmount;
   const freeShipping = Boolean(shipping && shippingAmount === 0);
 
   return (
@@ -81,6 +84,28 @@ export default function CheckoutOrderSummary({
           </span>
         </div>
 
+        {safeDiscount > 0 && (
+          <div className="flex justify-between text-[#2D6A4F]">
+            <span className="flex items-center gap-1.5">
+              <Tag size={14} />
+              Desconto{couponCode ? ` (${couponCode})` : ""}
+            </span>
+            <span className="font-semibold">−{formatPrice(safeDiscount)}</span>
+          </div>
+        )}
+
+        {couponCode && safeDiscount === 0 && (
+          <div className="flex items-center justify-between text-[#8B6F5E]">
+            <span className="flex items-center gap-1.5">
+              <Tag size={14} />
+              Cupom
+            </span>
+            <span className="rounded-full bg-[#C4522A]/10 px-2 py-0.5 text-xs font-semibold uppercase text-[#C4522A]">
+              {couponCode}
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-[#8B6F5E]">
             <Truck size={14} />
@@ -102,18 +127,6 @@ export default function CheckoutOrderSummary({
           <p className="-mt-1 text-right text-xs text-[#8B6F5E]">
             {shipping.company} · {shipping.name} · até {shipping.customDeliveryTime} dias úteis
           </p>
-        )}
-
-        {couponCode && (
-          <div className="flex items-center justify-between text-[#8B6F5E]">
-            <span className="flex items-center gap-1.5">
-              <Tag size={14} />
-              Cupom
-            </span>
-            <span className="rounded-full bg-[#C4522A]/10 px-2 py-0.5 text-xs font-semibold uppercase text-[#C4522A]">
-              {couponCode}
-            </span>
-          </div>
         )}
 
         <div className="flex items-center justify-between border-t border-[#E8D5C4] pt-3">

@@ -11,6 +11,7 @@ import type {
   OrderStatus,
 } from "@shared/types/order";
 import type { Banner, BannerInput } from "@shared/types/banner";
+import type { Coupon, CouponInput } from "@shared/types/coupon";
 import type { Region, RegionInput } from "@shared/types/region";
 import type {
   MelhorEnvioSettingsInput,
@@ -343,6 +344,30 @@ export function reorderAdminBanners(orderedIds: string[]) {
   return request<Banner[]>("/api/admin/banners/reorder", {
     method: "PATCH",
     body: JSON.stringify({ orderedIds }),
+  });
+}
+
+export function fetchAdminCoupons() {
+  return request<Coupon[]>("/api/admin/coupons");
+}
+
+export function createAdminCoupon(input: CouponInput) {
+  return request<Coupon>("/api/admin/coupons", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminCoupon(id: string, input: CouponInput) {
+  return request<Coupon>(`/api/admin/coupons/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAdminCoupon(id: string) {
+  return request<void>(`/api/admin/coupons/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
 }
 

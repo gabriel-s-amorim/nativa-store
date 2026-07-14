@@ -9,6 +9,7 @@ export interface OrderRow {
   status: string;
   total_amount: number;
   shipping_amount: number;
+  discount_amount?: number | string | null;
   shipping_quote_id?: string | null;
   shipping_service_id?: string | null;
   shipping_service_name?: string | null;
@@ -51,11 +52,17 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
-export function buildOrderTotals(subtotal: number, shippingAmount: number) {
+export function buildOrderTotals(
+  subtotal: number,
+  shippingAmount: number,
+  discountAmount = 0,
+) {
+  const safeDiscount = Math.max(0, Math.min(discountAmount, subtotal));
   return {
     subtotal,
     shippingAmount,
-    totalAmount: subtotal + shippingAmount,
+    discountAmount: safeDiscount,
+    totalAmount: Math.round((subtotal - safeDiscount + shippingAmount) * 100) / 100,
   };
 }
 
@@ -80,6 +87,7 @@ export function mapOrderRowToOrder(row: OrderRow, items: OrderItem[]): Order {
     status: row.status as Order["status"],
     totalAmount: toNumber(row.total_amount),
     shippingAmount: toNumber(row.shipping_amount),
+    discountAmount: toNumber(row.discount_amount ?? 0),
     shippingQuoteId: row.shipping_quote_id ?? null,
     shippingServiceId: row.shipping_service_id ?? null,
     shippingServiceName: row.shipping_service_name ?? null,
@@ -117,6 +125,7 @@ export function mapOrderRowToSummary(
     status: row.status as OrderSummary["status"],
     totalAmount: toNumber(row.total_amount),
     shippingAmount: toNumber(row.shipping_amount),
+    discountAmount: toNumber(row.discount_amount ?? 0),
     couponCode: row.coupon_code,
     paymentMethod: row.payment_method as OrderSummary["paymentMethod"],
     paymentStatus: (row.payment_status ??

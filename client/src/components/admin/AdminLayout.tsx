@@ -23,6 +23,7 @@ import {
   Package,
   Plug,
   ShoppingCart,
+  Ticket,
   Upload,
   Users,
 } from "lucide-react";
@@ -71,6 +72,12 @@ const navItems: NavItem[] = [
     href: "/admin/banners",
     icon: ImageIcon,
     match: (path) => path.startsWith("/admin/banners"),
+  },
+  {
+    label: "Cupons",
+    href: "/admin/cupons",
+    icon: Ticket,
+    match: (path) => path.startsWith("/admin/cupons"),
   },
   {
     label: "Mapa das Origens",

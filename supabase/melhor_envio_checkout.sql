@@ -98,8 +98,14 @@ alter table public.melhor_envio_shipments enable row level security;
 
 -- Substitui a versão do checkout criada em mercado_pago.sql para congelar o
 -- frete validado no mesmo momento em que o pedido e a tentativa são criados.
+-- discount_amount: ver também supabase/coupons.sql (assinatura canônica atual).
 drop function if exists public.checkout_create_payment_order(
   uuid, uuid, numeric, numeric, text, jsonb, text, jsonb, uuid, text
+);
+
+drop function if exists public.checkout_create_payment_order(
+  uuid, uuid, numeric, numeric, text, jsonb, text, jsonb, uuid, text,
+  uuid, text, text, text, int, text, jsonb, jsonb
 );
 
 create or replace function public.checkout_create_payment_order(
@@ -120,7 +126,8 @@ create or replace function public.checkout_create_payment_order(
   p_shipping_delivery_days int,
   p_shipping_environment text,
   p_shipping_quote_snapshot jsonb,
-  p_shipping_recipient jsonb
+  p_shipping_recipient jsonb,
+  p_discount_amount numeric default 0
 )
 returns public.orders
 language plpgsql
@@ -152,13 +159,15 @@ begin
 
   insert into public.orders (
     customer_id, status, payment_status, total_amount, shipping_amount,
-    coupon_code, shipping_address, payment_method, external_reference, cart_id,
+    discount_amount, coupon_code, shipping_address, payment_method,
+    external_reference, cart_id,
     shipping_quote_id, shipping_service_id, shipping_service_name,
     shipping_company, shipping_delivery_days, shipping_environment,
     shipping_quote_snapshot, shipping_recipient
   ) values (
     p_customer_id, 'pending', 'pending', p_total_amount, p_shipping_amount,
-    p_coupon_code, p_shipping_address, p_payment_method, gen_random_uuid()::text, p_cart_id,
+    coalesce(p_discount_amount, 0), p_coupon_code, p_shipping_address,
+    p_payment_method, gen_random_uuid()::text, p_cart_id,
     p_shipping_quote_id, p_shipping_service_id, p_shipping_service_name,
     p_shipping_company, p_shipping_delivery_days, p_shipping_environment,
     p_shipping_quote_snapshot, p_shipping_recipient

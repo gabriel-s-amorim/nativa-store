@@ -37,6 +37,7 @@ export interface Order {
   status: OrderStatus;
   totalAmount: number;
   shippingAmount: number;
+  discountAmount: number;
   shippingQuoteId: string | null;
   shippingServiceId: string | null;
   shippingServiceName: string | null;
@@ -78,6 +79,7 @@ export interface OrderSummary {
   status: OrderStatus;
   totalAmount: number;
   shippingAmount: number;
+  discountAmount: number;
   couponCode: string | null;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;

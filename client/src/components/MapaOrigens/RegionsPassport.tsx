@@ -12,8 +12,7 @@ import { REGION_COLORS, type RegionId } from "./RegionSvg";
 
 /**
  * Código do cupom de frete grátis oferecido ao completar o passaporte.
- * Precisa existir configurado como cupom válido no painel da loja para
- * ser de fato aplicado no checkout — troque aqui se o código mudar.
+ * Precisa existir e estar ativo em Admin → Cupons (seed: BORDADO5).
  */
 const FREE_SHIPPING_COUPON_CODE = "BORDADO5";
 

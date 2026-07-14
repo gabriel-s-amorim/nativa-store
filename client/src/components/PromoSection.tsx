@@ -4,11 +4,15 @@
  * Full-width promo with tropical pattern background + email signup
  */
 
+import { useCart } from "@/contexts/CartContext";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FeatherOrange, FeatherBlue, FeatherGreen } from "./NativaDecorations";
 
+const PROMO_COUPON_CODE = "NATIVA15";
+
 export default function PromoSection() {
+  const { applyCoupon, isUpdating } = useCart();
   const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(false);
   const [website, setWebsite] = useState("");
@@ -52,6 +56,15 @@ export default function PromoSection() {
       setStatus("error");
     }
   };
+
+  async function handlePromoCoupon() {
+    try {
+      await navigator.clipboard.writeText(PROMO_COUPON_CODE);
+    } catch {
+      // Clipboard pode falhar; ainda tentamos aplicar no carrinho.
+    }
+    await applyCoupon({ couponCode: PROMO_COUPON_CODE });
+  }
 
   return (
     <section
@@ -97,26 +110,28 @@ export default function PromoSection() {
                   letterSpacing: "0.08em",
                 }}
               >
-                🔥 OFERTA ESPECIAL
+                OFERTA ESPECIAL
               </div>
               <h3
                 className="text-3xl md:text-4xl font-bold text-white mb-2"
                 style={{ fontFamily: "'Playfair Display', serif" }}
               >
-                Primeira compra com<br />
-                <span style={{ color: "#F5D78A" }}>15% de desconto</span>
+                Um presente para a sua<br />
+                <span style={{ color: "#F5D78A" }}>primeira compra</span>
               </h3>
               <p
                 className="text-white/80 text-sm"
                 style={{ fontFamily: "'Lora', serif" }}
               >
-                Use o código <strong className="text-white">NATIVA15</strong> no checkout
+                Use o código <strong className="text-white">{PROMO_COUPON_CODE}</strong> no carrinho
               </p>
             </div>
 
             <button
-              onClick={() => toast("Código copiado: NATIVA15", { description: "Use no seu próximo pedido!" })}
-              className="flex-shrink-0 px-8 py-3.5 rounded-full font-bold text-sm transition-all duration-200 hover:shadow-xl hover:-translate-y-1 active:scale-95"
+              type="button"
+              disabled={isUpdating}
+              onClick={() => void handlePromoCoupon()}
+              className="flex-shrink-0 px-8 py-3.5 rounded-full font-bold text-sm transition-all duration-200 hover:shadow-xl hover:-translate-y-1 active:scale-95 disabled:opacity-60"
               style={{
                 background: "linear-gradient(135deg, #C4522A, #E8821A)",
                 color: "white",
@@ -124,7 +139,7 @@ export default function PromoSection() {
                 letterSpacing: "0.05em",
               }}
             >
-              Copiar Código
+              Aplicar {PROMO_COUPON_CODE}
             </button>
           </div>
         </div>

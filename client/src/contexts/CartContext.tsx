@@ -26,6 +26,10 @@ import { toast } from "sonner";
 const EMPTY_SUMMARY: CartSummary = {
   itemCount: 0,
   subtotal: 0,
+  discountAmount: 0,
+  couponType: null,
+  couponDescription: null,
+  grantsFreeShipping: false,
   freeShippingThreshold: 299,
   freeShippingRemaining: 299,
   qualifiesForFreeShipping: false,
@@ -192,7 +196,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setCart({
           ...cart,
           items: optimisticItems,
-          summary: buildCartSummary(optimisticItems),
+          summary: {
+            ...buildCartSummary(optimisticItems),
+            discountAmount: cart.summary.discountAmount,
+            couponType: cart.summary.couponType,
+            couponDescription: cart.summary.couponDescription,
+            grantsFreeShipping: cart.summary.grantsFreeShipping,
+          },
         });
       }
 
@@ -203,7 +213,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return true;
       } catch (error) {
         if (cart) {
-          setCart({ ...cart, items: previousItems, summary: buildCartSummary(previousItems) });
+          setCart({
+            ...cart,
+            items: previousItems,
+            summary: {
+              ...buildCartSummary(previousItems),
+              discountAmount: cart.summary.discountAmount,
+              couponType: cart.summary.couponType,
+              couponDescription: cart.summary.couponDescription,
+              grantsFreeShipping: cart.summary.grantsFreeShipping,
+            },
+          });
         }
         toast.error("Erro ao atualizar quantidade", {
           description: error instanceof Error ? error.message : "Tente novamente",
@@ -259,12 +279,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       try {
         const data = await applyCartCouponApi(input, token);
         applyCartState(setCart, data);
-        toast.success("Cupom salvo", {
-          description: "Será validado no checkout",
-        });
+        toast.success(
+          input.couponCode.trim() ? "Cupom aplicado" : "Cupom removido",
+        );
         return true;
       } catch (error) {
-        toast.error("Erro ao salvar cupom", {
+        toast.error("Erro ao aplicar cupom", {
           description: error instanceof Error ? error.message : "Tente novamente",
         });
         return false;

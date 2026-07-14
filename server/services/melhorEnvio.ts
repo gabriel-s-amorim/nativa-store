@@ -10,6 +10,8 @@ import {
   applyFreeShipping,
   groupShipmentVolumes,
 } from "@shared/lib/shipping";
+import { applyFreeShippingCoupon } from "@shared/lib/coupons";
+import { assertCouponApplicable } from "./coupons";
 import jwt from "jsonwebtoken";
 import { supabase } from "../lib/supabase";
 
@@ -696,7 +698,7 @@ export async function createCheckoutShippingQuote(
 ): Promise<ShippingQuoteResult> {
   const { data: cart, error: cartError } = await supabase
     .from("carts")
-    .select("id")
+    .select("id, coupon_code")
     .eq("customer_id", customerId)
     .eq("status", "active")
     .maybeSingle();
@@ -741,6 +743,27 @@ export async function createCheckoutShippingQuote(
     (total, item) => total + Number(item.unit_price) * item.quantity,
     0,
   );
+
+  let options = calculation.result.options;
+  let freeShippingApplied = calculation.result.freeShippingApplied;
+
+  if (cart.coupon_code) {
+    try {
+      const application = await assertCouponApplicable({
+        code: cart.coupon_code,
+        subtotal,
+        customerId,
+      });
+      if (application.grantsFreeShipping) {
+        const couponShipping = applyFreeShippingCoupon(options);
+        options = couponShipping.options;
+        freeShippingApplied = freeShippingApplied || couponShipping.applied;
+      }
+    } catch {
+      // Cupom inválido: cotação segue só com threshold; checkout revalida.
+    }
+  }
+
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   const { data: quote, error: quoteError } = await supabase
     .from("shipping_quotes")
@@ -751,10 +774,10 @@ export async function createCheckoutShippingQuote(
       from_postal_code: calculation.fromPostalCode,
       to_postal_code: toPostalCode,
       subtotal,
-      free_shipping_applied: calculation.result.freeShippingApplied,
+      free_shipping_applied: freeShippingApplied,
       request_payload: calculation.requestPayload,
       response_payload: calculation.responsePayload,
-      options: calculation.result.options,
+      options,
       expires_at: expiresAt,
     })
     .select("id, expires_at")
@@ -762,7 +785,9 @@ export async function createCheckoutShippingQuote(
   if (quoteError) throw new Error(quoteError.message);
 
   return {
-    ...calculation.result,
+    options,
+    environment: calculation.result.environment,
+    freeShippingApplied,
     quoteId: quote.id,
     expiresAt: quote.expires_at,
   };

@@ -874,10 +874,11 @@ function CheckoutPageContent() {
                   <div className="mt-4 rounded-xl border border-[#E8D5C4] bg-white p-2 sm:p-4">
                     {mpConfig && selectedShipping ? (
                       <CardPayment
-                        key={`card-${summary.subtotal + (selectedShipping.customPrice ?? 0)}-${profile?.email ?? ""}`}
+                        key={`card-${summary.subtotal - (summary.discountAmount ?? 0) + (selectedShipping.customPrice ?? 0)}-${profile?.email ?? ""}`}
                         initialization={{
                           amount:
-                            summary.subtotal +
+                            summary.subtotal -
+                            (summary.discountAmount ?? 0) +
                             (selectedShipping.customPrice ?? 0),
                           payer: { email: profile?.email },
                         }}
@@ -952,6 +953,7 @@ function CheckoutPageContent() {
             <CheckoutOrderSummary
               items={items}
               subtotal={summary.subtotal}
+              discountAmount={summary.discountAmount}
               couponCode={couponCode}
               shipping={selectedShipping}
               shippingLoading={shippingLoading}

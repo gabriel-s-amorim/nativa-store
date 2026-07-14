@@ -1,4 +1,5 @@
 import { FREE_SHIPPING_THRESHOLD } from "@shared/const/cart";
+import type { CouponApplication } from "@shared/types/coupon";
 import type { Cart, CartItem, CartSummary } from "@shared/types/cart";
 
 export interface CartRow {
@@ -65,14 +66,22 @@ export function mapCartItemRowToCartItem(
   };
 }
 
-export function buildCartSummary(items: CartItem[]): CartSummary {
+export function buildCartSummary(
+  items: CartItem[],
+  coupon?: CouponApplication | null,
+): CartSummary {
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
   const freeShippingRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
+  const discountAmount = coupon?.discountAmount ?? 0;
 
   return {
     itemCount,
     subtotal,
+    discountAmount,
+    couponType: coupon?.type ?? null,
+    couponDescription: coupon?.description ?? null,
+    grantsFreeShipping: coupon?.grantsFreeShipping ?? false,
     freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
     freeShippingRemaining,
     qualifiesForFreeShipping: subtotal >= FREE_SHIPPING_THRESHOLD,
@@ -82,20 +91,21 @@ export function buildCartSummary(items: CartItem[]): CartSummary {
 export function mapCartRowToCart(
   row: CartRow,
   items: CartItem[],
+  coupon?: CouponApplication | null,
 ): Cart {
   return {
     id: row.id,
     customerId: row.customer_id,
     sessionId: row.session_id,
     status: row.status as Cart["status"],
-    couponCode: row.coupon_code,
+    couponCode: coupon ? coupon.code : row.coupon_code,
     items,
-    summary: buildCartSummary(items),
+    summary: buildCartSummary(items, coupon),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 export function emptyCartResponse(cartRow: CartRow): Cart {
-  return mapCartRowToCart(cartRow, []);
+  return mapCartRowToCart(cartRow, [], null);
 }

@@ -5,13 +5,16 @@ import {
   type CartItemRow,
   type CartRow,
 } from "@shared/lib/cartMapper";
+import { CouponEvalError, normalizeCouponCode } from "@shared/lib/coupons";
 import { mapProductRowToProduct, type ProductRow } from "@shared/lib/productMapper";
 import { CART_STATUS_ACTIVE } from "@shared/const/cart";
 import type { CartAddItemInput, CartApplyCouponInput, CartUpdateItemInput } from "@shared/schemas/cart";
+import type { CouponApplication } from "@shared/types/coupon";
 import type { Cart } from "@shared/types/cart";
 import type { Product } from "@shared/types/product";
 import type { CartIdentity } from "../middleware/resolveCartIdentity";
 import { supabase } from "../lib/supabase";
+import { assertCouponApplicable } from "./coupons";
 import { getProductBySlug } from "./products";
 
 function normalizeColor(color?: string): string {
@@ -156,10 +159,45 @@ async function enrichCartItems(items: CartItemRow[]): Promise<ReturnType<typeof 
   );
 }
 
+async function clearCartCoupon(cartId: string): Promise<void> {
+  const { error } = await supabase
+    .from("carts")
+    .update({ coupon_code: null })
+    .eq("id", cartId);
+  if (error) throw new Error(error.message);
+}
+
+async function resolveCartCoupon(
+  cartRow: CartRow,
+  subtotal: number,
+): Promise<{ coupon: CouponApplication | null; cleared: boolean }> {
+  if (!cartRow.coupon_code) {
+    return { coupon: null, cleared: false };
+  }
+
+  try {
+    const coupon = await assertCouponApplicable({
+      code: cartRow.coupon_code,
+      subtotal,
+      customerId: cartRow.customer_id,
+    });
+    return { coupon, cleared: false };
+  } catch {
+    await clearCartCoupon(cartRow.id);
+    return { coupon: null, cleared: true };
+  }
+}
+
 async function buildCartResponse(cartRow: CartRow): Promise<Cart> {
   const itemRows = await fetchCartItems(cartRow.id);
   const items = await enrichCartItems(itemRows);
-  return mapCartRowToCart(cartRow, items);
+  const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+  const { coupon } = await resolveCartCoupon(cartRow, subtotal);
+  const rowForMap =
+    coupon || !cartRow.coupon_code
+      ? { ...cartRow, coupon_code: coupon?.code ?? null }
+      : cartRow;
+  return mapCartRowToCart(rowForMap, items, coupon);
 }
 
 export async function getCart(identity: CartIdentity): Promise<Cart> {
@@ -333,19 +371,43 @@ export async function applyCartCoupon(
   input: CartApplyCouponInput,
 ): Promise<Cart> {
   const cartRow = await getOrCreateCartRow(identity);
-  const couponCode = input.couponCode.trim() || null;
+  const rawCode = input.couponCode.trim();
 
-  const { error } = await supabase
-    .from("carts")
-    .update({ coupon_code: couponCode })
-    .eq("id", cartRow.id);
+  if (!rawCode) {
+    await clearCartCoupon(cartRow.id);
+    const refreshed = await fetchCartRow(identity);
+    if (!refreshed) throw new Error("Carrinho não encontrado");
+    return buildCartResponse(refreshed);
+  }
 
-  if (error) throw new Error(error.message);
+  const itemRows = await fetchCartItems(cartRow.id);
+  const items = await enrichCartItems(itemRows);
+  const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
 
-  const refreshed = await fetchCartRow(identity);
-  if (!refreshed) throw new Error("Carrinho não encontrado");
+  try {
+    const application = await assertCouponApplicable({
+      code: rawCode,
+      subtotal,
+      customerId: identity.customerId,
+    });
 
-  return buildCartResponse(refreshed);
+    const { error } = await supabase
+      .from("carts")
+      .update({ coupon_code: normalizeCouponCode(application.code) })
+      .eq("id", cartRow.id);
+
+    if (error) throw new Error(error.message);
+
+    const refreshed = await fetchCartRow(identity);
+    if (!refreshed) throw new Error("Carrinho não encontrado");
+    return buildCartResponse(refreshed);
+  } catch (error) {
+    await clearCartCoupon(cartRow.id);
+    if (error instanceof CouponEvalError) {
+      throw error;
+    }
+    throw error;
+  }
 }
 
 export async function mergeGuestCartIntoCustomer(

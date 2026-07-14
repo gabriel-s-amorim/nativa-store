@@ -1,7 +1,9 @@
 import { CART_STATUS_ACTIVE } from "@shared/const/cart";
 import { VISIBLE_ORDER_FILTER } from "@shared/const/order";
 import type { CartItemRow, CartRow } from "@shared/lib/cartMapper";
+import { CouponEvalError } from "@shared/lib/coupons";
 import {
+  buildOrderTotals,
   mapCartItemToOrderItemPayload,
   mapOrderItemRowToOrderItem,
   mapOrderRowToOrder,
@@ -21,6 +23,10 @@ import type {
   OrderSummary,
 } from "@shared/types/order";
 import { supabase } from "../lib/supabase";
+import {
+  assertCouponApplicable,
+  incrementCouponUsage,
+} from "./coupons";
 import {
   createMercadoPagoOrder,
   getActiveMercadoPagoEnvironment,
@@ -269,6 +275,30 @@ export async function createOrderFromCheckout(
       (sum, item) => sum + Number(item.unit_price) * item.quantity,
       0
     );
+
+    let discountAmount = 0;
+    let couponCode: string | null = null;
+    if (cartRow.coupon_code) {
+      try {
+        const application = await assertCouponApplicable({
+          code: cartRow.coupon_code,
+          subtotal,
+          customerId,
+        });
+        discountAmount = application.discountAmount;
+        couponCode = application.code;
+      } catch (error) {
+        await supabase
+          .from("carts")
+          .update({ coupon_code: null })
+          .eq("id", cartRow.id);
+        if (error instanceof CouponEvalError) {
+          throw new Error(error.message);
+        }
+        throw error;
+      }
+    }
+
     const selectedShipping = await validateShippingSelection({
       customerId,
       cartId: cartRow.id,
@@ -279,6 +309,7 @@ export async function createOrderFromCheckout(
       items: cartItems,
     });
     const shippingAmount = selectedShipping.chargedPrice;
+    const totals = buildOrderTotals(subtotal, shippingAmount, discountAmount);
     const itemsPayload = cartItems.map(mapCartItemToOrderItemPayload);
     const environment = await getActiveMercadoPagoEnvironment();
     paymentEnvironment = environment;
@@ -287,9 +318,10 @@ export async function createOrderFromCheckout(
       {
         p_customer_id: customerId,
         p_cart_id: cartRow.id,
-        p_total_amount: subtotal + shippingAmount,
+        p_total_amount: totals.totalAmount,
         p_shipping_amount: shippingAmount,
-        p_coupon_code: cartRow.coupon_code,
+        p_discount_amount: totals.discountAmount,
+        p_coupon_code: couponCode,
         p_shipping_address: input.shippingAddress,
         p_payment_method: input.paymentMethod,
         p_items: itemsPayload,
@@ -312,6 +344,9 @@ export async function createOrderFromCheckout(
       throw new Error(error.message);
     }
     order = await fetchOrderWithItems((data as OrderRow).id);
+    if (couponCode) {
+      await incrementCouponUsage(couponCode);
+    }
   }
 
   const customer = await fetchCustomerInfo(customerId);

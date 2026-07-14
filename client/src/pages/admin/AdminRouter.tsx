@@ -5,6 +5,7 @@ import { usePageMeta } from "@/lib/seo";
 import NotFound from "@/pages/NotFound";
 import { Redirect, Route, Switch } from "wouter";
 import AdminBanners from "./AdminBanners";
+import AdminCoupons from "./AdminCoupons";
 import AdminCustomerDetail from "./AdminCustomerDetail";
 import AdminCustomersList from "./AdminCustomersList";
 import AdminDashboard from "./AdminDashboard";
@@ -96,6 +97,11 @@ export default function AdminRouter() {
         <Route path="/admin/banners">
           <ProtectedAdmin>
             <AdminBanners />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/cupons">
+          <ProtectedAdmin>
+            <AdminCoupons />
           </ProtectedAdmin>
         </Route>
         <Route path="/admin/regioes">

@@ -227,6 +227,14 @@ export default function OrderDetailContent({
           <span>Subtotal</span>
           <span>{formatPrice(subtotal)}</span>
         </div>
+        {order.discountAmount > 0 && (
+          <div className={`mt-2 flex justify-between ${totalsMuted}`}>
+            <span>
+              Desconto{order.couponCode ? ` (${order.couponCode})` : ""}
+            </span>
+            <span>−{formatPrice(order.discountAmount)}</span>
+          </div>
+        )}
         <div className={`mt-2 flex justify-between ${totalsMuted}`}>
           <span className="flex items-center gap-1">
             <Truck size={14} />

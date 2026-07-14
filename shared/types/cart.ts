@@ -22,6 +22,10 @@ export interface CartItem {
 export interface CartSummary {
   itemCount: number;
   subtotal: number;
+  discountAmount: number;
+  couponType: "percentage" | "fixed" | "free_shipping" | null;
+  couponDescription: string | null;
+  grantsFreeShipping: boolean;
   freeShippingThreshold: number;
   freeShippingRemaining: number;
   qualifiesForFreeShipping: boolean;

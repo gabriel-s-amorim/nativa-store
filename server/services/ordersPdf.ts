@@ -283,9 +283,16 @@ function drawTotals(
 
   const rows: Array<[string, string, boolean]> = [
     ["Subtotal", formatBrl(subtotal), false],
-    ["Frete", formatBrl(order.shippingAmount), false],
   ];
-  if (order.couponCode) {
+  if (order.discountAmount > 0) {
+    rows.push([
+      order.couponCode ? `Desconto (${order.couponCode})` : "Desconto",
+      `-${formatBrl(order.discountAmount)}`,
+      false,
+    ]);
+  }
+  rows.push(["Frete", formatBrl(order.shippingAmount), false]);
+  if (order.couponCode && order.discountAmount <= 0) {
     rows.push(["Cupom", order.couponCode, false]);
   }
   rows.push(["Total", formatBrl(order.totalAmount), true]);

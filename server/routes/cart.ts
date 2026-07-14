@@ -105,9 +105,10 @@ router.patch("/coupon", async (req: CartRequest, res) => {
     const cart = await applyCartCoupon(req.cartIdentity!, parsed.data);
     res.json(cart);
   } catch (error) {
-    res.status(500).json({
-      error: error instanceof Error ? error.message : "Erro ao salvar cupom",
-    });
+    const message = error instanceof Error ? error.message : "Erro ao aplicar cupom";
+    const status =
+      error instanceof Error && error.name === "CouponEvalError" ? 400 : 500;
+    res.status(status).json({ error: message });
   }
 });
 
