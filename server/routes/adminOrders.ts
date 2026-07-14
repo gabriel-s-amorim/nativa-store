@@ -1,11 +1,19 @@
-import { orderStatusUpdateSchema } from "@shared/schemas/order";
+import {
+  orderBulkExportSchema,
+  orderBulkIdsSchema,
+  orderStatusUpdateSchema,
+} from "@shared/schemas/order";
 import { Router } from "express";
 import { requireAdmin } from "../middleware/requireAdmin";
 import {
+  deleteOrdersByIds,
   getOrderById,
+  getOrdersByIds,
   listAllOrders,
   updateOrderStatus,
 } from "../services/orders";
+import { buildOrdersCsv } from "../services/ordersCsv";
+import { buildOrdersPdfBuffer } from "../services/ordersPdf";
 import { ensurePaidOrderInMelhorEnvioCart } from "../services/melhorEnvio";
 
 const router = Router();
@@ -18,6 +26,60 @@ router.get("/", requireAdmin, async (_req, res) => {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Erro ao carregar pedidos",
     });
+  }
+});
+
+router.post("/bulk/delete", requireAdmin, async (req, res) => {
+  try {
+    const parsed = orderBulkIdsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });
+      return;
+    }
+
+    const result = await deleteOrdersByIds(parsed.data.ids);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao excluir pedidos",
+    });
+  }
+});
+
+router.post("/bulk/export", requireAdmin, async (req, res) => {
+  try {
+    const parsed = orderBulkExportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });
+      return;
+    }
+
+    const orders = await getOrdersByIds(parsed.data.ids);
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    if (parsed.data.format === "csv") {
+      const csv = buildOrdersCsv(orders);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="pedidos-nativa-${stamp}.csv"`
+      );
+      res.send(csv);
+      return;
+    }
+
+    const pdf = await buildOrdersPdfBuffer(orders);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="pedidos-nativa-${stamp}.pdf"`
+    );
+    res.send(pdf);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Erro ao exportar pedidos";
+    const status = message.includes("encontrado") ? 404 : 500;
+    res.status(status).json({ error: message });
   }
 });
 

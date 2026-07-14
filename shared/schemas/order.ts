@@ -58,5 +58,18 @@ export const orderStatusUpdateSchema = z.object({
   status: z.enum(["pending", "paid", "canceled"]),
 });
 
+export const orderBulkIdsSchema = z.object({
+  ids: z
+    .array(z.string().uuid("ID de pedido inválido"))
+    .min(1, "Selecione ao menos um pedido")
+    .max(200, "Máximo de 200 pedidos por operação"),
+});
+
+export const orderBulkExportSchema = orderBulkIdsSchema.extend({
+  format: z.enum(["csv", "pdf"]),
+});
+
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 export type OrderStatusUpdateInput = z.infer<typeof orderStatusUpdateSchema>;
+export type OrderBulkIdsInput = z.infer<typeof orderBulkIdsSchema>;
+export type OrderBulkExportInput = z.infer<typeof orderBulkExportSchema>;

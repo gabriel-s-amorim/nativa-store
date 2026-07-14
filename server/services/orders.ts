@@ -534,3 +534,53 @@ export async function updateOrderStatus(
 
   return getOrderById(orderId);
 }
+
+export async function getOrdersByIds(
+  orderIds: string[]
+): Promise<AdminOrderDetail[]> {
+  const uniqueIds = Array.from(new Set(orderIds));
+  const orders = await Promise.all(
+    uniqueIds.map(async id => {
+      try {
+        return await getOrderById(id);
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const found = orders.filter((order): order is AdminOrderDetail => order != null);
+  if (!found.length) {
+    throw new Error("Nenhum dos pedidos selecionados foi encontrado");
+  }
+
+  const orderMap = new Map(found.map(order => [order.id, order]));
+  return uniqueIds
+    .map(id => orderMap.get(id))
+    .filter((order): order is AdminOrderDetail => order != null);
+}
+
+export async function deleteOrdersByIds(
+  orderIds: string[]
+): Promise<{ deleted: number }> {
+  const uniqueIds = Array.from(new Set(orderIds));
+
+  const { data, error } = await supabase
+    .from("orders")
+    .delete()
+    .in("id", uniqueIds)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+
+  const deletedIds = (data ?? []).map(row => row.id);
+  if (deletedIds.length) {
+    await supabase
+      .from("admin_notifications")
+      .delete()
+      .eq("entity_type", "order")
+      .in("entity_id", deletedIds);
+  }
+
+  return { deleted: deletedIds.length };
+}

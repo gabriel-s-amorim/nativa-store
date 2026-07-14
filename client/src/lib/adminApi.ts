@@ -205,6 +205,54 @@ export function retryAdminOrderShipment(orderId: string) {
   );
 }
 
+export function deleteAdminOrders(ids: string[]) {
+  return request<{ deleted: number }>("/api/admin/orders/bulk/delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+async function downloadAdminOrdersExport(
+  ids: string[],
+  format: "csv" | "pdf"
+): Promise<void> {
+  const response = await fetch("/api/admin/orders/bulk/export", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids, format }),
+  });
+
+  if (!response.ok) {
+    const body = await parseJsonSafe(response);
+    throw new AdminApiError(body?.error ?? "Erro ao exportar pedidos", body?.issues);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename =
+    match?.[1] ??
+    `pedidos-nativa-${new Date().toISOString().slice(0, 10)}.${format}`;
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function exportAdminOrdersCsv(ids: string[]) {
+  return downloadAdminOrdersExport(ids, "csv");
+}
+
+export function exportAdminOrdersPdf(ids: string[]) {
+  return downloadAdminOrdersExport(ids, "pdf");
+}
+
 export function fetchAdminCustomers() {
   return request<AdminCustomerSummary[]>("/api/admin/customers");
 }
