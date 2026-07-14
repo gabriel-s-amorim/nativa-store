@@ -1,16 +1,21 @@
+import { Input } from "@/components/ui/input";
 import { formatPrice } from "@/lib/products";
 import type { CartItem } from "@shared/types/cart";
 import type { ShippingQuoteOption } from "@shared/types/melhorEnvio";
-import { Tag, Truck } from "lucide-react";
+import { Tag, Truck, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface CheckoutOrderSummaryProps {
   items: CartItem[];
   subtotal: number;
   discountAmount?: number;
+  grantsFreeShipping?: boolean;
   couponCode: string | null;
   shipping: ShippingQuoteOption | null;
   shippingLoading: boolean;
   isSubmitting: boolean;
+  isCouponUpdating?: boolean;
+  onApplyCoupon?: (couponCode: string) => Promise<boolean>;
   onSubmit: () => void;
   showSubmit?: boolean;
 }
@@ -19,17 +24,40 @@ export default function CheckoutOrderSummary({
   items,
   subtotal,
   discountAmount = 0,
+  grantsFreeShipping = false,
   couponCode,
   shipping,
   shippingLoading,
   isSubmitting,
+  isCouponUpdating = false,
+  onApplyCoupon,
   onSubmit,
   showSubmit = true,
 }: CheckoutOrderSummaryProps) {
+  const [couponInput, setCouponInput] = useState("");
   const shippingAmount = shipping?.customPrice ?? 0;
   const safeDiscount = Math.max(0, Math.min(discountAmount, subtotal));
   const total = subtotal - safeDiscount + shippingAmount;
   const freeShipping = Boolean(shipping && shippingAmount === 0);
+  const canEditCoupon = Boolean(onApplyCoupon) && !isSubmitting;
+
+  useEffect(() => {
+    if (!couponCode) setCouponInput("");
+  }, [couponCode]);
+
+  async function handleApplyCoupon(e: React.FormEvent) {
+    e.preventDefault();
+    if (!onApplyCoupon || isCouponUpdating) return;
+    const code = couponInput.trim();
+    if (!code) return;
+    await onApplyCoupon(code);
+  }
+
+  async function handleRemoveCoupon() {
+    if (!onApplyCoupon || isCouponUpdating) return;
+    setCouponInput("");
+    await onApplyCoupon("");
+  }
 
   return (
     <aside className="space-y-4 rounded-3xl border border-[#E8D5C4] bg-white p-5 shadow-[0_18px_50px_rgba(61,43,31,0.08)] lg:sticky lg:top-24">
@@ -73,6 +101,58 @@ export default function CheckoutOrderSummary({
         ))}
       </ul>
 
+      {canEditCoupon && (
+        <form onSubmit={e => void handleApplyCoupon(e)} className="space-y-2 border-t border-[#E8D5C4] pt-4">
+          <label
+            htmlFor="checkout-coupon"
+            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#8B6F5E]"
+            style={{ fontFamily: "'Nunito', sans-serif" }}
+          >
+            <Tag size={12} />
+            Cupom de desconto
+          </label>
+          {couponCode ? (
+            <div className="flex items-center gap-2">
+              <span className="flex-1 rounded-xl border border-[#2D6A4F]/25 bg-[#2D6A4F]/8 px-3 py-2.5 text-sm font-semibold uppercase text-[#2D6A4F]">
+                {couponCode}
+                {grantsFreeShipping ? " · frete grátis" : ""}
+              </span>
+              <button
+                type="button"
+                disabled={isCouponUpdating}
+                onClick={() => void handleRemoveCoupon()}
+                className="inline-flex h-10 items-center gap-1 rounded-xl border border-[#E8D5C4] px-3 text-sm font-semibold text-[#8B6F5E] hover:bg-[#FAF7F2] disabled:opacity-50"
+                style={{ fontFamily: "'Nunito', sans-serif" }}
+              >
+                <X size={14} />
+                Remover
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Input
+                id="checkout-coupon"
+                value={couponInput}
+                onChange={e => setCouponInput(e.target.value.toUpperCase())}
+                placeholder="Digite o cupom"
+                disabled={isCouponUpdating}
+                className="h-10 border-[#E8D5C4] bg-[#FAF7F2] uppercase"
+                style={{ fontFamily: "'Nunito', sans-serif" }}
+                autoComplete="off"
+              />
+              <button
+                type="submit"
+                disabled={isCouponUpdating || !couponInput.trim()}
+                className="shrink-0 rounded-xl border border-[#C4522A]/30 px-4 text-sm font-semibold text-[#C4522A] hover:bg-[#C4522A]/10 transition-colors disabled:opacity-50"
+                style={{ fontFamily: "'Nunito', sans-serif" }}
+              >
+                {isCouponUpdating ? "..." : "Aplicar"}
+              </button>
+            </div>
+          )}
+        </form>
+      )}
+
       <div
         className="space-y-2 border-t border-[#E8D5C4] pt-4 text-sm"
         style={{ fontFamily: "'Nunito', sans-serif" }}
@@ -94,7 +174,7 @@ export default function CheckoutOrderSummary({
           </div>
         )}
 
-        {couponCode && safeDiscount === 0 && (
+        {couponCode && safeDiscount === 0 && !canEditCoupon && (
           <div className="flex items-center justify-between text-[#8B6F5E]">
             <span className="flex items-center gap-1.5">
               <Tag size={14} />
@@ -144,7 +224,7 @@ export default function CheckoutOrderSummary({
         <button
           type="button"
           onClick={onSubmit}
-          disabled={isSubmitting || !shipping}
+          disabled={isSubmitting || !shipping || isCouponUpdating}
           className="hidden w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 lg:flex"
           style={{
             background: "linear-gradient(135deg, #C4522A, #E8821A)",
@@ -164,7 +244,7 @@ export default function CheckoutOrderSummary({
             <button
               type="button"
               onClick={onSubmit}
-              disabled={isSubmitting || !shipping}
+              disabled={isSubmitting || !shipping || isCouponUpdating}
               className="ml-auto min-h-12 flex-1 rounded-2xl bg-gradient-to-r from-[#C4522A] to-[#E8821A] px-5 text-sm font-bold text-white disabled:opacity-50"
             >
               {isSubmitting ? "Processando..." : "Finalizar compra"}

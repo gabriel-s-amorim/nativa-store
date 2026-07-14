@@ -79,7 +79,7 @@ function addressToFormValues(address: CustomerAddress): AddressFormValues {
 
 function CheckoutPageContent() {
   const { session } = useCustomerAuth();
-  const { items, summary, couponCode, itemCount, isLoading, clearCart } =
+  const { items, summary, couponCode, itemCount, isLoading, isUpdating, clearCart, applyCoupon } =
     useCart();
   const [, setLocation] = useLocation();
 
@@ -212,7 +212,7 @@ function CheckoutPageContent() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [addressForm.cep, itemCount, session?.access_token, summary.subtotal]);
+  }, [addressForm.cep, itemCount, session?.access_token, summary.subtotal, couponCode]);
 
   const selectedShipping: ShippingQuoteOption | null =
     shippingQuote?.options.find(option => option.id === selectedShippingId) ??
@@ -954,10 +954,13 @@ function CheckoutPageContent() {
               items={items}
               subtotal={summary.subtotal}
               discountAmount={summary.discountAmount}
+              grantsFreeShipping={summary.grantsFreeShipping}
               couponCode={couponCode}
               shipping={selectedShipping}
               shippingLoading={shippingLoading}
               isSubmitting={isSubmitting}
+              isCouponUpdating={isUpdating}
+              onApplyCoupon={async code => applyCoupon({ couponCode: code })}
               onSubmit={() => void handleSubmit()}
               showSubmit={paymentMethod !== "credit_card"}
             />
