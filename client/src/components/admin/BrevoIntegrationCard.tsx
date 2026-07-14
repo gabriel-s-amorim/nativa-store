@@ -20,6 +20,7 @@ import {
   fetchBrevoStatus,
   fetchBrevoTemplates,
   fetchStoreEmailTemplates,
+  resyncMarketingSubscriptions,
   testBrevoConnection,
   testBrevoOrderTemplate,
   updateBrevoSettings,
@@ -31,6 +32,7 @@ import {
   type StoreEmailTemplate,
 } from "@/lib/adminApi";
 import {
+  AlertTriangle,
   CheckCircle2,
   Copy,
   ExternalLink,
@@ -186,6 +188,20 @@ export default function BrevoIntegrationCard() {
       setApiKey("");
       setWebhookToken("");
       toast.success("Configurações da Brevo salvas");
+      if (data.defaultListId) {
+        try {
+          const resync = await resyncMarketingSubscriptions();
+          if (resync.total > 0) {
+            toast.success(
+              `Inscritos da newsletter reenviados: ${resync.synced} ok, ${resync.failed} falha(s)`
+            );
+          }
+        } catch {
+          toast.message(
+            "Salvo. Se houver inscritos antigos sem lista, use Contatos → Reenviar ao Brevo."
+          );
+        }
+      }
       if (data.hasApiKey) {
         const [senderData, listData, templateData] = await Promise.all([
           fetchBrevoSenders().catch(() => []),
@@ -370,7 +386,7 @@ export default function BrevoIntegrationCard() {
           </div>
           <div className="space-y-2">
             <Label>Lista padrão da newsletter</Label>
-            <Select value={listId} onValueChange={setListId}>
+            <Select value={listId || undefined} onValueChange={setListId}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Selecione uma lista" />
               </SelectTrigger>
@@ -382,6 +398,12 @@ export default function BrevoIntegrationCard() {
                 ))}
               </SelectContent>
             </Select>
+            {!listId && (
+              <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                Sem lista padrão, a inscrição da loja não entra em nenhuma lista do Brevo.
+              </p>
+            )}
           </div>
         </div>
 

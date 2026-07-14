@@ -155,6 +155,14 @@ export const brevoNewsletterSchema = z.object({
   website: z.string().max(200).optional(),
 });
 
+export const brevoContactListsSchema = z.object({
+  listIds: z.array(z.number().int().positive()).max(100),
+});
+
+export const brevoMarketingResyncSchema = z.object({
+  emails: z.array(z.email().max(320)).max(200).optional(),
+});
+
 export const brevoListCreateSchema = z.object({
   name: z.string().trim().min(1).max(150),
   folderId: z.number().int().positive().optional(),

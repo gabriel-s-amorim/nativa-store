@@ -659,33 +659,37 @@ export async function fetchBrevoContacts(params: {
   search?: string;
   listId?: number;
 } = {}) {
+  const query = new URLSearchParams({ limit: "500" });
+  if (params.search?.trim()) query.set("search", params.search.trim());
+  if (params.listId) query.set("listId", String(params.listId));
   const result = await request<
     Array<{
       id: string | number;
       email: string;
+      firstName?: string;
+      lastName?: string;
       attributes?: Record<string, string | undefined>;
       listIds?: number[];
       emailBlacklisted?: boolean;
+      subscribed?: boolean;
       createdAt?: string;
     }>
-  >("/api/admin/brevo/contacts?limit=500");
-  const query = params.search?.trim().toLowerCase();
-  return result
-    .map(contact => ({
-      id: String(contact.id),
-      email: contact.email,
-      firstName: contact.attributes?.NOME ?? contact.attributes?.FIRSTNAME,
-      lastName: contact.attributes?.SOBRENOME ?? contact.attributes?.LASTNAME,
-      listIds: contact.listIds ?? [],
-      subscribed: !contact.emailBlacklisted,
-      createdAt: contact.createdAt,
-    }))
-    .filter(contact => {
-      const matchesList =
-        !params.listId || contact.listIds?.includes(params.listId);
-      const haystack = `${contact.firstName ?? ""} ${contact.lastName ?? ""} ${contact.email}`.toLowerCase();
-      return matchesList && (!query || haystack.includes(query));
-    });
+  >(`/api/admin/brevo/contacts?${query.toString()}`);
+  return result.map(contact => ({
+    id: String(contact.id),
+    email: contact.email,
+    firstName:
+      contact.firstName ??
+      contact.attributes?.NOME ??
+      contact.attributes?.FIRSTNAME,
+    lastName:
+      contact.lastName ??
+      contact.attributes?.SOBRENOME ??
+      contact.attributes?.LASTNAME,
+    listIds: contact.listIds ?? [],
+    subscribed: contact.subscribed ?? !contact.emailBlacklisted,
+    createdAt: contact.createdAt,
+  }));
 }
 
 export function createBrevoContact(input: {
@@ -694,10 +698,12 @@ export function createBrevoContact(input: {
   lastName?: string;
   listIds: number[];
 }) {
-  return request<{ id?: string | number }>("/api/admin/brevo/contacts", {
+  return request<BrevoContact>("/api/admin/brevo/contacts", {
     method: "POST",
     body: JSON.stringify({
       email: input.email,
+      firstName: input.firstName,
+      lastName: input.lastName,
       attributes: {
         ...(input.firstName ? { NOME: input.firstName } : {}),
         ...(input.lastName ? { SOBRENOME: input.lastName } : {}),
@@ -707,12 +713,22 @@ export function createBrevoContact(input: {
     }),
   }).then(result => ({
     id: String(result.id ?? input.email),
-    email: input.email,
-    firstName: input.firstName,
-    lastName: input.lastName,
-    listIds: input.listIds,
-    subscribed: true,
+    email: result.email ?? input.email,
+    firstName: result.firstName ?? input.firstName,
+    lastName: result.lastName ?? input.lastName,
+    listIds: result.listIds ?? input.listIds,
+    subscribed: result.subscribed ?? true,
   }));
+}
+
+export function updateBrevoContactLists(email: string, listIds: number[]) {
+  return request<BrevoContact>(
+    `/api/admin/brevo/contacts/${encodeURIComponent(email)}/lists`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ listIds }),
+    }
+  );
 }
 
 export function removeBrevoContact(email: string) {
@@ -720,6 +736,39 @@ export function removeBrevoContact(email: string) {
     `/api/admin/brevo/contacts/${encodeURIComponent(email)}`,
     { method: "DELETE" }
   );
+}
+
+export interface MarketingSubscription {
+  id: string;
+  email: string;
+  name: string | null;
+  status: "subscribed" | "unsubscribed";
+  source: string;
+  sync_status: "pending" | "synced" | "failed";
+  sync_error: string | null;
+  brevo_contact_id: string | null;
+  brevo_list_ids: number[];
+  consented_at: string;
+  synced_at: string | null;
+  created_at: string;
+}
+
+export function fetchMarketingSubscriptions() {
+  return request<MarketingSubscription[]>(
+    "/api/admin/brevo/marketing-subscriptions?limit=200"
+  );
+}
+
+export function resyncMarketingSubscriptions(emails?: string[]) {
+  return request<{
+    total: number;
+    synced: number;
+    failed: number;
+    results: Array<{ email: string; ok: boolean; error?: string }>;
+  }>("/api/admin/brevo/marketing-subscriptions/resync", {
+    method: "POST",
+    body: JSON.stringify(emails?.length ? { emails } : {}),
+  });
 }
 
 type BrevoRawCampaign = {

@@ -2,8 +2,10 @@ import {
   brevoCampaignScheduleSchema,
   brevoCampaignSchema,
   brevoCampaignTestSchema,
+  brevoContactListsSchema,
   brevoContactSchema,
   brevoListCreateSchema,
+  brevoMarketingResyncSchema,
   brevoQuickTestSchema,
   brevoSettingsSchema,
   brevoStoreTemplateUpdateSchema,
@@ -15,6 +17,7 @@ import { z } from "zod";
 import { requireAdmin } from "../middleware/requireAdmin";
 import {
   BrevoApiError,
+  addContactsToBrevoList,
   configureBrevoWebhooks,
   createBrevoCampaign,
   createBrevoList,
@@ -23,11 +26,14 @@ import {
   getBrevoAdminStatus,
   getBrevoCampaign,
   getBrevoCampaignMetrics,
+  getBrevoContact,
   listBrevoCampaigns,
   listBrevoContacts,
   listBrevoLists,
   listBrevoSenders,
   listBrevoTemplates,
+  listMarketingSubscriptions,
+  resyncMarketingSubscriptions,
   scheduleBrevoCampaign,
   sendBrevoCampaignNow,
   sendBrevoCampaignTest,
@@ -35,6 +41,7 @@ import {
   sendBrevoTransactionalEmail,
   testBrevoCredentials,
   updateBrevoCampaign,
+  updateBrevoContactLists,
   updateBrevoSettings,
   upsertBrevoContact,
 } from "../services/brevo";
@@ -167,13 +174,63 @@ router.get("/contacts", async (req, res) => {
   }
 });
 
+router.get("/contacts/:email", async (req, res) => {
+  const parsed = z.string().trim().min(1).max(320).safeParse(req.params.email);
+  if (!parsed.success) return invalid(res, parsed.error.issues);
+  try {
+    res.json(await getBrevoContact(parsed.data));
+  } catch (error) {
+    failure(res, error, "Erro ao carregar contato");
+  }
+});
+
 router.post("/contacts", async (req, res) => {
   const parsed = brevoContactSchema.safeParse(req.body);
   if (!parsed.success) return invalid(res, parsed.error.issues);
   try {
-    res.status(201).json(await upsertBrevoContact(parsed.data));
+    await upsertBrevoContact(parsed.data);
+    if (parsed.data.listIds?.length) {
+      await Promise.all(
+        parsed.data.listIds.map(listId =>
+          addContactsToBrevoList(listId, [parsed.data.email])
+        )
+      );
+    }
+    try {
+      res.status(201).json(await getBrevoContact(parsed.data.email));
+    } catch {
+      res.status(201).json({
+        id: parsed.data.email,
+        email: parsed.data.email.toLowerCase(),
+        listIds: parsed.data.listIds ?? [],
+        subscribed: true,
+      });
+    }
   } catch (error) {
     failure(res, error, "Erro ao salvar contato");
+  }
+});
+
+router.put("/contacts/:email/lists", async (req, res) => {
+  const emailParsed = z
+    .string()
+    .trim()
+    .min(1)
+    .max(320)
+    .safeParse(req.params.email);
+  const bodyParsed = brevoContactListsSchema.safeParse(req.body);
+  if (!emailParsed.success || !bodyParsed.success) {
+    return invalid(
+      res,
+      emailParsed.success ? bodyParsed.error?.issues : emailParsed.error.issues
+    );
+  }
+  try {
+    res.json(
+      await updateBrevoContactLists(emailParsed.data, bodyParsed.data.listIds)
+    );
+  } catch (error) {
+    failure(res, error, "Erro ao atualizar listas do contato");
   }
 });
 
@@ -185,6 +242,26 @@ router.delete("/contacts/:email", async (req, res) => {
     res.status(204).send();
   } catch (error) {
     failure(res, error, "Erro ao excluir contato");
+  }
+});
+
+router.get("/marketing-subscriptions", async (req, res) => {
+  const parsed = paginationSchema.safeParse(req.query);
+  if (!parsed.success) return invalid(res, parsed.error.issues);
+  try {
+    res.json(await listMarketingSubscriptions(parsed.data.limit));
+  } catch (error) {
+    failure(res, error, "Erro ao listar inscritos da newsletter");
+  }
+});
+
+router.post("/marketing-subscriptions/resync", async (req, res) => {
+  const parsed = brevoMarketingResyncSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return invalid(res, parsed.error.issues);
+  try {
+    res.json(await resyncMarketingSubscriptions(parsed.data.emails));
+  } catch (error) {
+    failure(res, error, "Erro ao reenviar inscritos ao Brevo");
   }
 });
 

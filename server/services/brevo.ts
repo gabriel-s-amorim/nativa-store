@@ -401,12 +401,22 @@ export function deleteBrevoList(listId: number) {
   return brevoRequest(`/contacts/lists/${listId}`, { method: "DELETE" });
 }
 
-function mapContact(contact: any) {
+function mapContact(contact: any, fallbackListIds?: number[]) {
   return {
     ...contact,
     id: String(contact.id ?? contact.email),
-    firstName: contact.attributes?.FIRSTNAME ?? contact.attributes?.NOME,
-    lastName: contact.attributes?.LASTNAME ?? contact.attributes?.SOBRENOME,
+    email: String(contact.email ?? "").toLowerCase(),
+    firstName:
+      contact.attributes?.FIRSTNAME ??
+      contact.attributes?.NOME ??
+      contact.firstName,
+    lastName:
+      contact.attributes?.LASTNAME ??
+      contact.attributes?.SOBRENOME ??
+      contact.lastName,
+    listIds: Array.isArray(contact.listIds)
+      ? contact.listIds
+      : (fallbackListIds ?? []),
     subscribed: !contact.emailBlacklisted,
   };
 }
@@ -427,24 +437,106 @@ export async function listBrevoContacts(
       "filter[query]": filters.search,
     })}`
   )) as { contacts?: unknown[] };
-  return (result.contacts ?? []).map(mapContact);
+  const fallbackListIds = filters.listId ? [filters.listId] : undefined;
+  return (result.contacts ?? []).map(contact =>
+    mapContact(contact, fallbackListIds)
+  );
+}
+
+export async function getBrevoContact(email: string) {
+  const contact = await brevoRequest(
+    `/contacts/${encodeURIComponent(email.trim().toLowerCase())}`
+  );
+  return mapContact(contact);
+}
+
+export async function addContactsToBrevoList(
+  listId: number,
+  emails: string[]
+) {
+  const normalized = Array.from(
+    new Set(emails.map(email => email.trim().toLowerCase()).filter(Boolean))
+  );
+  if (!normalized.length) return { contacts: { success: [], failure: [] } };
+  try {
+    return await brevoRequest(`/contacts/lists/${listId}/contacts/add`, {
+      method: "POST",
+      body: JSON.stringify({ emails: normalized }),
+    });
+  } catch (error) {
+    // Contato já na lista ou processamento parcial não deve derrubar o fluxo.
+    if (error instanceof BrevoApiError && error.status < 500) {
+      return { contacts: { success: normalized, failure: [] } };
+    }
+    throw error;
+  }
+}
+
+export async function removeContactsFromBrevoList(
+  listId: number,
+  emails: string[]
+) {
+  const normalized = Array.from(
+    new Set(emails.map(email => email.trim().toLowerCase()).filter(Boolean))
+  );
+  if (!normalized.length) return { contacts: { success: [], failure: [] } };
+  return brevoRequest(`/contacts/lists/${listId}/contacts/remove`, {
+    method: "POST",
+    body: JSON.stringify({ emails: normalized }),
+  });
 }
 
 export function upsertBrevoContact(input: BrevoContactInput) {
+  const payload: Record<string, unknown> = {
+    email: input.email.toLowerCase(),
+    attributes: {
+      ...(input.attributes ?? {}),
+      ...(input.firstName ? { FIRSTNAME: input.firstName } : {}),
+      ...(input.lastName ? { LASTNAME: input.lastName } : {}),
+    },
+    updateEnabled: input.updateEnabled ?? true,
+  };
+  if (input.listIds?.length) payload.listIds = input.listIds;
+  if (input.unlinkListIds?.length) payload.unlinkListIds = input.unlinkListIds;
   return brevoRequest("/contacts", {
     method: "POST",
-    body: JSON.stringify({
-      email: input.email.toLowerCase(),
-      attributes: {
-        ...(input.attributes ?? {}),
-        ...(input.firstName ? { FIRSTNAME: input.firstName } : {}),
-        ...(input.lastName ? { LASTNAME: input.lastName } : {}),
-      },
-      listIds: input.listIds,
-      unlinkListIds: input.unlinkListIds,
-      updateEnabled: input.updateEnabled ?? true,
-    }),
+    body: JSON.stringify(payload),
   });
+}
+
+export async function updateBrevoContactLists(
+  email: string,
+  listIds: number[]
+) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const uniqueListIds = Array.from(new Set(listIds.filter(id => id > 0)));
+  let currentListIds: number[] = [];
+  try {
+    const current = await getBrevoContact(normalizedEmail);
+    currentListIds = current.listIds ?? [];
+  } catch (error) {
+    if (!(error instanceof BrevoApiError) || error.status !== 404) throw error;
+  }
+
+  const toAdd = uniqueListIds.filter(id => !currentListIds.includes(id));
+  const toRemove = currentListIds.filter(id => !uniqueListIds.includes(id));
+
+  await upsertBrevoContact({
+    email: normalizedEmail,
+    listIds: toAdd,
+    unlinkListIds: toRemove,
+    updateEnabled: true,
+  });
+
+  // Garante vínculo mesmo quando o contato já existia (updateEnabled / 204).
+  await Promise.all([
+    ...toAdd.map(listId => addContactsToBrevoList(listId, [normalizedEmail])),
+    ...toRemove.map(listId =>
+      removeContactsFromBrevoList(listId, [normalizedEmail])
+    ),
+  ]);
+
+  return getBrevoContact(normalizedEmail);
 }
 
 export function deleteBrevoContact(email: string) {
@@ -720,26 +812,7 @@ export async function subscribeToNewsletter(
   if (error) throw new Error(error.message);
 
   try {
-    const settings = await getActiveSettings();
-    const listIds = settings.default_list_id ? [settings.default_list_id] : [];
-    const result = (await upsertBrevoContact({
-      email,
-      attributes: input.name ? { NOME: input.name.trim() } : undefined,
-      listIds,
-      updateEnabled: true,
-    })) as { id?: string | number };
-    const { error: syncedError } = await supabase
-      .from("marketing_subscriptions")
-      .update({
-        brevo_contact_id: result?.id == null ? null : String(result.id),
-        brevo_list_ids: listIds,
-        sync_status: "synced",
-        sync_error: null,
-        synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("email", email);
-    if (syncedError) throw new Error(syncedError.message);
+    await syncMarketingSubscriptionToBrevo(email, input.name?.trim());
   } catch (syncError) {
     const message =
       syncError instanceof Error ? syncError.message : "Falha ao sincronizar";
@@ -753,4 +826,124 @@ export async function subscribeToNewsletter(
       .eq("email", email);
     if (failedError) throw new Error(failedError.message);
   }
+}
+
+async function syncMarketingSubscriptionToBrevo(
+  email: string,
+  name?: string | null
+) {
+  const settings = await getActiveSettings();
+  if (!settings.default_list_id) {
+    throw new Error(
+      "Lista padrão da newsletter não configurada. Em Integrações → Brevo, escolha a lista e salve."
+    );
+  }
+
+  const listIds = [settings.default_list_id];
+  await upsertBrevoContact({
+    email,
+    attributes: name ? { NOME: name, FIRSTNAME: name } : undefined,
+    listIds,
+    updateEnabled: true,
+  });
+  await addContactsToBrevoList(settings.default_list_id, [email]);
+
+  let contactId: string | null = null;
+  let syncedListIds = listIds;
+  try {
+    const contact = await getBrevoContact(email);
+    contactId = contact.id ? String(contact.id) : null;
+    if (Array.isArray(contact.listIds) && contact.listIds.length) {
+      syncedListIds = contact.listIds;
+    }
+  } catch {
+    // Contato pode ter sido criado sem retorno de ID; lista já foi vinculada.
+  }
+
+  const { error: syncedError } = await supabase
+    .from("marketing_subscriptions")
+    .update({
+      brevo_contact_id: contactId,
+      brevo_list_ids: syncedListIds,
+      sync_status: "synced",
+      sync_error: null,
+      synced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("email", email);
+  if (syncedError) throw new Error(syncedError.message);
+}
+
+export async function listMarketingSubscriptions(limit = 100) {
+  const { data, error } = await supabase
+    .from("marketing_subscriptions")
+    .select(
+      "id, email, name, status, source, sync_status, sync_error, brevo_contact_id, brevo_list_ids, consented_at, synced_at, created_at"
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function resyncMarketingSubscriptions(emails?: string[]) {
+  const settings = await getActiveSettings();
+  if (!settings.default_list_id) {
+    throw new Error(
+      "Lista padrão da newsletter não configurada. Em Integrações → Brevo, escolha a lista e salve."
+    );
+  }
+
+  let query = supabase
+    .from("marketing_subscriptions")
+    .select("email, name, status, sync_status, brevo_list_ids")
+    .eq("status", "subscribed")
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (emails?.length) {
+    query = query.in(
+      "email",
+      emails.map(email => email.trim().toLowerCase())
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const targets = (data ?? []).filter(row => {
+    if (emails?.length) return true;
+    const listIds = Array.isArray(row.brevo_list_ids) ? row.brevo_list_ids : [];
+    return (
+      row.sync_status !== "synced" ||
+      !listIds.includes(settings.default_list_id as number)
+    );
+  });
+
+  const results: Array<{ email: string; ok: boolean; error?: string }> = [];
+  for (const row of targets) {
+    try {
+      await syncMarketingSubscriptionToBrevo(row.email, row.name);
+      results.push({ email: row.email, ok: true });
+    } catch (syncError) {
+      const message =
+        syncError instanceof Error ? syncError.message : "Falha ao sincronizar";
+      await supabase
+        .from("marketing_subscriptions")
+        .update({
+          sync_status: "failed",
+          sync_error: message.slice(0, 2000),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("email", row.email);
+      results.push({ email: row.email, ok: false, error: message });
+    }
+  }
+
+  return {
+    total: targets.length,
+    synced: results.filter(item => item.ok).length,
+    failed: results.filter(item => !item.ok).length,
+    results,
+  };
 }
