@@ -39,12 +39,47 @@ function toForm(status: MercadoPagoAdminStatus): FormState {
   };
 }
 
+function isEnvironmentReady(
+  status: MercadoPagoAdminStatus,
+  form: FormState
+): boolean {
+  const hasPublicKey = Boolean(form.publicKey.trim() || status.publicKey);
+  const hasToken =
+    status.hasAccessToken || Boolean(form.accessToken.trim());
+  const hasWebhook =
+    status.hasWebhookSecret || Boolean(form.webhookSecret.trim());
+  return hasPublicKey && hasToken && hasWebhook;
+}
+
 export default function MercadoPagoIntegrationCard() {
   const [status, setStatus] = useState<MercadoPagoAdminStatus | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
+  const [checkoutEnvironment, setCheckoutEnvironment] =
+    useState<MercadoPagoEnvironment | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+
+  async function resolveCheckoutEnvironment(): Promise<{
+    preferred: MercadoPagoAdminStatus;
+    active: MercadoPagoEnvironment | null;
+  }> {
+    const [test, production] = await Promise.all([
+      fetchMercadoPagoStatus("test"),
+      fetchMercadoPagoStatus("production"),
+    ]);
+
+    if (production.enabled) {
+      return { preferred: production, active: "production" };
+    }
+    if (test.enabled) {
+      return { preferred: test, active: "test" };
+    }
+    return {
+      preferred: production.configured ? production : test,
+      active: null,
+    };
+  }
 
   async function load(environment: MercadoPagoEnvironment) {
     setLoading(true);
@@ -64,7 +99,31 @@ export default function MercadoPagoIntegrationCard() {
   }
 
   useEffect(() => {
-    void load("test");
+    let cancelled = false;
+
+    async function loadInitial() {
+      setLoading(true);
+      try {
+        const { preferred, active } = await resolveCheckoutEnvironment();
+        if (cancelled) return;
+        setCheckoutEnvironment(active);
+        setStatus(preferred);
+        setForm(toForm(preferred));
+      } catch (error) {
+        toast.error(
+          error instanceof AdminApiError
+            ? error.message
+            : "Erro ao carregar Mercado Pago"
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadInitial();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function save(event: React.FormEvent) {
@@ -79,6 +138,7 @@ export default function MercadoPagoIntegrationCard() {
       });
       setStatus(data);
       setForm(toForm(data));
+      setCheckoutEnvironment(data.enabled ? data.environment : null);
       toast.success("Configurações do Mercado Pago salvas");
     } catch (error) {
       toast.error(
@@ -112,6 +172,13 @@ export default function MercadoPagoIntegrationCard() {
     );
   }
 
+  const ready = isEnvironmentReady(status, form);
+  const isActiveOnCheckout = form.enabled && ready;
+  const otherEnvActive =
+    !form.enabled &&
+    checkoutEnvironment !== null &&
+    checkoutEnvironment !== form.environment;
+
   return (
     <form onSubmit={save}>
       <Card className="space-y-5 border-[var(--admin-border)] bg-[var(--admin-surface)] p-5 shadow-sm">
@@ -131,15 +198,21 @@ export default function MercadoPagoIntegrationCard() {
           </div>
           <div
             className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              status.enabled && status.configured
+              isActiveOnCheckout
                 ? "bg-emerald-50 text-emerald-700"
-                : "bg-amber-50 text-amber-800"
+                : otherEnvActive
+                  ? "bg-sky-50 text-sky-700"
+                  : "bg-amber-50 text-amber-800"
             }`}
           >
-            {status.enabled && status.configured ? (
+            {isActiveOnCheckout ? (
               <span className="inline-flex items-center gap-1">
-                <CheckCircle2 className="size-3.5" /> Ativo
+                <CheckCircle2 className="size-3.5" /> Ativo no checkout
               </span>
+            ) : otherEnvActive ? (
+              checkoutEnvironment === "production"
+                ? "Produção ativa"
+                : "Teste ativo"
             ) : (
               "Inativo"
             )}
@@ -154,7 +227,9 @@ export default function MercadoPagoIntegrationCard() {
                 : "Credenciais de produção"}
             </p>
             <p className="text-xs text-[var(--admin-text-muted)]">
-              Ative produção somente depois de concluir todos os testes.
+              {checkoutEnvironment === form.environment
+                ? "Este é o ambiente usado no checkout da loja."
+                : "Alterne para editar o outro ambiente. Só um fica ativo no checkout."}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -172,7 +247,8 @@ export default function MercadoPagoIntegrationCard() {
           <div>
             <Label>Habilitar este ambiente no checkout</Label>
             <p className="text-xs text-[var(--admin-text-muted)]">
-              Ao ativar, o outro ambiente é desativado automaticamente.
+              Ao ativar, o outro ambiente é desativado automaticamente. Salve
+              para aplicar.
             </p>
           </div>
           <Switch

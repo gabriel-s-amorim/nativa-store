@@ -312,8 +312,16 @@ function CheckoutPageContent() {
     return shippingAddressFromForm(addressForm);
   }
 
-  async function handleSubmit(card?: CardPaymentData): Promise<boolean> {
+  async function handleSubmit(
+    card?: CardPaymentData,
+    identificationFromBrick?: string
+  ): Promise<boolean> {
     if (!session?.access_token) return false;
+
+    const documentNumber =
+      paymentMethod === "credit_card"
+        ? (identificationFromBrick ?? "").replace(/\D/g, "")
+        : cpf;
 
     const payload = {
       shippingAddress: getShippingAddressFromSelection(),
@@ -325,11 +333,11 @@ function CheckoutPageContent() {
         name: recipientName,
         email: recipientEmail,
         phone: recipientPhone,
-        document: cpf,
+        document: documentNumber,
       },
       paymentMethod,
       idempotencyKey,
-      payer: { identificationNumber: cpf },
+      payer: { identificationNumber: documentNumber },
       card,
     };
 
@@ -820,52 +828,57 @@ function CheckoutPageContent() {
                     ))}
                 </RadioGroup>
 
-                <div className="mt-4 flex flex-col gap-2">
-                  <Label htmlFor="payer-cpf">CPF do destinatário e pagador</Label>
-                  <Input
-                    id="payer-cpf"
-                    value={cpf}
-                    onChange={event => {
-                      const digits = event.target.value
-                        .replace(/\D/g, "")
-                        .slice(0, 11);
-                      const masked = digits
-                        .replace(/(\d{3})(\d)/, "$1.$2")
-                        .replace(/(\d{3})(\d)/, "$1.$2")
-                        .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-                      setCpf(masked);
-                      setFieldErrors(previous => {
-                        const next = { ...previous };
-                        delete next["payer.identificationNumber"];
-                        delete next["recipient.document"];
-                        return next;
-                      });
-                    }}
-                    inputMode="numeric"
-                    placeholder="000.000.000-00"
-                    className="max-w-xs border-[#E8D5C4]"
-                  />
-                  {fieldErrors["payer.identificationNumber"] && (
-                    <p className="text-xs text-red-600">
-                      {fieldErrors["payer.identificationNumber"]}
-                    </p>
-                  )}
-                  {!fieldErrors["payer.identificationNumber"] &&
-                    fieldErrors["recipient.document"] && (
+                {paymentMethod !== "credit_card" && (
+                  <div className="mt-4 flex flex-col gap-2">
+                    <Label htmlFor="payer-cpf">
+                      CPF do destinatário e pagador
+                    </Label>
+                    <Input
+                      id="payer-cpf"
+                      value={cpf}
+                      onChange={event => {
+                        const digits = event.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 11);
+                        const masked = digits
+                          .replace(/(\d{3})(\d)/, "$1.$2")
+                          .replace(/(\d{3})(\d)/, "$1.$2")
+                          .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+                        setCpf(masked);
+                        setFieldErrors(previous => {
+                          const next = { ...previous };
+                          delete next["payer.identificationNumber"];
+                          delete next["recipient.document"];
+                          return next;
+                        });
+                      }}
+                      inputMode="numeric"
+                      placeholder="000.000.000-00"
+                      className="max-w-xs border-[#E8D5C4]"
+                    />
+                    {fieldErrors["payer.identificationNumber"] && (
                       <p className="text-xs text-red-600">
-                        {fieldErrors["recipient.document"]}
+                        {fieldErrors["payer.identificationNumber"]}
                       </p>
                     )}
-                </div>
+                    {!fieldErrors["payer.identificationNumber"] &&
+                      fieldErrors["recipient.document"] && (
+                        <p className="text-xs text-red-600">
+                          {fieldErrors["recipient.document"]}
+                        </p>
+                      )}
+                  </div>
+                )}
 
                 {paymentMethod === "credit_card" && (
                   <div className="mt-4 rounded-xl border border-[#E8D5C4] bg-white p-2 sm:p-4">
                     {mpConfig && selectedShipping ? (
                       <CardPayment
+                        key={`card-${summary.subtotal + (selectedShipping.customPrice ?? 0)}-${profile?.email ?? ""}`}
                         initialization={{
                           amount:
                             summary.subtotal +
-                            (selectedShipping?.customPrice ?? 0),
+                            (selectedShipping.customPrice ?? 0),
                           payer: { email: profile?.email },
                         }}
                         customization={{
@@ -878,12 +891,15 @@ function CheckoutPageContent() {
                         locale="pt-BR"
                         onSubmit={async formData => {
                           setIsCardProcessing(true);
-                          const success = await handleSubmit({
-                            token: formData.token,
-                            paymentMethodId: formData.payment_method_id,
-                            installments: formData.installments,
-                            issuerId: formData.issuer_id,
-                          });
+                          const success = await handleSubmit(
+                            {
+                              token: formData.token,
+                              paymentMethodId: formData.payment_method_id,
+                              installments: formData.installments,
+                              issuerId: formData.issuer_id,
+                            },
+                            formData.payer?.identification?.number
+                          );
                           if (!success) {
                             setIsCardProcessing(false);
                             throw new Error("Pagamento não concluído");
@@ -899,6 +915,13 @@ function CheckoutPageContent() {
                     ) : (
                       <p className="px-3 py-5 text-center text-sm text-[#8B6F5E]">
                         Escolha uma opção de entrega para liberar o cartão.
+                      </p>
+                    )}
+                    {(fieldErrors["payer.identificationNumber"] ||
+                      fieldErrors["recipient.document"]) && (
+                      <p className="mt-2 px-2 text-xs text-red-600">
+                        {fieldErrors["payer.identificationNumber"] ||
+                          fieldErrors["recipient.document"]}
                       </p>
                     )}
                   </div>
