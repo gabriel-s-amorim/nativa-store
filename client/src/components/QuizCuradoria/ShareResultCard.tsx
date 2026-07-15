@@ -43,6 +43,7 @@ const ShareResultCard = forwardRef<HTMLDivElement, ShareResultCardProps>(
         />
 
         <img
+          data-share-logo
           src={SITE_LOGO_PATH}
           alt=""
           width={220}
@@ -66,6 +67,7 @@ const ShareResultCard = forwardRef<HTMLDivElement, ShareResultCardProps>(
         </p>
 
         <h2
+          data-share-profile
           style={{
             fontFamily: "'Playfair Display', Georgia, serif",
             fontSize: 72,
@@ -95,6 +97,7 @@ const ShareResultCard = forwardRef<HTMLDivElement, ShareResultCardProps>(
           }}
         >
           <img
+            data-share-product-image
             src={productImage}
             alt=""
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
@@ -103,6 +106,7 @@ const ShareResultCard = forwardRef<HTMLDivElement, ShareResultCardProps>(
         </div>
 
         <p
+          data-share-product-name
           style={{
             marginTop: 28,
             fontSize: 26,

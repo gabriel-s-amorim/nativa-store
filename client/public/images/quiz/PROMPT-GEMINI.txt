@@ -2,7 +2,7 @@ Crie 12 imagens para o quiz de estilo de um e-commerce de bolsas artesanais bras
 
 IDENTIDADE VISUAL (obrigatório em todas):
 - Paleta terrosa/neutra: creme #F5F0E8, terracota #C4522A, verde floresta #2D6A4F, dourado suave #C9922A, marrom #3D2B1F
-- Clima artesanal, caloroso, brasileiro contemporâneo — sem look genérico de stock photo “IA roxa”
+- Clima artesanal, caloroso, brasileiro contemporâneo — nada americanizado, nada “brunch/stock genérico”
 - Sem texto, sem logos, sem marcas d’água, sem pessoas com rosto em close (pessoas só de costas/longe se necessário)
 - Estilo fotográfico editorial suave OU ilustração flat sofisticada (escolha UM estilo e mantenha nas 12)
 - Formato: quadrado 1:1, alta resolução (ideal 1080×1080 ou maior)
@@ -11,42 +11,42 @@ IDENTIDADE VISUAL (obrigatório em todas):
 LISTA DE ARQUIVOS E CENAS:
 
 1) q1-praia.jpg
-   Praia brasileira ao pôr do sol: areia dourada, horizonte quente, leve silhueta de bolsa de palha ou tecido no primeiro plano desfocado. Clima livre e natural.
+   Praia brasileira ao pôr do sol: areia dourada, horizonte quente, chinelos e bolsa de palha/tecido no canto. Clima “pé na areia, sem hora pra voltar”.
 
 2) q1-feira.jpg
-   Feira de artesanato: bancada com tecidos estampados, cerâmica, flores secas e peças feitas à mão. Luz quente de final de tarde. Clima místico/artesanal.
+   Feira hippie / artesanato brasileiro: bancada com tecidos estampados, cerâmica, flores secas e peças feitas à mão. Luz quente de final de tarde.
 
 3) q1-cafe.jpg
-   Café urbano aconchegante: mesa de madeira, xícara de café, bolsa transversal discreta ao lado, luz de janela. Clima clássico e city.
+   Centro da cidade brasileira: calçada, arquitetura urbana, sombra de árvore, bolsa transversal discreta. Clima de look afiado no dia a dia (não café gourmet estrangeiro).
 
 4) q2-trilha.jpg
-   Trilha na natureza (Mata Atlântica ou cerrado): caminho de terra, folhagem verde, luz filtrada entre árvores. Clima terroso e outdoor.
+   Trilha na Mata Atlântica ou cerrado: caminho de terra, folhagem, luz filtrada, garrafa d’água ou coco no fim. Clima outdoor brasileiro.
 
-5) q2-mistico.jpg
-   Cena intimista: velas, cristais, cartas de tarô e incenso sobre tecido linho, sem rostos. Tons terrosos + dourado. Clima místico acolhedor.
+5) q2-meditacao.jpg
+   Meditação ao ar livre ou em casa: tapete/esteira, luz suave da manhã, planta, sem tarô e sem cristais exagerados. Clima de silêncio e recarga.
 
-6) q2-brunch.jpg
-   Brunch com amigas (mãos/mesa apenas): frutas, croissants, flores frescas, bolsa colorida no canto. Clima vibrante e social.
+6) q2-pagode.jpg
+   Quintal brasileiro com vibe de pagode: mesa de madeira, copos, luz de fim de tarde, bolsa colorida no canto. Alegria, amizade, movimento — sem brunch.
 
 7) q3-terra.jpg
-   Moodboard de paleta: tecidos e folhas em tons terrosos e verdes (terracota, areia, musgo). Composição flat lay limpa.
+   Moodboard: tecidos e folhas em tons terrosos e verdes (terracota, areia, musgo). Flat lay limpo.
 
 8) q3-classico.jpg
-   Moodboard clássico: preto, off-white e detalhes dourados (tecido, corrente fina, óculos). Flat lay elegante e minimal.
+   Moodboard: preto, off-white e toque dourado (tecido, corrente fina, óculos). Flat lay elegante.
 
 9) q3-vibrante.jpg
-   Moodboard vibrante: vermelho, amarelo e rosa em tecidos/flores tropicais. Flat lay energético mas sofisticado.
+   Moodboard: rosa, amarelo e vermelho em tecidos/flores tropicais. Flat lay energético.
 
 10) q4-pedras.jpg
-    Colar de pedras naturais artesanal sobre tecido linho creme. Close-up tátil, luz suave.
+    Colar de pedras naturais artesanal sobre linho creme. Close-up tátil.
 
 11) q4-oculos.jpg
-    Óculos de sol clássico (acetato escuro ou tartaruga) sobre fundo neutro creme/mármore claro. Composição limpa.
+    Óculos de sol clássico sobre fundo neutro creme. Composição limpa.
 
 12) q4-brinco.jpg
-    Brinco grande colorido artesanal (contas, fio ou metal) sobre fundo neutro. Destaque da cor e do artesanato.
+    Brinco grande colorido artesanal sobre fundo neutro. Destaque da cor.
 
 ENTREGA:
 - Gere cada imagem separadamente com o nome de arquivo exato.
 - Mantenha consistência de estilo entre as 12.
-- Priorize atmosfera da marca (artesanato brasileiro) em vez de realismo genérico de stock.
+- Priorize Brasil real e artesanato — nada de vibe americana de stock.
