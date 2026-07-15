@@ -1,14 +1,28 @@
+import StitchBorder from "@/components/ui/StitchBorder";
+import { STITCH_DURATION_QUIZ_MS } from "@/hooks/useStitchAnimation";
+import { QUIZ_BRAND_ACCENT } from "@shared/const/quizTagColors";
 import type { QuizPublicOption } from "@shared/types/quiz";
 import { motion } from "framer-motion";
 
 interface QuestionCardProps {
   option: QuizPublicOption;
   selected: boolean;
+  stitching: boolean;
   disabled: boolean;
   onSelect: (optionId: string) => void;
+  onStitchComplete: (optionId: string) => void;
 }
 
-export default function QuestionCard({ option, selected, disabled, onSelect }: QuestionCardProps) {
+export default function QuestionCard({
+  option,
+  selected,
+  stitching,
+  disabled,
+  onSelect,
+  onStitchComplete,
+}: QuestionCardProps) {
+  const accent = option.accentColor || QUIZ_BRAND_ACCENT;
+
   return (
     <motion.button
       type="button"
@@ -17,19 +31,27 @@ export default function QuestionCard({ option, selected, disabled, onSelect }: Q
       onClick={() => onSelect(option.id)}
       whileTap={disabled ? undefined : { scale: 0.98 }}
       animate={{
-        scale: selected ? 1.03 : 1,
+        scale: selected ? 1.02 : 1,
         boxShadow: selected
-          ? "0 12px 32px rgba(196, 82, 42, 0.28)"
+          ? `0 12px 32px ${accent}40`
           : "0 4px 16px rgba(61, 43, 31, 0.08)",
       }}
       transition={{ duration: 0.28, ease: "easeOut" }}
-      className="group relative w-full overflow-hidden rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4522A]/60"
+      className="group relative w-full rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4522A]/60 disabled:cursor-default"
       style={{
         background: "#FFFaf5",
-        border: selected ? "2px solid #C4522A" : "2px solid transparent",
+        border: selected ? `2px solid ${accent}` : "2px solid transparent",
+        opacity: disabled && !selected ? 0.72 : 1,
       }}
     >
-      <div className="aspect-[4/5] w-full overflow-hidden bg-[#EDE4D8]">
+      <StitchBorder
+        active={stitching}
+        color={accent}
+        durationMs={STITCH_DURATION_QUIZ_MS}
+        onComplete={() => onStitchComplete(option.id)}
+      />
+
+      <div className="aspect-[4/5] w-full overflow-hidden rounded-t-[0.9rem] bg-[#EDE4D8]">
         <img
           src={option.imageUrl}
           alt={option.label}

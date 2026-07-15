@@ -60,5 +60,11 @@ export const quizResultRequestSchema = z.object({
     .min(1, "Envie ao menos uma opção selecionada"),
 });
 
+export const quizCompareRequestSchema = z.object({
+  yoursResultId: z.string().uuid("Informe o resultId válido"),
+  friendResultId: z.string().uuid("Informe o resultId da amiga"),
+});
+
 export type QuizQuestionInput = z.infer<typeof quizQuestionSchema>;
 export type QuizResultInput = z.infer<typeof quizResultSchema>;
+export type QuizCompareRequestInput = z.infer<typeof quizCompareRequestSchema>;

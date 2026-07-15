@@ -1,9 +1,11 @@
+import ProgressivePreview from "@/components/QuizCuradoria/ProgressivePreview";
 import QuestionCard from "@/components/QuizCuradoria/QuestionCard";
+import QuizCompareScreen from "@/components/QuizCuradoria/QuizCompareScreen";
 import ResultScreen from "@/components/QuizCuradoria/ResultScreen";
 import { Spinner } from "@/components/ui/spinner";
 import { useQuiz } from "@/hooks/useQuiz";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const REVEAL_LINES = [
   "Lendo suas escolhas…",
@@ -18,10 +20,16 @@ export default function QuizCuradoria() {
     currentQuestion,
     currentIndex,
     selectedOptionId,
+    stitchingOptionId,
     resultPayload,
+    comparePayload,
     error,
     progress,
+    previewChoices,
     selectOption,
+    onStitchComplete,
+    showResult,
+    showCompare,
     restart,
   } = useQuiz();
 
@@ -39,10 +47,21 @@ export default function QuizCuradoria() {
   }, [phase]);
 
   useEffect(() => {
-    if (phase === "result") {
+    if (phase === "result" || phase === "compare") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [phase]);
+
+  const livePreviewChoices = useMemo(() => {
+    if (!selectedOptionId || !currentQuestion) return previewChoices;
+    if (previewChoices.some((c) => c.id === selectedOptionId)) return previewChoices;
+    const opt = currentQuestion.options.find((o) => o.id === selectedOptionId);
+    if (!opt) return previewChoices;
+    return [
+      ...previewChoices,
+      { id: opt.id, imageUrl: opt.imageUrl, accentColor: opt.accentColor },
+    ];
+  }, [previewChoices, selectedOptionId, currentQuestion]);
 
   if (phase === "loading") {
     return (
@@ -70,45 +89,67 @@ export default function QuizCuradoria() {
     );
   }
 
+  if (phase === "compare" && comparePayload) {
+    return (
+      <QuizCompareScreen
+        payload={comparePayload}
+        onContinue={showResult}
+        onRestart={restart}
+      />
+    );
+  }
+
   if (phase === "result" && resultPayload) {
-    return <ResultScreen payload={resultPayload} onRestart={restart} />;
+    return (
+      <ResultScreen
+        payload={resultPayload}
+        onRestart={restart}
+        onShowCompare={comparePayload ? showCompare : undefined}
+      />
+    );
   }
 
   if (phase === "calculating") {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 text-center">
-        <motion.div
-          className="relative flex size-20 items-center justify-center"
-          animate={{ scale: [1, 1.06, 1] }}
-          transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <span
-            className="absolute inset-0 rounded-full opacity-30"
-            style={{
-              background: "radial-gradient(circle, #C4522A 0%, transparent 70%)",
-            }}
-          />
-          <Spinner className="size-9 text-[#C4522A]" />
-        </motion.div>
-        <AnimatePresence mode="wait">
-          <motion.p
-            key={revealLine}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.35 }}
-            className="text-base sm:text-lg"
-            style={{ color: "#5C4A3D", fontFamily: "'Lora', Georgia, serif" }}
+      <div className="relative">
+        <ProgressivePreview
+          choices={livePreviewChoices}
+          totalQuestions={questions.length}
+        />
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 text-center">
+          <motion.div
+            className="relative flex size-20 items-center justify-center"
+            animate={{ scale: [1, 1.06, 1] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
           >
-            {REVEAL_LINES[revealLine]}
-          </motion.p>
-        </AnimatePresence>
-        <p
-          className="text-xs font-semibold uppercase tracking-[0.2em]"
-          style={{ color: "#C4522A", fontFamily: "'Nunito', sans-serif" }}
-        >
-          Recompensa chegando
-        </p>
+            <span
+              className="absolute inset-0 rounded-full opacity-30"
+              style={{
+                background: "radial-gradient(circle, #C4522A 0%, transparent 70%)",
+              }}
+            />
+            <Spinner className="size-9 text-[#C4522A]" />
+          </motion.div>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={revealLine}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.35 }}
+              className="text-base sm:text-lg"
+              style={{ color: "#5C4A3D", fontFamily: "'Lora', Georgia, serif" }}
+            >
+              {REVEAL_LINES[revealLine]}
+            </motion.p>
+          </AnimatePresence>
+          <p
+            className="text-xs font-semibold uppercase tracking-[0.2em]"
+            style={{ color: "#C4522A", fontFamily: "'Nunito', sans-serif" }}
+          >
+            Recompensa chegando
+          </p>
+        </div>
       </div>
     );
   }
@@ -116,9 +157,15 @@ export default function QuizCuradoria() {
   if (!currentQuestion) return null;
 
   const remaining = questions.length - currentIndex;
+  const interactionLocked = !!stitchingOptionId || !!selectedOptionId;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-16 sm:px-6">
+    <div className="relative mx-auto w-full max-w-3xl px-4 pb-16 sm:px-6">
+      <ProgressivePreview
+        choices={livePreviewChoices}
+        totalQuestions={questions.length}
+      />
+
       <header className="mb-10 text-center">
         <p
           className="mb-2 text-xs font-semibold uppercase tracking-[0.2em]"
@@ -188,8 +235,10 @@ export default function QuizCuradoria() {
                 key={option.id}
                 option={option}
                 selected={selectedOptionId === option.id}
-                disabled={!!selectedOptionId}
+                stitching={stitchingOptionId === option.id}
+                disabled={interactionLocked}
                 onSelect={selectOption}
+                onStitchComplete={onStitchComplete}
               />
             ))}
           </div>

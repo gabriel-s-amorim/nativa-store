@@ -8,8 +8,10 @@ import {
   type QuizResultRow,
 } from "@shared/lib/quizMapper";
 import { mapProductRowToProduct, type ProductRow } from "@shared/lib/productMapper";
+import { getCombinationText } from "@shared/const/quizCombinations";
 import type { QuizQuestionInput, QuizResultInput } from "@shared/schemas/quiz";
 import type {
+  QuizComparePayload,
   QuizExportPayload,
   QuizImportError,
   QuizImportReport,
@@ -19,6 +21,8 @@ import type {
   QuizResult,
   QuizUpsertCounts,
 } from "@shared/types/quiz";
+import { QUIZ_RARITY_MIN_COMPLETIONS } from "@shared/types/quiz";
+import { randomUUID } from "node:crypto";
 import { supabase } from "../lib/supabase";
 
 async function listQuestionRows(): Promise<QuizQuestionRow[]> {
@@ -202,13 +206,99 @@ async function loadProductsByIds(ids: number[]) {
   return ids.map((id) => byId.get(id)).filter((product): product is NonNullable<typeof product> => !!product);
 }
 
-export async function computeQuizResult(selectedOptionIds: string[]): Promise<QuizPublicResultPayload> {
-  const [questions, results] = await Promise.all([listQuizQuestions(), listQuizResults()]);
+async function buildPublicPayload(winner: QuizResult): Promise<Omit<QuizPublicResultPayload, "resultId" | "rarityPercent">> {
+  const products = await loadProductsByIds(winner.recommendedProductIds);
+  return {
+    result: {
+      id: winner.id,
+      name: winner.name,
+      description: winner.description,
+      tags: winner.tags,
+    },
+    products,
+  };
+}
 
-  if (results.length === 0) {
-    throw new Error("Nenhum perfil de resultado cadastrado");
+// --- Raridade (cache em memória ~3 min) ---
+
+const RARITY_CACHE_TTL_MS = 3 * 60 * 1000;
+
+interface RaritySnapshot {
+  total: number;
+  counts: Record<string, number>;
+  fetchedAt: number;
+}
+
+let rarityCache: RaritySnapshot | null = null;
+
+async function fetchRaritySnapshot(): Promise<RaritySnapshot> {
+  const now = Date.now();
+  if (rarityCache && now - rarityCache.fetchedAt < RARITY_CACHE_TTL_MS) {
+    return rarityCache;
   }
 
+  const { data, error } = await supabase
+    .from("quiz_completions")
+    .select("result_profile_id");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const id = row.result_profile_id as string;
+    counts[id] = (counts[id] ?? 0) + 1;
+  }
+
+  rarityCache = {
+    total: (data ?? []).length,
+    counts,
+    fetchedAt: now,
+  };
+  return rarityCache;
+}
+
+function rarityPercentFor(profileId: string, snapshot: RaritySnapshot): number | null {
+  if (snapshot.total < QUIZ_RARITY_MIN_COMPLETIONS) return null;
+  const count = snapshot.counts[profileId] ?? 0;
+  return Math.round((count / snapshot.total) * 1000) / 10; // 1 casa decimal
+}
+
+function bumpRarityCache(profileId: string) {
+  if (!rarityCache) return;
+  rarityCache.total += 1;
+  rarityCache.counts[profileId] = (rarityCache.counts[profileId] ?? 0) + 1;
+}
+
+async function recordCompletion(profileId: string): Promise<{ resultId: string; rarityPercent: number | null }> {
+  const resultId = randomUUID();
+
+  const { error } = await supabase.from("quiz_completions").insert({
+    id: resultId,
+    result_profile_id: profileId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  bumpRarityCache(profileId);
+
+  let snapshot: RaritySnapshot;
+  try {
+    snapshot = await fetchRaritySnapshot();
+  } catch {
+    snapshot = rarityCache ?? { total: 1, counts: { [profileId]: 1 }, fetchedAt: Date.now() };
+  }
+
+  return {
+    resultId,
+    rarityPercent: rarityPercentFor(profileId, snapshot),
+  };
+}
+
+function pickWinner(questions: QuizQuestion[], results: QuizResult[], selectedOptionIds: string[]): QuizResult {
   const optionById = new Map(
     questions.flatMap((question) => question.options.map((option) => [option.id, option] as const)),
   );
@@ -240,20 +330,82 @@ export async function computeQuizResult(selectedOptionIds: string[]): Promise<Qu
     }
   }
 
-  // Se tudo zerou, usa o primeiro resultado por id estável
-  const winner =
-    best ??
-    [...results].sort((a, b) => a.id.localeCompare(b.id))[0];
+  return best ?? [...results].sort((a, b) => a.id.localeCompare(b.id))[0];
+}
 
-  const products = await loadProductsByIds(winner.recommendedProductIds);
+export async function computeQuizResult(selectedOptionIds: string[]): Promise<QuizPublicResultPayload> {
+  const [questions, results] = await Promise.all([listQuizQuestions(), listQuizResults()]);
+
+  if (results.length === 0) {
+    throw new Error("Nenhum perfil de resultado cadastrado");
+  }
+
+  const winner = pickWinner(questions, results, selectedOptionIds);
+  const base = await buildPublicPayload(winner);
+  const { resultId, rarityPercent } = await recordCompletion(winner.id);
 
   return {
-    result: {
-      id: winner.id,
-      name: winner.name,
-      description: winner.description,
-      tags: winner.tags,
-    },
-    products,
+    ...base,
+    resultId,
+    rarityPercent,
+  };
+}
+
+export async function getQuizResultBySessionId(resultId: string): Promise<QuizPublicResultPayload> {
+  const { data, error } = await supabase
+    .from("quiz_completions")
+    .select("id, result_profile_id")
+    .eq("id", resultId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Resultado não encontrado");
+  }
+
+  const profileId = data.result_profile_id as string;
+  const results = await listQuizResults();
+  const winner = results.find((r) => r.id === profileId);
+
+  if (!winner) {
+    throw new Error("Perfil de resultado não encontrado");
+  }
+
+  const base = await buildPublicPayload(winner);
+  let rarityPercent: number | null = null;
+  try {
+    const snapshot = await fetchRaritySnapshot();
+    rarityPercent = rarityPercentFor(profileId, snapshot);
+  } catch {
+    rarityPercent = null;
+  }
+
+  return {
+    ...base,
+    resultId: data.id as string,
+    rarityPercent,
+  };
+}
+
+export async function compareQuizResults(
+  yoursResultId: string,
+  friendResultId: string,
+): Promise<QuizComparePayload> {
+  if (yoursResultId === friendResultId) {
+    throw new Error("Os dois resultados precisam ser de pessoas diferentes");
+  }
+
+  const [yours, friend] = await Promise.all([
+    getQuizResultBySessionId(yoursResultId),
+    getQuizResultBySessionId(friendResultId),
+  ]);
+
+  return {
+    yours,
+    friend,
+    combinationText: getCombinationText(yours.result.id, friend.result.id),
   };
 }

@@ -8,15 +8,17 @@ import {
   downloadShareImage,
   shareOrDownloadImage,
 } from "@/components/QuizCuradoria/shareQuizResult";
+import { appPath } from "@/lib/appUrl";
 import type { QuizPublicResultPayload } from "@shared/types/quiz";
 import { AnimatePresence, motion } from "framer-motion";
-import { Copy, Download, Instagram, RefreshCw, Share2, Sparkles } from "lucide-react";
+import { Copy, Download, Instagram, RefreshCw, Share2, Sparkles, Users } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 interface ResultScreenProps {
   payload: QuizPublicResultPayload;
   onRestart: () => void;
+  onShowCompare?: () => void;
 }
 
 const stagger = {
@@ -36,7 +38,7 @@ const fadeUp = {
   },
 };
 
-export default function ResultScreen({ payload, onRestart }: ResultScreenProps) {
+export default function ResultScreen({ payload, onRestart, onShowCompare }: ResultScreenProps) {
   const shareRef = useRef<HTMLDivElement>(null);
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -44,6 +46,7 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
 
   const primaryProduct = payload.products[0] ?? null;
   const filename = `nativa-quiz-${payload.result.id}.png`;
+  const inviteUrl = appPath(`/quiz?convite=${payload.resultId}`);
 
   async function ensureImage(): Promise<Blob | null> {
     if (shareBlob) return shareBlob;
@@ -109,6 +112,30 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
     }
   }
 
+  async function handleInviteFriend() {
+    const text = `Faz o Quiz Nativa e a gente compara nossos estilos! ${inviteUrl}`;
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share({
+          title: "Quiz Nativa — Chama uma amiga",
+          text: "Descobre o estilo dela e compara com o meu!",
+          url: inviteUrl,
+        });
+        toast.success("Convite enviado!");
+        return;
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Link copiado — manda pra amiga!");
+    } catch {
+      toast.message(inviteUrl);
+    }
+  }
+
   return (
     <motion.div
       variants={stagger}
@@ -116,7 +143,6 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
       animate="show"
       className="relative mx-auto w-full max-w-3xl px-4 pb-20 pt-2 sm:px-6"
     >
-      {/* Hero de revelação — um foco só */}
       <motion.section
         variants={fadeUp}
         className="relative mb-12 overflow-hidden rounded-[2rem] px-6 py-12 text-center sm:px-10 sm:py-14"
@@ -155,7 +181,7 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
           initial={{ opacity: 0, scale: 0.88, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ delay: 0.28, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-          className="relative z-[1] mb-5 text-4xl leading-[1.1] sm:text-6xl"
+          className="relative z-[1] mb-3 text-4xl leading-[1.1] sm:text-6xl"
           style={{
             fontFamily: "'Playfair Display', Georgia, serif",
             color: "#3D2B1F",
@@ -164,6 +190,22 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
         >
           {payload.result.name}
         </motion.h1>
+
+        {payload.rarityPercent != null && (
+          <motion.p
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.4 }}
+            className="relative z-[1] mb-5 text-sm"
+            style={{ color: "#8B6F5E", fontFamily: "'Nunito', sans-serif" }}
+          >
+            Esse é o estilo de{" "}
+            <span className="font-semibold" style={{ color: "#C4522A" }}>
+              {payload.rarityPercent}%
+            </span>{" "}
+            de quem já fez o quiz
+          </motion.p>
+        )}
 
         <motion.div
           initial={{ scaleX: 0 }}
@@ -240,6 +282,40 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
           </span>{" "}
           e desafia as amigas a descobrirem o estilo delas.
         </p>
+      </motion.div>
+
+      <motion.div
+        variants={fadeUp}
+        className="mb-4 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:flex-wrap"
+      >
+        <button
+          type="button"
+          onClick={() => void handleInviteFriend()}
+          className="inline-flex items-center justify-center gap-2 rounded-full px-7 py-3.5 text-sm font-bold text-white transition-opacity hover:opacity-90"
+          style={{
+            background: "linear-gradient(135deg, #2D6A4F, #52A87A)",
+            fontFamily: "'Nunito', sans-serif",
+          }}
+        >
+          <Users className="size-4" />
+          Chama uma amiga pra descobrir o estilo dela
+        </button>
+
+        {onShowCompare && (
+          <button
+            type="button"
+            onClick={onShowCompare}
+            className="inline-flex items-center justify-center gap-2 rounded-full border-2 px-7 py-3.5 text-sm font-bold transition-opacity hover:opacity-90"
+            style={{
+              borderColor: "#2D6A4F",
+              color: "#2D6A4F",
+              fontFamily: "'Nunito', sans-serif",
+              background: "transparent",
+            }}
+          >
+            Ver combinação com a amiga
+          </button>
+        )}
       </motion.div>
 
       <motion.div

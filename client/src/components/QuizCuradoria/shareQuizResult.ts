@@ -86,8 +86,17 @@ export function buildQuizShareCaption(profileName: string): string {
 /**
  * Card 1080×1080 pensado para Stories/Feed:
  * revelação do perfil + produto + CTA com link do site.
+ * Sempre renderiza em resolução nativa 1080px (não depende do DPR da tela).
  */
-export async function captureShareCard(element: HTMLElement): Promise<Blob> {
+export interface CaptureShareCardOptions {
+  eyebrow?: string;
+  subtitle?: string;
+}
+
+export async function captureShareCard(
+  element: HTMLElement,
+  options: CaptureShareCardOptions = {},
+): Promise<Blob> {
   const profileName =
     element.querySelector("[data-share-profile]")?.textContent?.trim() ?? "Meu estilo";
   const productName =
@@ -101,15 +110,21 @@ export async function captureShareCard(element: HTMLElement): Promise<Blob> {
   const quizUrl =
     element.getAttribute("data-share-quiz-url")?.trim() || appPath("/quiz");
   const quizUrlDisplay = displayQuizUrl(quizUrl);
+  const eyebrow = options.eyebrow?.trim() || "EU SOU";
+  const subtitle = options.subtitle?.trim() || "";
 
   const size = 1080;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { alpha: false });
   if (!ctx) {
     throw new Error("Canvas não disponível neste navegador");
   }
+
+  // Qualidade máxima ao escalar fotos para o card 1080²
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
   // Fundo editorial
   const bg = ctx.createLinearGradient(0, 0, size, size);
@@ -176,16 +191,28 @@ export async function captureShareCard(element: HTMLElement): Promise<Blob> {
   // Eyebrow
   ctx.fillStyle = "#8B6F5E";
   ctx.font = "600 20px Nunito, sans-serif";
-  ctx.fillText("EU SOU", size / 2, 268);
+  ctx.fillText(eyebrow.toUpperCase(), size / 2, 268);
 
   // Nome do perfil (destaque)
   ctx.fillStyle = "#3D2B1F";
-  ctx.font = "700 68px 'Playfair Display', Georgia, serif";
+  ctx.font = subtitle ? "700 52px 'Playfair Display', Georgia, serif" : "700 68px 'Playfair Display', Georgia, serif";
   const nameLines = wrapText(ctx, profileName, 860);
   let nameY = 340;
   for (const line of nameLines.slice(0, 2)) {
     ctx.fillText(line, size / 2, nameY);
-    nameY += 78;
+    nameY += subtitle ? 60 : 78;
+  }
+
+  // Subtítulo da combinação (opcional)
+  if (subtitle) {
+    ctx.fillStyle = "#5C4A3D";
+    ctx.font = "500 22px Lora, Georgia, serif";
+    const subLines = wrapText(ctx, subtitle, 820);
+    nameY += 8;
+    for (const line of subLines.slice(0, 3)) {
+      ctx.fillText(line, size / 2, nameY);
+      nameY += 28;
+    }
   }
 
   // Linha decorativa
@@ -201,8 +228,8 @@ export async function captureShareCard(element: HTMLElement): Promise<Blob> {
   ctx.fillStyle = "#C4522A";
   ctx.fill();
 
-  // Produto
-  const productBox = 390;
+  // Produto — caixa grande o bastante para ficar nítida em 1080
+  const productBox = subtitle ? 340 : 390;
   const productX = (size - productBox) / 2;
   const productY = lineY + 28;
 
@@ -231,6 +258,7 @@ export async function captureShareCard(element: HTMLElement): Promise<Blob> {
       ctx.save();
       roundRect(ctx, productX, productY, productBox, productBox, 26);
       ctx.clip();
+      // Cover com suavização alta — mantém nitidez em 1080×1080
       const scale = Math.max(productBox / product.width, productBox / product.height);
       const w = product.width * scale;
       const h = product.height * scale;
@@ -281,6 +309,11 @@ export async function captureShareCard(element: HTMLElement): Promise<Blob> {
       (blob) => {
         if (!blob) {
           reject(new Error("Não foi possível gerar a imagem"));
+          return;
+        }
+        // Garante dimensões exatas no blob PNG (canvas já é 1080×1080)
+        if (canvas.width !== 1080 || canvas.height !== 1080) {
+          reject(new Error("Resolução da imagem inválida"));
           return;
         }
         resolve(blob);

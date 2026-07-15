@@ -1,3 +1,4 @@
+import { accentColorForTags } from "../const/quizTagColors";
 import type {
   QuizOption,
   QuizPublicOption,
@@ -129,6 +130,7 @@ export function toPublicQuestion(question: QuizQuestion): QuizPublicQuestion {
         id: option.id,
         label: option.label,
         imageUrl: option.imageUrl,
+        accentColor: accentColorForTags(option.tags),
       }),
     ),
   };

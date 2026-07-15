@@ -12,11 +12,12 @@ export interface QuizOption {
   tags: QuizTagWeight[];
 }
 
-/** Opção pública (sem tags/pesos). */
+/** Opção pública (sem tags/pesos; accentColor derivado da tag principal). */
 export interface QuizPublicOption {
   id: string;
   label: string;
   imageUrl: string;
+  accentColor: string;
 }
 
 export interface QuizQuestion {
@@ -41,9 +42,25 @@ export interface QuizResult {
   recommendedProductIds: number[];
 }
 
+/** Mínimo de conclusões antes de exibir raridade. */
+export const QUIZ_RARITY_MIN_COMPLETIONS = 20;
+
 export interface QuizPublicResultPayload {
   result: Omit<QuizResult, "recommendedProductIds">;
   products: Product[];
+  /** Id único desta sessão de resultado (para convite / comparação). */
+  resultId: string;
+  /**
+   * % do total de quizzes que cairam neste perfil.
+   * null quando ainda há poucos dados (< QUIZ_RARITY_MIN_COMPLETIONS).
+   */
+  rarityPercent: number | null;
+}
+
+export interface QuizComparePayload {
+  yours: QuizPublicResultPayload;
+  friend: QuizPublicResultPayload;
+  combinationText: string;
 }
 
 export interface QuizImportError {

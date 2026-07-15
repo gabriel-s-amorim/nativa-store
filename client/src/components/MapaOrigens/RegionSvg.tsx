@@ -5,10 +5,15 @@
  * As 5 regiões se tocam exatamente nas bordas reais (mesma fonte geográfica).
  *
  * Ao selecionar uma região, o contorno dela é "bordado" em tempo real
- * (stroke-dasharray/dashoffset + uma agulha animada via getPointAtLength)
- * antes do painel de história ser revelado pelo componente pai.
+ * (via useStitchAnimation compartilhado com o quiz) antes do painel de
+ * história ser revelado pelo componente pai.
  */
 
+import {
+  STITCH_DURATION_MAP_MS,
+  prefersReducedMotion,
+  useStitchAnimation,
+} from "@/hooks/useStitchAnimation";
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { BRAZIL_MAP_VIEWBOX, BRAZIL_REGION_PATHS } from "./brazilRegionsPaths";
 
@@ -42,15 +47,6 @@ export const REGION_COLORS: Record<RegionId, string> = REGION_SHAPES.reduce(
 
 const BORDER_COLOR = "#3D2B1F";
 
-/** Duração do "bordado" do contorno — dentro da faixa 1.5-2s pedida. */
-const EMBROIDERY_DURATION_MS = 1800;
-const EMBROIDERY_EASING = "cubic-bezier(0.65, 0, 0.35, 1)";
-
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined" || !window.matchMedia) return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 interface RegionSvgProps {
   selectedId: RegionId | null;
   onSelect: (id: RegionId) => void;
@@ -63,73 +59,29 @@ export default function RegionSvg({ selectedId, onSelect, getRegionName }: Regio
 
   const overlayPathRef = useRef<SVGPathElement | null>(null);
   const needleRef = useRef<SVGCircleElement | null>(null);
-  const rafIdRef = useRef<number | null>(null);
-  const startTimeRef = useRef(0);
 
   const onSelectRef = useRef(onSelect);
   useLayoutEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
-  // Anima o "bordado" do contorno da região em `drawingId`. Ao terminar,
-  // revela a seleção real (onSelect) — é isso que atrasa o painel de história.
+  const drawingIdRef = useRef(drawingId);
   useLayoutEffect(() => {
-    if (!drawingId) return;
-    const activeId: RegionId = drawingId;
-
-    const path = overlayPathRef.current;
-    const needle = needleRef.current;
-    if (!path) return;
-    const pathEl: SVGPathElement = path;
-
-    const totalLength = pathEl.getTotalLength();
-
-    pathEl.style.transition = "none";
-    pathEl.style.strokeDasharray = `${totalLength}`;
-    pathEl.style.strokeDashoffset = `${totalLength}`;
-
-    if (needle) {
-      const startPoint = pathEl.getPointAtLength(0);
-      needle.style.transition = "none";
-      needle.style.transform = `translate(${startPoint.x}px, ${startPoint.y}px)`;
-      needle.style.opacity = "1";
-    }
-
-    function tick(now: number) {
-      const elapsed = now - startTimeRef.current;
-      const progress = Math.min(elapsed / EMBROIDERY_DURATION_MS, 1);
-      const point = pathEl.getPointAtLength(progress * totalLength);
-      if (needle) {
-        needle.style.transform = `translate(${point.x}px, ${point.y}px)`;
-      }
-
-      if (progress < 1) {
-        rafIdRef.current = requestAnimationFrame(tick);
-      } else {
-        rafIdRef.current = null;
-        if (needle) needle.style.opacity = "0";
-        setDrawingId(null);
-        onSelectRef.current(activeId);
-      }
-    }
-
-    // Um frame de intervalo para o navegador registrar o estado "traço
-    // cheio invisível" antes de ligar a transição — só assim o CSS anima
-    // do total até zero em vez de simplesmente "pular" para o final.
-    rafIdRef.current = requestAnimationFrame(() => {
-      pathEl.style.transition = `stroke-dashoffset ${EMBROIDERY_DURATION_MS}ms ${EMBROIDERY_EASING}`;
-      pathEl.style.strokeDashoffset = "0";
-      startTimeRef.current = performance.now();
-      rafIdRef.current = requestAnimationFrame(tick);
-    });
-
-    return () => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-    };
+    drawingIdRef.current = drawingId;
   }, [drawingId]);
+
+  useStitchAnimation({
+    active: drawingId !== null,
+    pathRef: overlayPathRef,
+    needleRef,
+    durationMs: STITCH_DURATION_MAP_MS,
+    token: drawingId,
+    onComplete: () => {
+      const activeId = drawingIdRef.current;
+      setDrawingId(null);
+      if (activeId) onSelectRef.current(activeId);
+    },
+  });
 
   function handleActivate(id: RegionId) {
     if (id === drawingId) return;
@@ -151,9 +103,9 @@ export default function RegionSvg({ selectedId, onSelect, getRegionName }: Regio
     }
   }
 
-  // Região em foco visual: a que está sendo bordada agora tem prioridade
-  // sobre a já revelada, para que o destaque apareça desde o clique.
   const focusId = drawingId ?? selectedId;
+  const drawingColor =
+    REGION_SHAPES.find((shape) => shape.id === drawingId)?.color ?? BORDER_COLOR;
 
   return (
     <svg
@@ -197,7 +149,7 @@ export default function RegionSvg({ selectedId, onSelect, getRegionName }: Regio
                   ref={overlayPathRef}
                   d={path}
                   fill="none"
-                  stroke={shape.color}
+                  stroke={drawingColor}
                   strokeWidth={4}
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -209,7 +161,7 @@ export default function RegionSvg({ selectedId, onSelect, getRegionName }: Regio
                   cx={0}
                   cy={0}
                   r={5}
-                  fill={shape.color}
+                  fill={drawingColor}
                   stroke="#FDF9F2"
                   strokeWidth={1.75}
                   pointerEvents="none"

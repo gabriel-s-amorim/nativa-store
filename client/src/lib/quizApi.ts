@@ -1,4 +1,8 @@
-import type { QuizPublicQuestion, QuizPublicResultPayload } from "@shared/types/quiz";
+import type {
+  QuizComparePayload,
+  QuizPublicQuestion,
+  QuizPublicResultPayload,
+} from "@shared/types/quiz";
 
 async function parseJsonSafe(response: Response): Promise<any> {
   try {
@@ -34,4 +38,33 @@ export async function submitQuizResult(
   }
 
   return body as QuizPublicResultPayload;
+}
+
+export async function fetchQuizResultById(resultId: string): Promise<QuizPublicResultPayload> {
+  const response = await fetch(`/api/quiz/result/${encodeURIComponent(resultId)}`);
+  const body = await parseJsonSafe(response);
+
+  if (!response.ok) {
+    throw new Error(body?.error ?? "Não foi possível carregar o resultado");
+  }
+
+  return body as QuizPublicResultPayload;
+}
+
+export async function compareQuizResults(
+  yoursResultId: string,
+  friendResultId: string,
+): Promise<QuizComparePayload> {
+  const response = await fetch("/api/quiz/compare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ yoursResultId, friendResultId }),
+  });
+  const body = await parseJsonSafe(response);
+
+  if (!response.ok) {
+    throw new Error(body?.error ?? "Não foi possível comparar os resultados");
+  }
+
+  return body as QuizComparePayload;
 }
