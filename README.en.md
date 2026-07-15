@@ -122,7 +122,7 @@ nativa-store/
 ├── client/          # React — UI and fetch to /api
 ├── server/          # Express — business rules, auth, Supabase
 ├── shared/          # Types, Zod schemas, mappers, constants
-├── supabase/        # DDL (products, cart, orders, customers, analytics…)
+├── supabase/        # DDL (products, cart, orders, customers, payments, shipping, coupons, email, quiz, notifications, analytics…)
 ├── docs/            # Operational guides (e.g. bulk import)
 └── api/             # Serverless bundle for Vercel
 ```
@@ -263,9 +263,12 @@ Additional engineering notes: admin loaded via **lazy route**, seed/migration/st
 pnpm install
 cp .env.example .env
 # Fill in SUPABASE_*, ADMIN_PASSWORD, and ADMIN_JWT_SECRET
+# Additional vars apply (e.g. MERCADO_PAGO_ENCRYPTION_KEY, BREVO_ENCRYPTION_KEY);
+# Melhor Envio: credentials in admin (/admin/integracoes) — see .env.example (APP_URL, etc.)
 ```
 
-Run the SQLs in `supabase/` in the Supabase SQL Editor (order: `setup` → `customers` → `cart` → `orders` → addresses → notifications → analytics).
+Run the SQLs in `supabase/` in the Supabase SQL Editor, in this order:
+`setup.sql` → `customers.sql` → `cart.sql` → `orders.sql` → `customer_addresses.sql` → `admin_notifications.sql` → `store_analytics.sql` → `banners.sql` → `regions.sql` → `melhor_envio.sql` → `mercado_pago.sql` → `melhor_envio_checkout.sql` → `coupons.sql` → `coupons_map_reward.sql` → `brevo.sql` → `brevo_merchant_notify.sql` → `brevo_store_templates.sql` → `order_fulfillment.sql` → `quiz.sql` → `quiz_completions.sql`.
 
 ```bash
 pnpm setup:storage   # image bucket (once)
@@ -320,7 +323,7 @@ Variable details and pitfalls: see [`.env.example`](.env.example).
 - [ ] Store settings in the admin
 - [ ] Advanced catalog search and filters
 - [ ] Real customer reviews
-- [ ] Migrate remaining images from the Nuvemshop CDN → Supabase Storage
+- [ ] Finish migrating legacy images from the Nuvemshop CDN to Supabase Storage
 
 ---
 

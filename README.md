@@ -122,7 +122,7 @@ nativa-store/
 ├── client/          # React — UI e fetch para /api
 ├── server/          # Express — regras de negócio, auth, Supabase
 ├── shared/          # Tipos, schemas Zod, mappers, constantes
-├── supabase/        # DDL (products, cart, orders, customers, analytics…)
+├── supabase/        # DDL (produtos, carrinho, pedidos, clientes, pagamento, frete, cupons, e-mail, quiz, notificações, analytics…)
 ├── docs/            # Guias operacionais (ex.: importação em massa)
 └── api/             # Bundle serverless para a Vercel
 ```
@@ -263,9 +263,12 @@ Notas de engenharia adicionais: admin carregado via **lazy route**, scripts de s
 pnpm install
 cp .env.example .env
 # Preencha SUPABASE_*, ADMIN_PASSWORD e ADMIN_JWT_SECRET
+# Há variáveis adicionais (ex.: MERCADO_PAGO_ENCRYPTION_KEY, BREVO_ENCRYPTION_KEY);
+# Melhor Envio: credenciais no admin (/admin/integracoes) — ver .env.example (APP_URL etc.)
 ```
 
-Execute os SQLs em `supabase/` no SQL Editor do Supabase (na ordem: `setup` → `customers` → `cart` → `orders` → endereços → notificações → analytics).
+Execute os SQLs em `supabase/` no SQL Editor do Supabase, nesta ordem:
+`setup.sql` → `customers.sql` → `cart.sql` → `orders.sql` → `customer_addresses.sql` → `admin_notifications.sql` → `store_analytics.sql` → `banners.sql` → `regions.sql` → `melhor_envio.sql` → `mercado_pago.sql` → `melhor_envio_checkout.sql` → `coupons.sql` → `coupons_map_reward.sql` → `brevo.sql` → `brevo_merchant_notify.sql` → `brevo_store_templates.sql` → `order_fulfillment.sql` → `quiz.sql` → `quiz_completions.sql`.
 
 ```bash
 pnpm setup:storage   # bucket de imagens (1x)
@@ -320,7 +323,7 @@ Detalhes de variáveis e armadilhas: ver [`.env.example`](.env.example).
 - [ ] Configurações da loja no admin
 - [ ] Busca e filtros avançados no catálogo
 - [ ] Avaliações reais de clientes
-- [ ] Migrar imagens restantes do CDN Nuvemshop → Supabase Storage
+- [ ] Finalizar migração de imagens legadas do CDN Nuvemshop para Supabase Storage
 
 ---
 
