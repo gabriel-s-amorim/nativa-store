@@ -128,3 +128,6 @@ AGENTS.md
 
 # Guia interno Brevo (produção — não publicar)
 docs/brevo-producao.md
+
+# Conteúdo editorial do quiz (importação local)
+quiz-curadoria.json

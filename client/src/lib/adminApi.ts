@@ -83,7 +83,7 @@ export function adminMe() {
 
 export async function uploadProductImage(
   file: File,
-  folder: "products" | "banners" = "products"
+  folder: "products" | "banners" | "quiz" = "products"
 ): Promise<{ url: string }> {
   // GIF e arquivos maiores: upload direto ao Supabase (Vercel limita ~4,5MB no body da function).
   const mustUseDirectUpload =
@@ -897,6 +897,20 @@ export function importQuiz(payload: QuizExportPayload) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function updateQuizOptionImage(
+  questionId: string,
+  optionId: string,
+  imageUrl: string,
+) {
+  return request<QuizQuestion>(
+    `/api/admin/quiz/questions/${encodeURIComponent(questionId)}/options/${encodeURIComponent(optionId)}/image`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ imageUrl }),
+    },
+  );
 }
 
 export async function fetchBrevoCampaignMetrics(campaignId: string) {

@@ -6,9 +6,26 @@ import {
   type QuizResultInput,
 } from "@shared/schemas/quiz";
 import type { QuizImportError } from "@shared/types/quiz";
+import { z } from "zod";
 import { Router } from "express";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { exportQuiz, importQuiz, listQuizQuestions, listQuizResults } from "../services/quiz";
+import {
+  exportQuiz,
+  importQuiz,
+  listQuizQuestions,
+  listQuizResults,
+  updateQuizOptionImage,
+} from "../services/quiz";
+
+const optionImageSchema = z.object({
+  imageUrl: z
+    .string()
+    .min(1)
+    .refine(
+      (value) => value.startsWith("/") || /^https?:\/\//i.test(value),
+      "URL de imagem inválida",
+    ),
+});
 
 const router = Router();
 
@@ -22,6 +39,32 @@ router.get("/", requireAdmin, async (_req, res) => {
     });
   }
 });
+
+router.patch(
+  "/questions/:questionId/options/:optionId/image",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const parsed = optionImageSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });
+        return;
+      }
+
+      const question = await updateQuizOptionImage(
+        req.params.questionId,
+        req.params.optionId,
+        parsed.data.imageUrl,
+      );
+      res.json(question);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao atualizar imagem da opção";
+      const status = message.includes("não encontrada") ? 404 : 500;
+      res.status(status).json({ error: message });
+    }
+  },
+);
 
 router.get("/export", requireAdmin, async (_req, res) => {
   try {

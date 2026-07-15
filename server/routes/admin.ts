@@ -111,7 +111,8 @@ router.post(
 
       const folderRaw =
         typeof req.body?.folder === "string" ? req.body.folder : "products";
-      const folder = folderRaw === "banners" ? "banners" : "products";
+      const folder =
+        folderRaw === "banners" ? "banners" : folderRaw === "quiz" ? "quiz" : "products";
       const url = await uploadProductImage(req.file, folder);
       res.json({ url });
     } catch (error) {
@@ -126,7 +127,8 @@ router.post(
 router.post("/uploads/sign", requireAdmin, async (req, res) => {
   try {
     const folderRaw = typeof req.body?.folder === "string" ? req.body.folder : "products";
-    const folder = folderRaw === "banners" ? "banners" : "products";
+    const folder =
+      folderRaw === "banners" ? "banners" : folderRaw === "quiz" ? "quiz" : "products";
     const contentType =
       typeof req.body?.contentType === "string" ? req.body.contentType : "";
 

@@ -11,10 +11,13 @@ export const MAX_STORAGE_FILE_BYTES = 15 * 1024 * 1024;
 /** Qualidade WebP (0–100). Bom equilíbrio tamanho × nitidez para e-commerce. */
 const WEBP_QUALITY = 82;
 
+export type UploadFolder = "products" | "banners" | "quiz";
+
 /** Lado maior máximo em px — evita uploads gigantes na loja. */
-const MAX_DIMENSION_BY_FOLDER: Record<"products" | "banners", number> = {
+const MAX_DIMENSION_BY_FOLDER: Record<UploadFolder, number> = {
   products: 1600,
   banners: 2400,
+  quiz: 1400,
 };
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -31,7 +34,7 @@ const EXT_BY_MIME: Record<string, string> = {
  */
 async function toOptimizedWebp(
   buffer: Buffer,
-  folder: "products" | "banners",
+  folder: UploadFolder,
 ): Promise<Buffer> {
   const maxSide = MAX_DIMENSION_BY_FOLDER[folder];
 
@@ -57,7 +60,7 @@ export async function uploadProductImage(
     mimetype: string;
     originalname: string;
   },
-  folder: "products" | "banners" = "products",
+  folder: UploadFolder = "products",
 ): Promise<string> {
   // GIF: envia o arquivo original para preservar animação (sharp → WebP perde frames).
   if (isGif(file.mimetype)) {
@@ -108,7 +111,7 @@ export async function uploadProductImage(
  * contornando o limite de payload da function na Vercel (~4,5MB).
  */
 export async function createSignedImageUpload(input: {
-  folder: "products" | "banners";
+  folder: UploadFolder;
   contentType: string;
 }): Promise<{ path: string; token: string; signedUrl: string; publicUrl: string }> {
   const contentType = input.contentType.toLowerCase().trim();

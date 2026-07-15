@@ -16,19 +16,22 @@ import {
   exportQuiz,
   fetchAdminQuiz,
   importQuiz,
+  updateQuizOptionImage,
+  uploadProductImage,
 } from "@/lib/adminApi";
 import type { QuizExportPayload, QuizImportReport, QuizQuestion, QuizResult } from "@shared/types/quiz";
-import { Download, RefreshCcw, Sparkles, Upload } from "lucide-react";
+import { Download, ImagePlus, RefreshCcw, Sparkles, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 export default function AdminQuiz() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const jsonInputRef = useRef<HTMLInputElement>(null);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [lastReport, setLastReport] = useState<QuizImportReport | null>(null);
 
   const loadQuiz = useCallback(async () => {
@@ -48,7 +51,7 @@ export default function AdminQuiz() {
     void loadQuiz();
   }, [loadQuiz]);
 
-  async function handleFile(file: File) {
+  async function handleJsonFile(file: File) {
     setIsImporting(true);
     setLastReport(null);
 
@@ -99,7 +102,7 @@ export default function AdminQuiz() {
       toast.error(error instanceof AdminApiError ? error.message : "Erro ao importar quiz");
     } finally {
       setIsImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (jsonInputRef.current) jsonInputRef.current.value = "";
     }
   }
 
@@ -122,6 +125,25 @@ export default function AdminQuiz() {
     }
   }
 
+  async function handleOptionImageUpload(
+    questionId: string,
+    optionId: string,
+    file: File,
+  ) {
+    const key = `${questionId}:${optionId}`;
+    setUploadingKey(key);
+    try {
+      const { url } = await uploadProductImage(file, "quiz");
+      const updated = await updateQuizOptionImage(questionId, optionId, url);
+      setQuestions((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+      toast.success("Imagem da opção atualizada");
+    } catch (error) {
+      toast.error(error instanceof AdminApiError ? error.message : "Erro ao enviar imagem");
+    } finally {
+      setUploadingKey(null);
+    }
+  }
+
   return (
     <AdminLayout
       title="Quiz de Curadoria"
@@ -137,20 +159,20 @@ export default function AdminQuiz() {
           </Button>
           <Button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => jsonInputRef.current?.click()}
             disabled={isImporting}
           >
             <Upload className="size-4" />
             {isImporting ? "Importando…" : "Importar JSON"}
           </Button>
           <input
-            ref={fileInputRef}
+            ref={jsonInputRef}
             type="file"
             accept="application/json,.json"
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file) void handleFile(file);
+              if (file) void handleJsonFile(file);
             }}
           />
         </div>
@@ -164,8 +186,8 @@ export default function AdminQuiz() {
               Importação em massa
             </CardTitle>
             <CardDescription>
-              Envie um arquivo .json com arrays <code>questions</code> e <code>results</code>. Itens
-              inválidos são reportados e pulados; o upsert usa o campo <code>id</code>.
+              Envie um arquivo .json com arrays <code>questions</code> e <code>results</code>. Depois,
+              troque as imagens das opções abaixo pelo upload — elas vão para o Storage (pasta quiz).
             </CardDescription>
           </CardHeader>
           {lastReport && (
@@ -218,33 +240,84 @@ export default function AdminQuiz() {
           <>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Perguntas ({questions.length})</CardTitle>
-                <CardDescription>Somente leitura — edite via JSON.</CardDescription>
+                <CardTitle className="text-base">Perguntas e imagens ({questions.length})</CardTitle>
+                <CardDescription>
+                  Clique em “Trocar imagem” em cada opção. JPG, PNG, WEBP ou GIF.
+                </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-8">
                 {questions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nenhuma pergunta cadastrada.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Nenhuma pergunta cadastrada. Importe o JSON primeiro.
+                  </p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Ordem</TableHead>
-                        <TableHead>Id</TableHead>
-                        <TableHead>Pergunta</TableHead>
-                        <TableHead className="text-right">Opções</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {questions.map((question) => (
-                        <TableRow key={question.id}>
-                          <TableCell>{question.order}</TableCell>
-                          <TableCell className="font-mono text-xs">{question.id}</TableCell>
-                          <TableCell>{question.text}</TableCell>
-                          <TableCell className="text-right">{question.options.length}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  questions.map((question) => (
+                    <div key={question.id} className="space-y-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          #{question.order} · {question.id}
+                        </p>
+                        <h3 className="text-sm font-semibold">{question.text}</h3>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {question.options.map((option) => {
+                          const key = `${question.id}:${option.id}`;
+                          const isUploading = uploadingKey === key;
+                          return (
+                            <div
+                              key={option.id}
+                              className="overflow-hidden rounded-lg border bg-card"
+                            >
+                              <div className="aspect-[4/5] bg-muted">
+                                {option.imageUrl ? (
+                                  <img
+                                    src={option.imageUrl}
+                                    alt={option.label}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                                    Sem imagem
+                                  </div>
+                                )}
+                              </div>
+                              <div className="space-y-2 p-3">
+                                <p className="text-sm font-medium leading-snug">{option.label}</p>
+                                <p className="truncate font-mono text-[10px] text-muted-foreground">
+                                  {option.id}
+                                </p>
+                                <label className="block">
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp,image/gif"
+                                    className="hidden"
+                                    disabled={!!uploadingKey}
+                                    onChange={(event) => {
+                                      const file = event.target.files?.[0];
+                                      if (file) {
+                                        void handleOptionImageUpload(question.id, option.id, file);
+                                      }
+                                      event.target.value = "";
+                                    }}
+                                  />
+                                  <span
+                                    className={`inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-xs font-semibold ${
+                                      isUploading || uploadingKey
+                                        ? "pointer-events-none opacity-50"
+                                        : "hover:bg-muted"
+                                    }`}
+                                  >
+                                    <ImagePlus className="size-3.5" />
+                                    {isUploading ? "Enviando…" : "Trocar imagem"}
+                                  </span>
+                                </label>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
                 )}
               </CardContent>
             </Card>

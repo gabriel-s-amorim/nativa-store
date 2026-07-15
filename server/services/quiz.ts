@@ -48,6 +48,57 @@ export async function listQuizQuestions(): Promise<QuizQuestion[]> {
   return (await listQuestionRows()).map(mapQuizQuestionRow);
 }
 
+export async function updateQuizOptionImage(
+  questionId: string,
+  optionId: string,
+  imageUrl: string,
+): Promise<QuizQuestion> {
+  const { data, error } = await supabase
+    .from("quiz_questions")
+    .select("*")
+    .eq("id", questionId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Pergunta não encontrada");
+  }
+
+  const question = mapQuizQuestionRow(data as QuizQuestionRow);
+  const optionIndex = question.options.findIndex((option) => option.id === optionId);
+
+  if (optionIndex < 0) {
+    throw new Error("Opção não encontrada");
+  }
+
+  const nextOptions = question.options.map((option, index) =>
+    index === optionIndex ? { ...option, imageUrl } : option,
+  );
+
+  const row = mapQuestionToRow({
+    id: question.id,
+    order: question.order,
+    text: question.text,
+    options: nextOptions,
+  });
+
+  const { data: updated, error: updateError } = await supabase
+    .from("quiz_questions")
+    .update(row)
+    .eq("id", questionId)
+    .select("*")
+    .single();
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  return mapQuizQuestionRow(updated as QuizQuestionRow);
+}
+
 export async function listQuizResults(): Promise<QuizResult[]> {
   return (await listResultRows()).map(mapQuizResultRow);
 }
