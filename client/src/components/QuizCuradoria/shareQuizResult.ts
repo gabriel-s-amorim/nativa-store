@@ -1,3 +1,6 @@
+import { SITE_NAME, SITE_TWITTER_HANDLE } from "@shared/const/site";
+import { appPath } from "@/lib/appUrl";
+
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -57,20 +60,47 @@ function roundRect(
   ctx.closePath();
 }
 
+function displayQuizUrl(fullUrl: string): string {
+  try {
+    const parsed = new URL(fullUrl);
+    return `${parsed.host}${parsed.pathname}`.replace(/\/$/, "");
+  } catch {
+    return fullUrl.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+  }
+}
+
+/** Legenda pronta para colar no Instagram. */
+export function buildQuizShareCaption(profileName: string): string {
+  const quizUrl = appPath("/quiz");
+  const handle = SITE_TWITTER_HANDLE.replace(/^@/, "");
+  return [
+    `Meu resultado no Quiz Nativa: ${profileName}`,
+    "",
+    "Qual é o seu? Faz o quiz e marca a gente nos Stories ✨",
+    quizUrl,
+    "",
+    `#NativaStore #QuizDeEstilo #${handle}`,
+  ].join("\n");
+}
+
 /**
- * Gera o card 1080×1080 via Canvas 2D (sem html2canvas).
- * Evita o erro de oklch do Tailwind CSS v4.
+ * Card 1080×1080 pensado para Stories/Feed:
+ * revelação do perfil + produto + CTA com link do site.
  */
 export async function captureShareCard(element: HTMLElement): Promise<Blob> {
   const profileName =
     element.querySelector("[data-share-profile]")?.textContent?.trim() ?? "Meu estilo";
   const productName =
     element.querySelector("[data-share-product-name]")?.textContent?.trim() ?? "";
-  const logoSrc = element.querySelector<HTMLImageElement>("[data-share-logo]")?.currentSrc
-    || element.querySelector<HTMLImageElement>("[data-share-logo]")?.src;
+  const logoSrc =
+    element.querySelector<HTMLImageElement>("[data-share-logo]")?.currentSrc ||
+    element.querySelector<HTMLImageElement>("[data-share-logo]")?.src;
   const productSrc =
-    element.querySelector<HTMLImageElement>("[data-share-product-image]")?.currentSrc
-    || element.querySelector<HTMLImageElement>("[data-share-product-image]")?.src;
+    element.querySelector<HTMLImageElement>("[data-share-product-image]")?.currentSrc ||
+    element.querySelector<HTMLImageElement>("[data-share-product-image]")?.src;
+  const quizUrl =
+    element.getAttribute("data-share-quiz-url")?.trim() || appPath("/quiz");
+  const quizUrlDisplay = displayQuizUrl(quizUrl);
 
   const size = 1080;
   const canvas = document.createElement("canvas");
@@ -81,70 +111,125 @@ export async function captureShareCard(element: HTMLElement): Promise<Blob> {
     throw new Error("Canvas não disponível neste navegador");
   }
 
-  const gradient = ctx.createLinearGradient(0, 0, size * 0.2, size);
-  gradient.addColorStop(0, "#F5F0E8");
-  gradient.addColorStop(0.45, "#EDE4D8");
-  gradient.addColorStop(1, "#F8E8DC");
-  ctx.fillStyle = gradient;
+  // Fundo editorial
+  const bg = ctx.createLinearGradient(0, 0, size, size);
+  bg.addColorStop(0, "#FBF6EE");
+  bg.addColorStop(0.55, "#F3E8D8");
+  bg.addColorStop(1, "#E8D5C4");
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, size, size);
 
-  const blobA = ctx.createRadialGradient(216, 324, 0, 216, 324, 360);
-  blobA.addColorStop(0, "rgba(196,82,42,0.12)");
-  blobA.addColorStop(1, "rgba(196,82,42,0)");
-  ctx.fillStyle = blobA;
+  // Manchas de cor
+  const glow1 = ctx.createRadialGradient(180, 200, 0, 180, 200, 420);
+  glow1.addColorStop(0, "rgba(196,82,42,0.18)");
+  glow1.addColorStop(1, "rgba(196,82,42,0)");
+  ctx.fillStyle = glow1;
   ctx.fillRect(0, 0, size, size);
 
-  const blobB = ctx.createRadialGradient(864, 756, 0, 864, 756, 400);
-  blobB.addColorStop(0, "rgba(45,106,79,0.10)");
-  blobB.addColorStop(1, "rgba(45,106,79,0)");
-  ctx.fillStyle = blobB;
+  const glow2 = ctx.createRadialGradient(920, 880, 0, 920, 880, 480);
+  glow2.addColorStop(0, "rgba(45,106,79,0.14)");
+  glow2.addColorStop(1, "rgba(45,106,79,0)");
+  ctx.fillStyle = glow2;
   ctx.fillRect(0, 0, size, size);
+
+  // Moldura interna
+  ctx.strokeStyle = "rgba(196,82,42,0.35)";
+  ctx.lineWidth = 3;
+  roundRect(ctx, 36, 36, size - 72, size - 72, 28);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(61,43,31,0.08)";
+  ctx.lineWidth = 1;
+  roundRect(ctx, 48, 48, size - 96, size - 96, 22);
+  ctx.stroke();
 
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
 
+  // Logo
   if (logoSrc) {
     try {
       const logo = await loadImage(logoSrc);
-      const logoW = 220;
-      const logoH = Math.max(40, (logo.height / Math.max(logo.width, 1)) * logoW);
-      ctx.drawImage(logo, (size - logoW) / 2, 72, logoW, logoH);
+      const logoW = 200;
+      const logoH = Math.max(36, (logo.height / Math.max(logo.width, 1)) * logoW);
+      ctx.drawImage(logo, (size - logoW) / 2, 78, logoW, logoH);
     } catch {
-      // logo opcional
+      // fallback tipográfico
+      ctx.fillStyle = "#C4522A";
+      ctx.font = "700 36px 'Playfair Display', Georgia, serif";
+      ctx.fillText(SITE_NAME, size / 2, 120);
     }
   }
 
-  ctx.fillStyle = "#8B6F5E";
-  ctx.font = "600 22px Nunito, sans-serif";
-  ctx.fillText("MEU ESTILO", size / 2, 220);
+  // Chip "Quiz de Curadoria"
+  const chipLabel = "QUIZ DE CURADORIA";
+  ctx.font = "700 16px Nunito, sans-serif";
+  const chipW = ctx.measureText(chipLabel).width + 40;
+  const chipX = (size - chipW) / 2;
+  const chipY = 188;
+  roundRect(ctx, chipX, chipY, chipW, 36, 18);
+  ctx.fillStyle = "rgba(196,82,42,0.12)";
+  ctx.fill();
+  ctx.fillStyle = "#C4522A";
+  ctx.fillText(chipLabel, size / 2, chipY + 24);
 
+  // Eyebrow
+  ctx.fillStyle = "#8B6F5E";
+  ctx.font = "600 20px Nunito, sans-serif";
+  ctx.fillText("EU SOU", size / 2, 268);
+
+  // Nome do perfil (destaque)
   ctx.fillStyle = "#3D2B1F";
-  ctx.font = "700 64px 'Playfair Display', Georgia, serif";
-  const nameLines = wrapText(ctx, profileName, 900);
-  let nameY = 300;
-  for (const line of nameLines.slice(0, 3)) {
+  ctx.font = "700 68px 'Playfair Display', Georgia, serif";
+  const nameLines = wrapText(ctx, profileName, 860);
+  let nameY = 340;
+  for (const line of nameLines.slice(0, 2)) {
     ctx.fillText(line, size / 2, nameY);
-    nameY += 74;
+    nameY += 78;
   }
 
-  const productBox = 420;
-  const productX = (size - productBox) / 2;
-  const productY = Math.min(Math.max(nameY + 24, 380), 520);
+  // Linha decorativa
+  const lineY = nameY + 8;
+  ctx.strokeStyle = "#C4522A";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(size / 2 - 48, lineY);
+  ctx.lineTo(size / 2 + 48, lineY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(size / 2, lineY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = "#C4522A";
+  ctx.fill();
 
+  // Produto
+  const productBox = 390;
+  const productX = (size - productBox) / 2;
+  const productY = lineY + 28;
+
+  // sombra + borda dourada
   ctx.save();
-  ctx.shadowColor = "rgba(61,43,31,0.18)";
-  ctx.shadowBlur = 36;
-  ctx.shadowOffsetY = 18;
-  ctx.fillStyle = "#EDE4D8";
-  roundRect(ctx, productX, productY, productBox, productBox, 28);
+  ctx.shadowColor = "rgba(61,43,31,0.22)";
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 20;
+  ctx.fillStyle = "#FFF8F0";
+  roundRect(ctx, productX - 8, productY - 8, productBox + 16, productBox + 16, 32);
   ctx.fill();
   ctx.restore();
+
+  ctx.strokeStyle = "rgba(201,146,42,0.55)";
+  ctx.lineWidth = 3;
+  roundRect(ctx, productX - 8, productY - 8, productBox + 16, productBox + 16, 32);
+  ctx.stroke();
+
+  ctx.fillStyle = "#EDE4D8";
+  roundRect(ctx, productX, productY, productBox, productBox, 26);
+  ctx.fill();
 
   if (productSrc) {
     try {
       const product = await loadImage(productSrc);
       ctx.save();
-      roundRect(ctx, productX, productY, productBox, productBox, 28);
+      roundRect(ctx, productX, productY, productBox, productBox, 26);
       ctx.clip();
       const scale = Math.max(productBox / product.width, productBox / product.height);
       const w = product.width * scale;
@@ -158,24 +243,38 @@ export async function captureShareCard(element: HTMLElement): Promise<Blob> {
       );
       ctx.restore();
     } catch {
-      // produto sem imagem (CORS ou URL inválida)
+      // CORS / imagem indisponível
     }
   }
 
+  // Nome do produto
+  let afterProductY = productY + productBox + 40;
   if (productName) {
-    ctx.fillStyle = "#3D2B1F";
-    ctx.font = "600 26px Nunito, sans-serif";
-    const productLines = wrapText(ctx, productName, 720);
-    let py = productY + productBox + 48;
+    ctx.fillStyle = "#5C4A3D";
+    ctx.font = "600 24px Nunito, sans-serif";
+    const productLines = wrapText(ctx, productName, 780);
     for (const line of productLines.slice(0, 2)) {
-      ctx.fillText(line, size / 2, py);
-      py += 34;
+      ctx.fillText(line, size / 2, afterProductY);
+      afterProductY += 30;
     }
   }
 
-  ctx.fillStyle = "#8B6F5E";
-  ctx.font = "400 22px Nunito, sans-serif";
-  ctx.fillText("Descubra o seu em Nativa Store", size / 2, size - 64);
+  // Faixa CTA inferior (Stories: link legível na imagem)
+  const ctaTop = size - 168;
+  const ctaGrad = ctx.createLinearGradient(0, ctaTop, 0, size);
+  ctaGrad.addColorStop(0, "#C4522A");
+  ctaGrad.addColorStop(1, "#A63E1C");
+  ctx.fillStyle = ctaGrad;
+  roundRect(ctx, 60, ctaTop, size - 120, 108, 24);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.font = "700 20px Nunito, sans-serif";
+  ctx.fillText("Descobre o seu também  ·  faz o quiz", size / 2, ctaTop + 38);
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "700 28px Nunito, sans-serif";
+  ctx.fillText(quizUrlDisplay, size / 2, ctaTop + 74);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -222,7 +321,7 @@ export async function shareOrDownloadImage(
     try {
       await navigator.share({
         files: [file],
-        title: shareText,
+        title: shareText.split("\n")[0] || SITE_NAME,
         text: shareText,
       });
       return "shared";
@@ -235,4 +334,14 @@ export async function shareOrDownloadImage(
 
   await downloadShareImage(blob, filename);
   return "downloaded";
+}
+
+export async function copyShareCaption(profileName: string): Promise<boolean> {
+  const caption = buildQuizShareCaption(profileName);
+  try {
+    await navigator.clipboard.writeText(caption);
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -1,13 +1,15 @@
 import ProductCard from "@/components/ProductCard";
 import ShareResultCard from "@/components/QuizCuradoria/ShareResultCard";
 import {
+  buildQuizShareCaption,
   captureShareCard,
+  copyShareCaption,
   downloadShareImage,
   shareOrDownloadImage,
 } from "@/components/QuizCuradoria/shareQuizResult";
 import type { QuizPublicResultPayload } from "@shared/types/quiz";
 import { AnimatePresence, motion } from "framer-motion";
-import { Download, RefreshCw, Share2 } from "lucide-react";
+import { Copy, Download, Instagram, RefreshCw, Share2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -57,7 +59,16 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
     const blob = await ensureImage();
     if (!blob) return;
     await downloadShareImage(blob, filename);
-    toast.success("Imagem baixada");
+    toast.success("Imagem baixada — agora é só postar nos Stories!");
+  }
+
+  async function handleCopyCaption() {
+    const ok = await copyShareCaption(payload.result.name);
+    if (ok) {
+      toast.success("Legenda copiada! Cole no Instagram com a imagem.");
+    } else {
+      toast.message(buildQuizShareCaption(payload.result.name));
+    }
   }
 
   async function handleNativeShare() {
@@ -68,12 +79,12 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
       const mode = await shareOrDownloadImage(
         blob,
         filename,
-        `Meu estilo no quiz Nativa: ${payload.result.name}`,
+        buildQuizShareCaption(payload.result.name),
       );
       if (mode === "shared") {
-        toast.success("Compartilhado!");
+        toast.success("Manda nos Stories e marca a @nativastore!");
       } else {
-        toast.success("Imagem baixada (compartilhamento indisponível neste navegador)");
+        toast.success("Imagem baixada — posta nos Stories e marca a gente!");
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -138,6 +149,22 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
         </p>
       )}
 
+      <div
+        className="mb-5 rounded-2xl px-5 py-4 text-center"
+        style={{ background: "rgba(196,82,42,0.08)" }}
+      >
+        <p
+          className="text-sm leading-relaxed sm:text-base"
+          style={{ color: "#5C4A3D", fontFamily: "'Lora', Georgia, serif" }}
+        >
+          Gostou do resultado? Posta nos Stories, marca{" "}
+          <span className="font-semibold" style={{ color: "#C4522A" }}>
+            @nativastore
+          </span>{" "}
+          e desafia as amigas a descobrirem o estilo delas.
+        </p>
+      </div>
+
       <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
         <button
           type="button"
@@ -164,8 +191,8 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
             fontFamily: "'Nunito', sans-serif",
           }}
         >
-          <Share2 className="size-4" />
-          {isGenerating ? "Gerando imagem…" : "Compartilhar resultado"}
+          <Instagram className="size-4" />
+          {isGenerating ? "Gerando imagem…" : "Postar no Instagram"}
         </button>
       </div>
 
@@ -175,33 +202,56 @@ export default function ResultScreen({ payload, onRestart }: ResultScreenProps) 
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mt-5 flex flex-col items-stretch justify-center gap-3 sm:flex-row"
+            className="mt-5 space-y-3"
           >
-            <button
-              type="button"
-              onClick={() => void handleDownload()}
-              className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold"
-              style={{
-                background: "#EDE4D8",
-                color: "#3D2B1F",
-                fontFamily: "'Nunito', sans-serif",
-              }}
+            <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => void handleDownload()}
+                className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold"
+                style={{
+                  background: "#EDE4D8",
+                  color: "#3D2B1F",
+                  fontFamily: "'Nunito', sans-serif",
+                }}
+              >
+                <Download className="size-4" />
+                Baixar imagem
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopyCaption()}
+                className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold"
+                style={{
+                  background: "#FFF8F0",
+                  color: "#C4522A",
+                  border: "1px solid rgba(196,82,42,0.35)",
+                  fontFamily: "'Nunito', sans-serif",
+                }}
+              >
+                <Copy className="size-4" />
+                Copiar legenda
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleNativeShare()}
+                className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-white"
+                style={{
+                  background: "#2D6A4F",
+                  fontFamily: "'Nunito', sans-serif",
+                }}
+              >
+                <Share2 className="size-4" />
+                Compartilhar
+              </button>
+            </div>
+            <p
+              className="text-center text-xs leading-relaxed"
+              style={{ color: "#8B6F5E", fontFamily: "'Nunito', sans-serif" }}
             >
-              <Download className="size-4" />
-              Baixar imagem
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleNativeShare()}
-              className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-white"
-              style={{
-                background: "#2D6A4F",
-                fontFamily: "'Nunito', sans-serif",
-              }}
-            >
-              <Share2 className="size-4" />
-              Compartilhar
-            </button>
+              Dica: no Instagram, sobe a imagem nos Stories e cola a legenda — o link do quiz já
+              aparece na arte.
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
