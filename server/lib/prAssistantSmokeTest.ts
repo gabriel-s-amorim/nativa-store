@@ -25,3 +25,6 @@ export async function deleteThing(id: string) {
   // Intentional: fire-and-forget delete with no error handling
   await fetch(`/api/things/${id}`, { method: "DELETE" });
 }
+
+// retrigger webhook after model fix
+
