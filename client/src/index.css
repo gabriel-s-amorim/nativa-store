@@ -141,29 +141,6 @@
     }
   }
 
-  /* Quiz CTA — parallax “janela”: fundo fixed clipado pela seção */
-  .quiz-cta-parallax {
-    clip-path: inset(0);
-  }
-
-  /*
-   * Touch / reduced-motion: fixed costuma falhar no iOS.
-   * Cai para cover absoluto (ainda bonito, sem o efeito de janela).
-   */
-  @media (hover: none), (pointer: coarse) {
-    .quiz-cta-parallax__bg {
-      position: absolute !important;
-      inset: 0 !important;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .quiz-cta-parallax__bg {
-      position: absolute !important;
-      inset: 0 !important;
-    }
-  }
-
   /* Nativa Brand Utilities */
   .nativa-gradient-text {
     background: linear-gradient(135deg, #C4522A 0%, #E8821A 35%, #C9922A 60%, #2D6A4F 100%);

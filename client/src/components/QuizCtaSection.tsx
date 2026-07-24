@@ -1,31 +1,49 @@
 import { FeatherGreen, FeatherOrange, FeatherRed } from "@/components/NativaDecorations";
-import { motion, useReducedMotion } from "framer-motion";
+import {
+  motion,
+  useReducedMotion,
+  useScroll,
+  useTransform,
+} from "framer-motion";
+import { useRef } from "react";
 import { Link } from "wouter";
 
 /** Foto da artesã com bolsa — coerente com a identidade Nativa. */
 const QUIZ_CTA_BG = "/images/1cad9ce5-deab-4955-8b80-f93e26115088.jpg";
 
-/** Convite ao Quiz de Curadoria — parallax com fundo fixo. */
+/** Convite ao Quiz de Curadoria — parallax no desktop e no mobile. */
 export default function QuizCtaSection() {
+  const sectionRef = useRef<HTMLElement>(null);
   const reduceMotion = useReducedMotion();
+
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start end", "end start"],
+  });
+
+  // Imagem se move mais devagar que o scroll → efeito de profundidade em qualquer device.
+  const bgY = useTransform(scrollYProgress, [0, 1], reduceMotion ? ["0%", "0%"] : ["-18%", "18%"]);
 
   return (
     <section
-      className="quiz-cta-parallax relative isolate py-24 sm:py-28 md:py-32"
+      ref={sectionRef}
+      className="relative isolate overflow-hidden py-24 sm:py-28 md:py-32"
       aria-labelledby="quiz-cta-heading"
     >
-      {/*
-        Fundo fixo “janela”: clip-path mantém o fixed relativo à viewport
-        e só revela a imagem enquanto a seção passa na rolagem.
-      */}
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div
-          className="quiz-cta-parallax__bg fixed inset-0 bg-cover bg-no-repeat"
-          style={{
-            backgroundImage: `url(${QUIZ_CTA_BG})`,
-            backgroundPosition: "center 32%",
-          }}
-        />
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <motion.div
+          className="absolute inset-x-0 -top-[18%] h-[136%] w-full will-change-transform"
+          style={{ y: bgY }}
+        >
+          <div
+            className="h-full w-full bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url(${QUIZ_CTA_BG})`,
+              backgroundPosition: "center 32%",
+            }}
+          />
+        </motion.div>
+
         <div
           className="absolute inset-0"
           style={{
