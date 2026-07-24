@@ -5,7 +5,14 @@ import { getDashboardStats } from "../services/adminDashboard";
 
 const router = Router();
 
-const VALID_PERIODS = new Set<DashboardPeriod>(["7d", "30d", "90d", "all"]);
+const VALID_PERIODS = new Set<DashboardPeriod>([
+  "today",
+  "yesterday",
+  "7d",
+  "30d",
+  "90d",
+  "all",
+]);
 
 router.get("/", requireAdmin, async (req, res) => {
   try {

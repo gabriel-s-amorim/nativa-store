@@ -18,6 +18,19 @@ import type { OrderStatus, PaymentMethod } from "@shared/types/order";
 import { supabase } from "../lib/supabase";
 
 const MS_DAY = 24 * 60 * 60 * 1000;
+/** Fuso da loja — define “hoje” / “ontem” de calendário. */
+const STORE_TZ = "America/Sao_Paulo";
+
+interface PeriodBounds {
+  /** Início inclusivo do período atual (null = sem limite). */
+  start: Date | null;
+  /** Fim exclusivo do período atual (null = até agora). */
+  end: Date | null;
+  /** Início inclusivo do período anterior (para % de variação). */
+  prevStart: Date | null;
+  /** Fim exclusivo do período anterior. */
+  prevEnd: Date | null;
+}
 
 function periodToDays(period: DashboardPeriod): number | null {
   if (period === "7d") return 7;
@@ -26,16 +39,54 @@ function periodToDays(period: DashboardPeriod): number | null {
   return null;
 }
 
-function startDateForPeriod(period: DashboardPeriod): Date | null {
-  const days = periodToDays(period);
-  if (days === null) return null;
-  return new Date(Date.now() - days * MS_DAY);
+/** YYYY-MM-DD no fuso da loja. */
+function dateKeyInStoreTz(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: STORE_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
-function previousStartDateForPeriod(period: DashboardPeriod): Date | null {
+/** Meia-noite (America/Sao_Paulo) do dia YYYY-MM-DD → Instant UTC. */
+function startOfStoreDay(dateKey: string): Date {
+  // Brasil sem horário de verão desde 2019 → UTC−3 o ano todo.
+  return new Date(`${dateKey}T00:00:00-03:00`);
+}
+
+function shiftStoreDay(dateKey: string, deltaDays: number): string {
+  const base = startOfStoreDay(dateKey);
+  return dateKeyInStoreTz(new Date(base.getTime() + deltaDays * MS_DAY));
+}
+
+function getPeriodBounds(period: DashboardPeriod): PeriodBounds {
+  const now = new Date();
+
+  if (period === "today") {
+    const todayKey = dateKeyInStoreTz(now);
+    const start = startOfStoreDay(todayKey);
+    const prevStart = startOfStoreDay(shiftStoreDay(todayKey, -1));
+    return { start, end: null, prevStart, prevEnd: start };
+  }
+
+  if (period === "yesterday") {
+    const todayKey = dateKeyInStoreTz(now);
+    const todayStart = startOfStoreDay(todayKey);
+    const yesterdayKey = shiftStoreDay(todayKey, -1);
+    const start = startOfStoreDay(yesterdayKey);
+    const prevStart = startOfStoreDay(shiftStoreDay(yesterdayKey, -1));
+    return { start, end: todayStart, prevStart, prevEnd: start };
+  }
+
   const days = periodToDays(period);
-  if (days === null) return null;
-  return new Date(Date.now() - days * 2 * MS_DAY);
+  if (days === null) {
+    return { start: null, end: null, prevStart: null, prevEnd: null };
+  }
+
+  const start = new Date(Date.now() - days * MS_DAY);
+  const prevStart = new Date(Date.now() - days * 2 * MS_DAY);
+  return { start, end: null, prevStart, prevEnd: start };
 }
 
 function pctChange(current: number, previous: number): number | null {
@@ -44,19 +95,17 @@ function pctChange(current: number, previous: number): number | null {
 }
 
 function toDateKey(iso: string): string {
-  return iso.slice(0, 10);
+  return dateKeyInStoreTz(new Date(iso));
 }
 
 function buildDateRange(start: Date, end: Date): string[] {
   const keys: string[] = [];
-  const cursor = new Date(start);
-  cursor.setHours(0, 0, 0, 0);
-  const endDay = new Date(end);
-  endDay.setHours(0, 0, 0, 0);
+  let cursorKey = dateKeyInStoreTz(start);
+  const endKey = dateKeyInStoreTz(end);
 
-  while (cursor <= endDay) {
-    keys.push(cursor.toISOString().slice(0, 10));
-    cursor.setDate(cursor.getDate() + 1);
+  while (cursorKey <= endKey) {
+    keys.push(cursorKey);
+    cursorKey = shiftStoreDay(cursorKey, 1);
   }
 
   return keys;
@@ -158,7 +207,8 @@ async function fetchCartConversion() {
 }
 
 async function fetchTopProducts(
-  start: Date | null
+  start: Date | null,
+  end: Date | null = null
 ): Promise<DashboardTopProduct[]> {
   const { data: orders, error } = await supabase
     .from("orders")
@@ -168,7 +218,7 @@ async function fetchTopProducts(
   if (error) throw new Error(error.message);
 
   const orderIds = (orders ?? [])
-    .filter(o => inRange(o.created_at, start))
+    .filter(o => inRange(o.created_at, start, end))
     .map(o => o.id);
 
   if (!orderIds.length) return [];
@@ -224,12 +274,10 @@ function computeOverview(
   cartConversionRate: number,
   stock: { inStock: number; outOfStock: number }
 ): DashboardOverview {
-  const start = startDateForPeriod(period);
-  const prevStart = previousStartDateForPeriod(period);
-  const prevEnd = start;
+  const { start, end, prevStart, prevEnd } = getPeriodBounds(period);
 
   const paidInPeriod = orders.filter(
-    o => o.status === "paid" && inRange(o.created_at, start)
+    o => o.status === "paid" && inRange(o.created_at, start, end)
   );
   const paidPrevPeriod = orders.filter(
     o => o.status === "paid" && inRange(o.created_at, prevStart, prevEnd)
@@ -244,7 +292,7 @@ function computeOverview(
   const ordersCount = paidInPeriod.length;
   const ordersPrev = paidPrevPeriod.length;
 
-  const viewsInPeriod = pageViews.filter(v => inRange(v.created_at, start));
+  const viewsInPeriod = pageViews.filter(v => inRange(v.created_at, start, end));
   const viewsPrevPeriod = pageViews.filter(v =>
     inRange(v.created_at, prevStart, prevEnd)
   );
@@ -254,7 +302,7 @@ function computeOverview(
     .size;
 
   const newCustomers = customers.filter(c =>
-    inRange(c.created_at, start)
+    inRange(c.created_at, start, end)
   ).length;
   const newCustomersPrev = customers.filter(c =>
     inRange(c.created_at, prevStart, prevEnd)
@@ -288,11 +336,14 @@ function buildTimeSeries(
   orders: Awaited<ReturnType<typeof fetchOrdersRows>>,
   pageViews: Awaited<ReturnType<typeof fetchPageViews>>
 ): DashboardTimePoint[] {
-  const days = periodToDays(period) ?? 30;
-  const end = new Date();
-  const start =
-    startDateForPeriod(period) ?? new Date(Date.now() - days * MS_DAY);
-  const keys = buildDateRange(start, end);
+  const { start, end } = getPeriodBounds(period);
+  const seriesEnd = end ?? new Date();
+  const seriesStart =
+    start ??
+    (period === "all"
+      ? new Date(Date.now() - 30 * MS_DAY)
+      : new Date(Date.now() - 30 * MS_DAY));
+  const keys = buildDateRange(seriesStart, seriesEnd);
 
   const revenueByDay = new Map<string, number>();
   const ordersByDay = new Map<string, number>();
@@ -337,8 +388,8 @@ function buildStatusSlices(
   period: DashboardPeriod,
   orders: Awaited<ReturnType<typeof fetchOrdersRows>>
 ): DashboardStatusSlice[] {
-  const start = startDateForPeriod(period);
-  const filtered = orders.filter(o => inRange(o.created_at, start));
+  const { start, end } = getPeriodBounds(period);
+  const filtered = orders.filter(o => inRange(o.created_at, start, end));
   const counts = new Map<OrderStatus, number>();
 
   for (const order of filtered) {
@@ -357,9 +408,9 @@ function buildPaymentSlices(
   period: DashboardPeriod,
   orders: Awaited<ReturnType<typeof fetchOrdersRows>>
 ): DashboardPaymentSlice[] {
-  const start = startDateForPeriod(period);
+  const { start, end } = getPeriodBounds(period);
   const filtered = orders.filter(
-    o => o.status === "paid" && inRange(o.created_at, start)
+    o => o.status === "paid" && inRange(o.created_at, start, end)
   );
   const map = new Map<PaymentMethod, { count: number; revenue: number }>();
 
@@ -401,6 +452,7 @@ async function buildRecentOrders(
 export async function getDashboardStats(
   period: DashboardPeriod
 ): Promise<DashboardStats> {
+  const bounds = getPeriodBounds(period);
   const [
     orders,
     customers,
@@ -416,7 +468,7 @@ export async function getDashboardStats(
     fetchAbandonedCarts(),
     fetchCartConversion(),
     fetchProductStockCounts(),
-    fetchTopProducts(startDateForPeriod(period)),
+    fetchTopProducts(bounds.start, bounds.end),
   ]);
 
   return {

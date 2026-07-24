@@ -1,4 +1,4 @@
-export type DashboardPeriod = "7d" | "30d" | "90d" | "all";
+export type DashboardPeriod = "today" | "yesterday" | "7d" | "30d" | "90d" | "all";
 
 export interface DashboardOverview {
   revenue: number;
@@ -65,6 +65,8 @@ export interface DashboardStats {
 }
 
 export const DASHBOARD_PERIOD_LABELS: Record<DashboardPeriod, string> = {
+  today: "Hoje",
+  yesterday: "Ontem",
   "7d": "7 dias",
   "30d": "30 dias",
   "90d": "90 dias",

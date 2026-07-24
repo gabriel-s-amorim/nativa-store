@@ -37,7 +37,7 @@ import {
 import { toast } from "sonner";
 import { Link } from "wouter";
 
-const PERIODS: DashboardPeriod[] = ["7d", "30d", "90d", "all"];
+const PERIODS: DashboardPeriod[] = ["today", "yesterday", "7d", "30d", "90d", "all"];
 
 const PIE_COLORS = ["#059669", "#C4522A", "#64748b", "#d97706"];
 

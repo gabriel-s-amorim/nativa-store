@@ -1,5 +1,3 @@
-import type { DashboardPeriod } from "@shared/types/dashboard";
-
 export function trackPageView(path: string) {
   if (path.startsWith("/admin")) return;
 
