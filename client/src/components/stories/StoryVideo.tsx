@@ -10,26 +10,20 @@ import type { StoryWithUrls } from "@/content/stories";
 
 type StoryVideoProps = {
   story: StoryWithUrls;
-  /** Se true, o elemento <video> recebe src e tenta play */
   active: boolean;
-  /** Carrega o src (ativo ou vizinho mais próximo) */
   shouldLoad: boolean;
-  /** Preload hint do navegador */
   preload?: "none" | "metadata" | "auto";
   className?: string;
   borderRadius: string;
-  /** Loop no carrossel desktop; no imersivo costuma avançar no ended */
   loop?: boolean;
   onEnded?: () => void;
-  /** Mute compartilhado entre slides (opcional) */
   muted?: boolean;
   onMutedChange?: (muted: boolean) => void;
 };
 
 /**
- * Player de story: tenta autoplay COM som; se o navegador bloquear,
- * cai para mudo e mantém o botão de som.
- * O vídeo toca na duração original do arquivo (sem corte).
+ * Player de story: autoplay com som (fallback mudo se o browser bloquear).
+ * Sem thumb no Storage, usa o próprio vídeo pausado como preview.
  */
 export function StoryVideo({
   story,
@@ -45,12 +39,18 @@ export function StoryVideo({
 }: StoryVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [internalMuted, setInternalMuted] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
   const muted = mutedProp ?? internalMuted;
+  const hasThumb = Boolean(story.thumbnailUrl) && !thumbFailed;
 
   const setMuted = (next: boolean) => {
     if (onMutedChange) onMutedChange(next);
     else setInternalMuted(next);
   };
+
+  useEffect(() => {
+    setThumbFailed(false);
+  }, [story.id, story.thumbnailUrl]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -59,9 +59,9 @@ export function StoryVideo({
     if (!active) {
       el.pause();
       try {
-        el.currentTime = 0;
+        el.currentTime = 0.05;
       } catch {
-        /* ignore seek em src ainda não pronto */
+        /* ignore */
       }
       return;
     }
@@ -69,25 +69,23 @@ export function StoryVideo({
     let cancelled = false;
 
     const play = async () => {
-      // 1) Tenta com som (preferência)
       el.muted = false;
       try {
         await el.play();
         if (!cancelled) setMuted(false);
         return;
       } catch {
-        /* política do browser — segue para mudo */
+        /* autoplay com som bloqueado */
       }
 
       if (cancelled) return;
 
-      // 2) Fallback: autoplay mudo (exigência comum em Chrome/Safari)
       el.muted = true;
       if (!cancelled) setMuted(true);
       try {
         await el.play();
       } catch {
-        /* thumbnail permanece */
+        /* thumbnail / frame permanece */
       }
     };
 
@@ -96,11 +94,9 @@ export function StoryVideo({
     return () => {
       cancelled = true;
     };
-    // Só reage a troca de slide / carga — mute manual é tratado no toggle
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setMuted estável o suficiente aqui
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, shouldLoad, story.videoUrl]);
 
-  // Sincroniza atributo muted quando o usuário altera o botão
   useEffect(() => {
     const el = videoRef.current;
     if (!el || !active) return;
@@ -122,30 +118,39 @@ export function StoryVideo({
     }
   };
 
+  // #t=0.1 ajuda o browser a mostrar o 1º frame quando não há thumb
+  const videoSrc =
+    story.videoUrl && !active
+      ? `${story.videoUrl}#t=0.1`
+      : story.videoUrl;
+
   return (
     <div
       className={`relative h-full w-full overflow-hidden bg-[#3D2B1F] ${className}`}
       style={{ borderRadius }}
     >
-      <img
-        src={story.thumbnailUrl || undefined}
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover"
-        loading="lazy"
-        decoding="async"
-        draggable={false}
-        aria-hidden
-      />
+      {hasThumb ? (
+        <img
+          src={story.thumbnailUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          aria-hidden
+          onError={() => setThumbFailed(true)}
+        />
+      ) : null}
 
       {shouldLoad && story.videoUrl ? (
         <video
           ref={videoRef}
           key={story.id}
-          src={story.videoUrl}
-          poster={story.thumbnailUrl || undefined}
+          src={videoSrc}
+          poster={hasThumb ? story.thumbnailUrl : undefined}
           className="absolute inset-0 h-full w-full object-cover"
           playsInline
-          muted={muted}
+          muted={muted || !active}
           loop={loop}
           preload={preload}
           onEnded={onEnded}

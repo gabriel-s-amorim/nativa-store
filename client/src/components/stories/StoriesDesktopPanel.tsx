@@ -4,16 +4,21 @@ import { StoriesCarousel } from "./StoriesCarousel";
 type StoriesDesktopPanelProps = {
   /** Já visível no swap — libera lazy load dos vídeos */
   active: boolean;
+  /** Ao avançar além do último vídeo, volta ao texto/foto da história */
+  onReturnToStory?: () => void;
 };
 
 /**
  * Painel do making-of para o swap desktop dentro de #sobre.
  * (Mobile continua em StoriesSection.)
  */
-export function StoriesDesktopPanel({ active }: StoriesDesktopPanelProps) {
+export function StoriesDesktopPanel({
+  active,
+  onReturnToStory,
+}: StoriesDesktopPanelProps) {
   return (
     <div className="w-full" data-stories-desktop-panel>
-      <div className="mb-6 text-center md:mb-8 md:pr-36">
+      <div className="mb-4 text-center md:mb-6 md:pr-36">
         <p
           className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#C4522A]"
           style={{ fontFamily: "'Nunito', sans-serif" }}
@@ -34,7 +39,11 @@ export function StoriesDesktopPanel({ active }: StoriesDesktopPanelProps) {
         </p>
       </div>
 
-      <StoriesCarousel stories={STORIES} nearViewport={active} />
+      <StoriesCarousel
+        stories={STORIES}
+        nearViewport={active}
+        onCycleComplete={onReturnToStory}
+      />
     </div>
   );
 }
