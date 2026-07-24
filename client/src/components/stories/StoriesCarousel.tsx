@@ -207,7 +207,7 @@ export function StoriesCarousel({
         aria-hidden
       />
 
-      {/* Altura fixa — cards no mesmo tamanho; destaque só por opacidade/glow (sem scale = sem deslocar) */}
+      {/* Ativo maior; laterais menores. Escala ancorada na BASE → sem puxar a seção pra baixo */}
       <div className="relative h-[min(640px,78vh)] min-h-[500px]">
         <div className="absolute inset-0 overflow-hidden" ref={emblaRef}>
           <div className="flex h-full items-end pb-2">
@@ -216,7 +216,9 @@ export function StoriesCarousel({
               const dist = Math.abs(index - selected);
               const isNeighbor = dist === 1;
               const shouldLoad = nearViewport && dist <= 1 && !isCta;
-              const opacity = isActive ? 1 : dist === 1 ? 0.58 : 0.34;
+
+              const scale = isActive ? 1 : dist === 1 ? 0.78 : 0.64;
+              const opacity = isActive ? 1 : dist === 1 ? 0.55 : 0.3;
 
               return (
                 <div
@@ -228,12 +230,13 @@ export function StoriesCarousel({
                     onClick={() => {
                       if (!isActive) emblaApi?.scrollTo(index);
                     }}
-                    animate={{ opacity }}
+                    animate={{ scale, opacity }}
                     transition={tween}
                     style={{
                       zIndex: isActive ? 20 : Math.max(1, 8 - dist),
+                      transformOrigin: "50% 100%",
                       cursor: isActive ? "default" : "pointer",
-                      willChange: "opacity",
+                      willChange: "transform, opacity",
                     }}
                     role={isActive ? undefined : "button"}
                     tabIndex={isActive ? undefined : 0}
@@ -258,12 +261,11 @@ export function StoriesCarousel({
                       style={{
                         borderRadius: story.borderRadius,
                         boxShadow: isActive
-                          ? "0 24px 56px rgba(196,82,42,0.32), 0 0 0 2px rgba(255,255,255,0.9)"
+                          ? "0 24px 56px rgba(196,82,42,0.35), 0 0 0 2px rgba(255,255,255,0.9)"
                           : "0 8px 24px rgba(61,43,31,0.12)",
                         transition: reduceMotion
                           ? undefined
                           : "box-shadow 0.35s ease",
-                        transform: isActive ? "translateZ(0)" : undefined,
                       }}
                     >
                       <StoryVideo
@@ -313,12 +315,14 @@ export function StoriesCarousel({
               <motion.div
                 className="relative w-full max-w-[300px] lg:max-w-[320px]"
                 animate={{
-                  opacity: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.58 : 0.34,
+                  scale: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.78 : 0.64,
+                  opacity: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.55 : 0.3,
                 }}
                 transition={tween}
                 style={{
                   zIndex: isCta ? 20 : 4,
-                  willChange: "opacity",
+                  transformOrigin: "50% 100%",
+                  willChange: "transform, opacity",
                 }}
                 onClick={() => {
                   if (!isCta) emblaApi?.scrollTo(ctaIndex);
@@ -329,7 +333,7 @@ export function StoriesCarousel({
                   style={{
                     borderRadius: CTA_BORDER,
                     boxShadow: isCta
-                      ? "0 24px 56px rgba(196,82,42,0.32), 0 0 0 2px rgba(255,255,255,0.9)"
+                      ? "0 24px 56px rgba(196,82,42,0.35), 0 0 0 2px rgba(255,255,255,0.9)"
                       : "0 8px 24px rgba(61,43,31,0.12)",
                   }}
                 >
