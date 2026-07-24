@@ -4,10 +4,10 @@
  * Hospede os arquivos no bucket público `story-videos` do Supabase Storage:
  *   story-videos/making-of-1.mp4
  *   story-videos/making-of-1-thumb.webp
- *   … (idem para 2 e 3)
+ *   … (idem para 2, 3, …)
  *
  * As URLs são montadas a partir de VITE_SUPABASE_URL.
- * Após o upload, confira no dashboard se o path bate com `file` / `thumb` abaixo.
+ * O vídeo toca inteiro — duração = arquivo original no Storage.
  */
 
 export const STORY_VIDEOS_BUCKET = "story-videos";
@@ -18,8 +18,6 @@ export type StoryItem = {
   file: string;
   /** Thumbnail (primeiro frame ou WebP estático) */
   thumb: string;
-  /** Duração aproximada em segundos (indicadores / acessibilidade) */
-  durationSec: number;
   /** border-radius assimétrico CSS — cada card com forma orgânica distinta */
   borderRadius: string;
   /** Rótulo curto opcional */
@@ -31,7 +29,6 @@ const STORIES_META: StoryItem[] = [
     id: "making-of-1",
     file: "making-of-1.mp4",
     thumb: "making-of-1-thumb.webp",
-    durationSec: 18,
     borderRadius: "32px 12px 48px 16px",
     label: "Costura",
   },
@@ -39,7 +36,6 @@ const STORIES_META: StoryItem[] = [
     id: "making-of-2",
     file: "making-of-2.mp4",
     thumb: "making-of-2-thumb.webp",
-    durationSec: 22,
     borderRadius: "16px 40px 14px 36px",
     label: "Acabamento",
   },
@@ -47,8 +43,28 @@ const STORIES_META: StoryItem[] = [
     id: "making-of-3",
     file: "making-of-3.mp4",
     thumb: "making-of-3-thumb.webp",
-    durationSec: 15,
     borderRadius: "44px 18px 28px 40px",
+    label: "Detalhes",
+  },
+  {
+    id: "making-of-4",
+    file: "making-of-4.mp4",
+    thumb: "making-of-4-thumb.webp",
+    borderRadius: "16px 40px 14px 36px",
+    label: "Detalhes",
+  },
+  {
+    id: "making-of-5",
+    file: "making-of-5.mp4",
+    thumb: "making-of-5-thumb.webp",
+    borderRadius: "16px 40px 14px 36px",
+    label: "Detalhes",
+  },
+  {
+    id: "making-of-6",
+    file: "making-of-6.mp4",
+    thumb: "making-of-6-thumb.webp",
+    borderRadius: "16px 40px 14px 36px",
     label: "Detalhes",
   },
 ];

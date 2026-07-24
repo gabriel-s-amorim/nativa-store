@@ -32,7 +32,7 @@ export function StoriesImmersive({
 }: StoriesImmersiveProps) {
   const reduceMotion = useReducedMotion();
   const [index, setIndex] = useState(initialIndex);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [exiting, setExiting] = useState(false);
 
   useEffect(() => {

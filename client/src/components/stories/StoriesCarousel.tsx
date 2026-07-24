@@ -26,7 +26,7 @@ export function StoriesCarousel({ stories, nearViewport }: StoriesCarouselProps)
     duration: reduceMotion ? 10 : 28,
   });
   const [selected, setSelected] = useState(0);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   /** Distância normalizada de cada slide ao snap ativo (0 = centro) */
   const [distances, setDistances] = useState<number[]>(() =>
     stories.map((_, i) => (i === 0 ? 0 : 1)),

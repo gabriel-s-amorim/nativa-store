@@ -27,8 +27,9 @@ type StoryVideoProps = {
 };
 
 /**
- * Player de story: autoplay mudo, botão de som, lazy src.
- * Não monta o src até `shouldLoad` — evita baixar os 3 vídeos de uma vez.
+ * Player de story: tenta autoplay COM som; se o navegador bloquear,
+ * cai para mudo e mantém o botão de som.
+ * O vídeo toca na duração original do arquivo (sem corte).
  */
 export function StoryVideo({
   story,
@@ -43,7 +44,7 @@ export function StoryVideo({
   onMutedChange,
 }: StoryVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [internalMuted, setInternalMuted] = useState(true);
+  const [internalMuted, setInternalMuted] = useState(false);
   const muted = mutedProp ?? internalMuted;
 
   const setMuted = (next: boolean) => {
@@ -55,28 +56,70 @@ export function StoryVideo({
     const el = videoRef.current;
     if (!el || !shouldLoad) return;
 
-    if (active) {
-      el.muted = muted;
-      const playPromise = el.play();
-      if (playPromise) {
-        playPromise.catch(() => {
-          /* autoplay bloqueado — thumbnail permanece */
-        });
-      }
-    } else {
+    if (!active) {
       el.pause();
       try {
         el.currentTime = 0;
       } catch {
         /* ignore seek em src ainda não pronto */
       }
+      return;
     }
-  }, [active, shouldLoad, muted, story.videoUrl]);
+
+    let cancelled = false;
+
+    const play = async () => {
+      // 1) Tenta com som (preferência)
+      el.muted = false;
+      try {
+        await el.play();
+        if (!cancelled) setMuted(false);
+        return;
+      } catch {
+        /* política do browser — segue para mudo */
+      }
+
+      if (cancelled) return;
+
+      // 2) Fallback: autoplay mudo (exigência comum em Chrome/Safari)
+      el.muted = true;
+      if (!cancelled) setMuted(true);
+      try {
+        await el.play();
+      } catch {
+        /* thumbnail permanece */
+      }
+    };
+
+    void play();
+
+    return () => {
+      cancelled = true;
+    };
+    // Só reage a troca de slide / carga — mute manual é tratado no toggle
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setMuted estável o suficiente aqui
+  }, [active, shouldLoad, story.videoUrl]);
+
+  // Sincroniza atributo muted quando o usuário altera o botão
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !active) return;
+    el.muted = muted;
+  }, [muted, active]);
 
   const toggleMute = (event: MouseEvent | PointerEvent) => {
     event.stopPropagation();
     event.preventDefault();
-    setMuted(!muted);
+    const next = !muted;
+    setMuted(next);
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = next;
+    if (!next) {
+      void el.play().catch(() => {
+        /* ignore */
+      });
+    }
   };
 
   return (
@@ -84,7 +127,6 @@ export function StoryVideo({
       className={`relative h-full w-full overflow-hidden bg-[#3D2B1F] ${className}`}
       style={{ borderRadius }}
     >
-      {/* Thumbnail sempre visível por baixo (fallback / laterais) */}
       <img
         src={story.thumbnailUrl || undefined}
         alt=""
