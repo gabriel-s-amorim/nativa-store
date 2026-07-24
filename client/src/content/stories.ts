@@ -3,7 +3,7 @@
  *
  * Hospede os arquivos no bucket público `story-videos` do Supabase Storage:
  *   story-videos/making-of-1.mp4
- *   story-videos/making-of-1-thumb.webp
+ *   story-videos/making-of-1-thumb.jpeg
  *   … (idem para 2, 3, …)
  *
  * As URLs são montadas a partir de VITE_SUPABASE_URL.
@@ -16,7 +16,7 @@ export type StoryItem = {
   id: string;
   /** Path relativo dentro do bucket (ex.: making-of-1.mp4) */
   file: string;
-  /** Thumbnail (primeiro frame ou WebP estático) */
+  /** Thumbnail (primeiro frame — jpeg/webp/png) */
   thumb: string;
   /** border-radius assimétrico CSS — cada card com forma orgânica distinta */
   borderRadius: string;
@@ -28,42 +28,42 @@ const STORIES_META: StoryItem[] = [
   {
     id: "making-of-1",
     file: "making-of-1.mp4",
-    thumb: "making-of-1-thumb.webp",
+    thumb: "making-of-1-thumb.jpeg",
     borderRadius: "32px 12px 48px 16px",
     label: "Costura",
   },
   {
     id: "making-of-2",
     file: "making-of-2.mp4",
-    thumb: "making-of-2-thumb.webp",
+    thumb: "making-of-2-thumb.jpeg",
     borderRadius: "16px 40px 14px 36px",
     label: "Acabamento",
   },
   {
     id: "making-of-3",
     file: "making-of-3.mp4",
-    thumb: "making-of-3-thumb.webp",
+    thumb: "making-of-3-thumb.jpeg",
     borderRadius: "44px 18px 28px 40px",
     label: "Detalhes",
   },
   {
     id: "making-of-4",
     file: "making-of-4.mp4",
-    thumb: "making-of-4-thumb.webp",
+    thumb: "making-of-4-thumb.jpeg",
     borderRadius: "16px 40px 14px 36px",
     label: "Detalhes",
   },
   {
     id: "making-of-5",
     file: "making-of-5.mp4",
-    thumb: "making-of-5-thumb.webp",
+    thumb: "making-of-5-thumb.jpeg",
     borderRadius: "16px 40px 14px 36px",
     label: "Detalhes",
   },
   {
     id: "making-of-6",
     file: "making-of-6.mp4",
-    thumb: "making-of-6-thumb.webp",
+    thumb: "making-of-6-thumb.jpeg",
     borderRadius: "16px 40px 14px 36px",
     label: "Detalhes",
   },
