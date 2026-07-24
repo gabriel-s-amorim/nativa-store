@@ -18,7 +18,7 @@ export function StoriesDesktopPanel({
 }: StoriesDesktopPanelProps) {
   return (
     <div className="w-full" data-stories-desktop-panel>
-      <div className="mb-4 text-center md:mb-6 md:pr-36">
+      <div className="mb-4 text-center md:mb-6 md:pr-28">
         <p
           className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#C4522A]"
           style={{ fontFamily: "'Nunito', sans-serif" }}

@@ -10,7 +10,7 @@ import {
   motion,
   useReducedMotion,
 } from "framer-motion";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Clapperboard } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
   type MouseEvent,
+  type ReactNode,
 } from "react";
 import { StoriesDesktopPanel } from "./stories/StoriesDesktopPanel";
 import { StoriesSection } from "./stories/StoriesSection";
@@ -201,131 +202,185 @@ const values = [
   },
 ];
 
-function AboutStoryContent() {
+function AboutStoryContent({
+  desktopCta,
+}: {
+  desktopCta?: ReactNode;
+} = {}) {
   return (
     <div className="grid md:grid-cols-[minmax(0,340px)_1fr] lg:grid-cols-[minmax(0,380px)_1fr] gap-12 lg:gap-16 xl:gap-20 items-center">
       <div className="relative order-2 md:order-1 flex justify-center md:justify-start py-2">
         <AboutPhotoCard />
       </div>
 
-      <div className="order-1 md:order-2 md:pr-40 lg:pr-44">
-        <div className="flex items-center gap-3 mb-4">
-          <ArrowNativa className="w-20 h-4" />
-          <span
-            className="text-xs font-semibold text-[#1B7A8C] uppercase tracking-widest"
-            style={{ fontFamily: "'Nunito', sans-serif" }}
+      <div className="relative order-1 md:order-2">
+        <div className={desktopCta ? "md:pr-[8.5rem] lg:pr-40" : undefined}>
+          <div className="flex items-center gap-3 mb-4">
+            <ArrowNativa className="w-20 h-4" />
+            <span
+              className="text-xs font-semibold text-[#1B7A8C] uppercase tracking-widest"
+              style={{ fontFamily: "'Nunito', sans-serif" }}
+            >
+              Nossa História
+            </span>
+          </div>
+
+          <h2
+            className="text-4xl md:text-5xl font-bold leading-tight mb-6"
+            style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              background: "linear-gradient(135deg, #C4522A, #E8821A, #2D6A4F)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
           >
-            Nossa História
-          </span>
+            Carregar identidade
+            <br />
+            <span style={{ WebkitTextFillColor: "#3D2B1F", backgroundClip: "unset" }}>
+              é nossa missão
+            </span>
+          </h2>
+
+          <p
+            className="text-[#5C4033] text-base leading-relaxed mb-4"
+            style={{ fontFamily: "'Lora', serif" }}
+          >
+            A Nativa nasceu do amor pela cultura brasileira e pelo artesanato. Cada bolsa que criamos
+            carrega a essência da nossa terra — as cores vibrantes da Amazônia, os padrões dos povos
+            originários e a riqueza da fauna e flora nativa.
+          </p>
+          <p
+            className="text-[#8B6F5E] text-base leading-relaxed mb-8"
+            style={{ fontFamily: "'Lora', serif", fontStyle: "italic" }}
+          >
+            &quot;Não fazemos moda. Fazemos bolsas com memória.&quot;
+          </p>
+
+          <div className="grid grid-cols-1 gap-4">
+            {values.map((val) => (
+              <div key={val.title} className="flex items-start gap-4">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
+                  style={{ background: "linear-gradient(135deg, #C4522A15, #E8821A20)" }}
+                >
+                  {val.icon}
+                </div>
+                <div>
+                  <h4
+                    className="text-sm font-bold text-[#3D2B1F] mb-0.5"
+                    style={{ fontFamily: "'Nunito', sans-serif" }}
+                  >
+                    {val.title}
+                  </h4>
+                  <p
+                    className="text-xs text-[#8B6F5E] leading-relaxed"
+                    style={{ fontFamily: "'Lora', serif" }}
+                  >
+                    {val.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <h2
-          className="text-4xl md:text-5xl font-bold leading-tight mb-6"
-          style={{
-            fontFamily: "'Playfair Display', Georgia, serif",
-            background: "linear-gradient(135deg, #C4522A, #E8821A, #2D6A4F)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-          }}
-        >
-          Carregar identidade
-          <br />
-          <span style={{ WebkitTextFillColor: "#3D2B1F", backgroundClip: "unset" }}>
-            é nossa missão
-          </span>
-        </h2>
-
-        <p
-          className="text-[#5C4033] text-base leading-relaxed mb-4"
-          style={{ fontFamily: "'Lora', serif" }}
-        >
-          A Nativa nasceu do amor pela cultura brasileira e pelo artesanato. Cada bolsa que criamos
-          carrega a essência da nossa terra — as cores vibrantes da Amazônia, os padrões dos povos
-          originários e a riqueza da fauna e flora nativa.
-        </p>
-        <p
-          className="text-[#8B6F5E] text-base leading-relaxed mb-8"
-          style={{ fontFamily: "'Lora', serif", fontStyle: "italic" }}
-        >
-          &quot;Não fazemos moda. Fazemos bolsas com memória.&quot;
-        </p>
-
-        <div className="grid grid-cols-1 gap-4">
-          {values.map((val) => (
-            <div key={val.title} className="flex items-start gap-4">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
-                style={{ background: "linear-gradient(135deg, #C4522A15, #E8821A20)" }}
-              >
-                {val.icon}
-              </div>
-              <div>
-                <h4
-                  className="text-sm font-bold text-[#3D2B1F] mb-0.5"
-                  style={{ fontFamily: "'Nunito', sans-serif" }}
-                >
-                  {val.title}
-                </h4>
-                <p
-                  className="text-xs text-[#8B6F5E] leading-relaxed"
-                  style={{ fontFamily: "'Lora', serif" }}
-                >
-                  {val.desc}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* CTA Making of — à direita do texto (desktop) */}
+        {desktopCta ? (
+          <div className="pointer-events-none absolute inset-y-0 right-0 hidden items-center md:flex">
+            <div className="pointer-events-auto">{desktopCta}</div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function BastidoresToggle({
-  view,
-  onToggle,
+/** CTA vertical à direita do texto — chama para o making of */
+function MakingOfCta({
+  onClick,
   reduceMotion,
 }: {
-  view: AboutView;
-  onToggle: () => void;
+  onClick: () => void;
   reduceMotion: boolean | null;
 }) {
-  const showingMakingOf = view === "making-of";
-
   return (
     <motion.button
       type="button"
-      onClick={onToggle}
-      className="group absolute top-0 right-0 z-20 inline-flex items-center gap-2 rounded-full border border-[#E8D5C4] bg-white/90 px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-[#C4522A] shadow-[0_8px_24px_rgba(196,82,42,0.12)] backdrop-blur-sm transition hover:border-[#C4522A]/40 hover:bg-white hover:shadow-[0_10px_28px_rgba(196,82,42,0.18)]"
+      onClick={onClick}
+      className="group relative flex w-[5.75rem] flex-col items-center gap-2.5 rounded-3xl border border-[#E8D5C4]/90 bg-white/95 px-2.5 py-4 shadow-[0_12px_36px_rgba(196,82,42,0.14)] backdrop-blur-sm"
       style={{ fontFamily: "'Nunito', sans-serif" }}
-      aria-label={showingMakingOf ? "Voltar para Nossa História" : "Ver making of / bastidores"}
-      animate={
-        reduceMotion
-          ? undefined
-          : showingMakingOf
+      aria-label="Ver making of / bastidores"
+      whileHover={reduceMotion ? undefined : { scale: 1.04, y: -2 }}
+      whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+    >
+      {/* Halo pulsante */}
+      {!reduceMotion ? (
+        <motion.span
+          className="pointer-events-none absolute -inset-1 rounded-[1.6rem]"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 35%, rgba(196,82,42,0.22), transparent 70%)",
+          }}
+          animate={{ opacity: [0.35, 0.85, 0.35], scale: [1, 1.04, 1] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+          aria-hidden
+        />
+      ) : null}
+
+      <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#C4522A] to-[#E8821A] text-white shadow-[0_8px_20px_rgba(196,82,42,0.35)]">
+        <Clapperboard className="h-5 w-5" strokeWidth={1.75} />
+        {!reduceMotion ? (
+          <motion.span
+            className="absolute inset-0 rounded-full border-2 border-[#C4522A]/40"
+            animate={{ scale: [1, 1.35], opacity: [0.55, 0] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
+            aria-hidden
+          />
+        ) : null}
+      </span>
+
+      <span className="relative text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] text-[#C4522A]">
+        Making
+        <br />
+        of
+      </span>
+
+      <motion.span
+        className="relative text-[#E8821A]"
+        animate={reduceMotion ? undefined : { x: [0, 5, 0] }}
+        transition={
+          reduceMotion
             ? undefined
-            : { x: [0, 5, 0] }
-      }
-      transition={
-        reduceMotion || showingMakingOf
-          ? undefined
-          : { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
-      }
+            : { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+        }
+        aria-hidden
+      >
+        <ArrowRight className="h-4 w-4" />
+      </motion.span>
+    </motion.button>
+  );
+}
+
+function MakingOfBackButton({
+  onClick,
+  reduceMotion,
+}: {
+  onClick: () => void;
+  reduceMotion: boolean | null;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      className="absolute right-0 top-0 z-20 inline-flex items-center gap-2 rounded-full border border-[#E8D5C4] bg-white/95 px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-[#C4522A] shadow-sm backdrop-blur-sm transition hover:bg-white"
+      style={{ fontFamily: "'Nunito', sans-serif" }}
+      aria-label="Voltar para Nossa História"
       whileHover={reduceMotion ? undefined : { scale: 1.03 }}
       whileTap={reduceMotion ? undefined : { scale: 0.98 }}
     >
-      {showingMakingOf ? (
-        <>
-          <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
-          <span>Voltar</span>
-        </>
-      ) : (
-        <>
-          <span>Making of</span>
-          <ArrowRight className="h-3.5 w-3.5 shrink-0" />
-        </>
-      )}
+      <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+      <span>Voltar</span>
     </motion.button>
   );
 }
@@ -335,10 +390,6 @@ export default function AboutSection() {
   const [view, setView] = useState<AboutView>("story");
   const measureRef = useRef<HTMLDivElement>(null);
   const [panelHeight, setPanelHeight] = useState<number | "auto">("auto");
-
-  const toggleView = () => {
-    setView((v) => (v === "story" ? "making-of" : "story"));
-  };
 
   useLayoutEffect(() => {
     const el = measureRef.current;
@@ -376,11 +427,12 @@ export default function AboutSection() {
 
           {/* —— Desktop/tablet: swap no mesmo espaço —— */}
           <div className="relative hidden md:block">
-            <BastidoresToggle
-              view={view}
-              onToggle={toggleView}
-              reduceMotion={reduceMotion}
-            />
+            {view === "making-of" ? (
+              <MakingOfBackButton
+                onClick={() => setView("story")}
+                reduceMotion={reduceMotion}
+              />
+            ) : null}
 
             <motion.div
               className="overflow-hidden"
@@ -415,7 +467,14 @@ export default function AboutSection() {
                           : { duration: 0.38, ease: [0.22, 1, 0.36, 1] }
                       }
                     >
-                      <AboutStoryContent />
+                      <AboutStoryContent
+                        desktopCta={
+                          <MakingOfCta
+                            onClick={() => setView("making-of")}
+                            reduceMotion={reduceMotion}
+                          />
+                        }
+                      />
                     </motion.div>
                   ) : (
                     <motion.div
