@@ -1,15 +1,38 @@
 /**
  * Nativa Store — About Section
  * Design: Brasil Vivo — Artesanato com Alma
- * Two-column layout: portrait artisan photo left, story text right
+ * Desktop: troca texto/foto ↔ making-of no mesmo espaço
+ * Mobile: texto/foto + stories abaixo (inalterado)
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+} from "framer-motion";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
+import { StoriesDesktopPanel } from "./stories/StoriesDesktopPanel";
 import { StoriesSection } from "./stories/StoriesSection";
-import { ArrowNativa, FeatherGreen, FeatherRed, WaveDividerDown, WaveDividerUp } from "./NativaDecorations";
+import {
+  ArrowNativa,
+  FeatherGreen,
+  FeatherRed,
+  WaveDividerDown,
+  WaveDividerUp,
+} from "./NativaDecorations";
 
 const ABOUT_IMAGE = "/images/1cad9ce5-deab-4955-8b80-f93e26115088.jpg";
 const MAX_TILT = 10;
+
+type AboutView = "story" | "making-of";
 
 type TiltState = {
   rotateX: number;
@@ -41,7 +64,7 @@ function AboutPhotoCard() {
   }, []);
 
   const handleMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
+    (event: MouseEvent<HTMLDivElement>) => {
       if (motionReduced) return;
 
       const element = cardRef.current;
@@ -178,7 +201,159 @@ const values = [
   },
 ];
 
+function AboutStoryContent() {
+  return (
+    <div className="grid md:grid-cols-[minmax(0,340px)_1fr] lg:grid-cols-[minmax(0,380px)_1fr] gap-12 lg:gap-16 xl:gap-20 items-center">
+      <div className="relative order-2 md:order-1 flex justify-center md:justify-start py-2">
+        <AboutPhotoCard />
+      </div>
+
+      <div className="order-1 md:order-2 md:pr-40 lg:pr-44">
+        <div className="flex items-center gap-3 mb-4">
+          <ArrowNativa className="w-20 h-4" />
+          <span
+            className="text-xs font-semibold text-[#1B7A8C] uppercase tracking-widest"
+            style={{ fontFamily: "'Nunito', sans-serif" }}
+          >
+            Nossa História
+          </span>
+        </div>
+
+        <h2
+          className="text-4xl md:text-5xl font-bold leading-tight mb-6"
+          style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            background: "linear-gradient(135deg, #C4522A, #E8821A, #2D6A4F)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}
+        >
+          Carregar identidade
+          <br />
+          <span style={{ WebkitTextFillColor: "#3D2B1F", backgroundClip: "unset" }}>
+            é nossa missão
+          </span>
+        </h2>
+
+        <p
+          className="text-[#5C4033] text-base leading-relaxed mb-4"
+          style={{ fontFamily: "'Lora', serif" }}
+        >
+          A Nativa nasceu do amor pela cultura brasileira e pelo artesanato. Cada bolsa que criamos
+          carrega a essência da nossa terra — as cores vibrantes da Amazônia, os padrões dos povos
+          originários e a riqueza da fauna e flora nativa.
+        </p>
+        <p
+          className="text-[#8B6F5E] text-base leading-relaxed mb-8"
+          style={{ fontFamily: "'Lora', serif", fontStyle: "italic" }}
+        >
+          &quot;Não fazemos moda. Fazemos bolsas com memória.&quot;
+        </p>
+
+        <div className="grid grid-cols-1 gap-4">
+          {values.map((val) => (
+            <div key={val.title} className="flex items-start gap-4">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
+                style={{ background: "linear-gradient(135deg, #C4522A15, #E8821A20)" }}
+              >
+                {val.icon}
+              </div>
+              <div>
+                <h4
+                  className="text-sm font-bold text-[#3D2B1F] mb-0.5"
+                  style={{ fontFamily: "'Nunito', sans-serif" }}
+                >
+                  {val.title}
+                </h4>
+                <p
+                  className="text-xs text-[#8B6F5E] leading-relaxed"
+                  style={{ fontFamily: "'Lora', serif" }}
+                >
+                  {val.desc}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BastidoresToggle({
+  view,
+  onToggle,
+  reduceMotion,
+}: {
+  view: AboutView;
+  onToggle: () => void;
+  reduceMotion: boolean | null;
+}) {
+  const showingMakingOf = view === "making-of";
+
+  return (
+    <motion.button
+      type="button"
+      onClick={onToggle}
+      className="group absolute top-0 right-0 z-20 inline-flex items-center gap-2 rounded-full border border-[#E8D5C4] bg-white/90 px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-[#C4522A] shadow-[0_8px_24px_rgba(196,82,42,0.12)] backdrop-blur-sm transition hover:border-[#C4522A]/40 hover:bg-white hover:shadow-[0_10px_28px_rgba(196,82,42,0.18)]"
+      style={{ fontFamily: "'Nunito', sans-serif" }}
+      aria-label={showingMakingOf ? "Voltar para Nossa História" : "Ver making of / bastidores"}
+      animate={
+        reduceMotion
+          ? undefined
+          : showingMakingOf
+            ? undefined
+            : { x: [0, 5, 0] }
+      }
+      transition={
+        reduceMotion || showingMakingOf
+          ? undefined
+          : { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
+      }
+      whileHover={reduceMotion ? undefined : { scale: 1.03 }}
+      whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+    >
+      {showingMakingOf ? (
+        <>
+          <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+          <span>Voltar</span>
+        </>
+      ) : (
+        <>
+          <span>Making of</span>
+          <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+        </>
+      )}
+    </motion.button>
+  );
+}
+
 export default function AboutSection() {
+  const reduceMotion = useReducedMotion();
+  const [view, setView] = useState<AboutView>("story");
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [panelHeight, setPanelHeight] = useState<number | "auto">("auto");
+
+  const toggleView = () => {
+    setView((v) => (v === "story" ? "making-of" : "story"));
+  };
+
+  useLayoutEffect(() => {
+    const el = measureRef.current;
+    if (!el) return;
+
+    const update = () => {
+      setPanelHeight(el.offsetHeight);
+    };
+    update();
+
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view]);
+
   return (
     <>
       <WaveDividerUp color="#FAF7F2" />
@@ -187,7 +362,6 @@ export default function AboutSection() {
         className="py-20 relative overflow-hidden"
         style={{ background: "#F5F0E8" }}
       >
-        {/* Floating feathers */}
         <div className="absolute top-16 left-4 feather-float-delay opacity-30">
           <FeatherGreen className="w-7 h-16 rotate-[-25deg]" />
         </div>
@@ -196,85 +370,80 @@ export default function AboutSection() {
         </div>
 
         <div className="container">
-          <div className="grid md:grid-cols-[minmax(0,340px)_1fr] lg:grid-cols-[minmax(0,380px)_1fr] gap-12 lg:gap-16 xl:gap-20 items-center">
-            {/* Portrait photo — 3D tilt on hover */}
-            <div className="relative order-2 md:order-1 flex justify-center md:justify-start py-2">
-              <AboutPhotoCard />
-            </div>
-
-            {/* Text side */}
-            <div className="order-1 md:order-2">
-              <div className="flex items-center gap-3 mb-4">
-                <ArrowNativa className="w-20 h-4" />
-                <span
-                  className="text-xs font-semibold text-[#1B7A8C] uppercase tracking-widest"
-                  style={{ fontFamily: "'Nunito', sans-serif" }}
-                >
-                  Nossa História
-                </span>
-              </div>
-
-              <h2
-                className="text-4xl md:text-5xl font-bold leading-tight mb-6"
-                style={{
-                  fontFamily: "'Playfair Display', Georgia, serif",
-                  background: "linear-gradient(135deg, #C4522A, #E8821A, #2D6A4F)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                Carregar identidade<br />
-                <span style={{ WebkitTextFillColor: "#3D2B1F", backgroundClip: "unset" }}>
-                  é nossa missão
-                </span>
-              </h2>
-
-              <p
-                className="text-[#5C4033] text-base leading-relaxed mb-4"
-                style={{ fontFamily: "'Lora', serif" }}
-              >
-                A Nativa nasceu do amor pela cultura brasileira e pelo artesanato. Cada bolsa que criamos carrega a essência da nossa terra — as cores vibrantes da Amazônia, os padrões dos povos originários e a riqueza da fauna e flora nativa.
-              </p>
-              <p
-                className="text-[#8B6F5E] text-base leading-relaxed mb-8"
-                style={{ fontFamily: "'Lora', serif", fontStyle: "italic" }}
-              >
-                "Não fazemos moda. Fazemos bolsas com memória."
-              </p>
-
-              {/* Values */}
-              <div className="grid grid-cols-1 gap-4">
-                {values.map((val) => (
-                  <div key={val.title} className="flex items-start gap-4">
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
-                      style={{ background: "linear-gradient(135deg, #C4522A15, #E8821A20)" }}
-                    >
-                      {val.icon}
-                    </div>
-                    <div>
-                      <h4
-                        className="text-sm font-bold text-[#3D2B1F] mb-0.5"
-                        style={{ fontFamily: "'Nunito', sans-serif" }}
-                      >
-                        {val.title}
-                      </h4>
-                      <p
-                        className="text-xs text-[#8B6F5E] leading-relaxed"
-                        style={{ fontFamily: "'Lora', serif" }}
-                      >
-                        {val.desc}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* —— Mobile: texto/foto + stories abaixo (comportamento atual) —— */}
+          <div className="md:hidden">
+            <AboutStoryContent />
+            <StoriesSection />
           </div>
 
-          {/* Stories / making-of — carrossel (md+) e imersivo (mobile) */}
-          <StoriesSection />
+          {/* —— Desktop/tablet: swap no mesmo espaço —— */}
+          <div className="relative hidden md:block">
+            <BastidoresToggle
+              view={view}
+              onToggle={toggleView}
+              reduceMotion={reduceMotion}
+            />
+
+            <motion.div
+              className="overflow-hidden"
+              animate={
+                reduceMotion || panelHeight === "auto"
+                  ? undefined
+                  : { height: panelHeight }
+              }
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : { duration: 0.45, ease: [0.22, 1, 0.36, 1] }
+              }
+            >
+              <div ref={measureRef}>
+                <AnimatePresence mode="wait" initial={false}>
+                  {view === "story" ? (
+                    <motion.div
+                      key="about-story"
+                      initial={
+                        reduceMotion ? false : { opacity: 0, x: -28 }
+                      }
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={
+                        reduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, x: -28 }
+                      }
+                      transition={
+                        reduceMotion
+                          ? { duration: 0 }
+                          : { duration: 0.38, ease: [0.22, 1, 0.36, 1] }
+                      }
+                    >
+                      <AboutStoryContent />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="about-making-of"
+                      initial={
+                        reduceMotion ? false : { opacity: 0, x: 28 }
+                      }
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={
+                        reduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, x: 28 }
+                      }
+                      transition={
+                        reduceMotion
+                          ? { duration: 0 }
+                          : { duration: 0.38, ease: [0.22, 1, 0.36, 1] }
+                      }
+                    >
+                      <StoriesDesktopPanel active />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          </div>
         </div>
       </section>
       <WaveDividerDown color="#FAF7F2" />

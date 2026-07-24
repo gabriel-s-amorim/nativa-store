@@ -20,7 +20,7 @@ export function StoriesCarousel({ stories, nearViewport }: StoriesCarouselProps)
   const reduceMotion = useReducedMotion();
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "center",
-    containScroll: false,
+    containScroll: "trimSnaps",
     dragFree: false,
     skipSnaps: false,
     duration: reduceMotion ? 10 : 28,
