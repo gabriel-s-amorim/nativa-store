@@ -19,6 +19,8 @@ type StoryVideoProps = {
   onEnded?: () => void;
   muted?: boolean;
   onMutedChange?: (muted: boolean) => void;
+  /** contain = vídeo inteiro sem corte (ativo); cover = laterais */
+  fit?: "cover" | "contain";
 };
 
 /**
@@ -36,6 +38,7 @@ export function StoryVideo({
   onEnded,
   muted: mutedProp,
   onMutedChange,
+  fit = "cover",
 }: StoryVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [internalMuted, setInternalMuted] = useState(false);
@@ -124,6 +127,8 @@ export function StoryVideo({
       ? `${story.videoUrl}#t=0.1`
       : story.videoUrl;
 
+  const objectFit = fit === "contain" ? "object-contain" : "object-cover";
+
   return (
     <div
       className={`relative h-full w-full overflow-hidden bg-[#3D2B1F] ${className}`}
@@ -133,7 +138,7 @@ export function StoryVideo({
         <img
           src={story.thumbnailUrl}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+          className={`absolute inset-0 h-full w-full ${objectFit}`}
           loading="lazy"
           decoding="async"
           draggable={false}
@@ -148,7 +153,7 @@ export function StoryVideo({
           key={story.id}
           src={videoSrc}
           poster={hasThumb ? story.thumbnailUrl : undefined}
-          className="absolute inset-0 h-full w-full object-cover"
+          className={`absolute inset-0 h-full w-full ${objectFit}`}
           playsInline
           muted={muted || !active}
           loop={loop}

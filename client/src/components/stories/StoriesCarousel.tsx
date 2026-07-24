@@ -216,8 +216,8 @@ export function StoriesCarousel({
         aria-hidden
       />
 
-      {/* Altura reservada — evita a seção “pular” ao trocar de slide */}
-      <div className="relative h-[min(580px,70vh)] min-h-[440px]">
+      {/* Altura folgada: o card ativo NÃO usa scale>1 (evita corte topo/baixo) */}
+      <div className="relative h-[min(640px,78vh)] min-h-[500px]">
         <div className="absolute inset-0 overflow-hidden" ref={emblaRef}>
           <div className="flex h-full items-center">
             {stories.map((story, index) => {
@@ -226,8 +226,9 @@ export function StoriesCarousel({
               const isNeighbor = dist === 1;
               const shouldLoad = nearViewport && dist <= 1 && !isCta;
 
-              const scale = isActive ? 1.06 : dist === 1 ? 0.84 : 0.72;
-              const opacity = isActive ? 1 : dist === 1 ? 0.5 : 0.28;
+              // Destaque = laterais menores; ativo fica em escala 1 (sem clip)
+              const scale = isActive ? 1 : dist === 1 ? 0.86 : 0.74;
+              const opacity = isActive ? 1 : dist === 1 ? 0.55 : 0.32;
 
               return (
                 <div
@@ -286,6 +287,7 @@ export function StoriesCarousel({
                         loop
                         muted={muted}
                         onMutedChange={setMuted}
+                        fit={isActive ? "contain" : "cover"}
                       />
                       {!isActive ? (
                         <div
@@ -323,8 +325,8 @@ export function StoriesCarousel({
               <motion.div
                 className="relative w-full max-w-[300px] lg:max-w-[320px]"
                 animate={{
-                  scale: isCta ? 1.08 : Math.abs(selected - ctaIndex) === 1 ? 0.84 : 0.72,
-                  opacity: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.5 : 0.28,
+                  scale: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.86 : 0.74,
+                  opacity: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.55 : 0.32,
                 }}
                 transition={tween}
                 style={{
