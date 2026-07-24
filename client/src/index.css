@@ -141,6 +141,18 @@
     }
   }
 
+  /* Quiz CTA — janela de parallax (fundo fixed no desktop) */
+  .quiz-cta-parallax {
+    clip-path: inset(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .quiz-cta-parallax__bg {
+      position: absolute !important;
+      inset: 0 !important;
+    }
+  }
+
   /* Nativa Brand Utilities */
   .nativa-gradient-text {
     background: linear-gradient(135deg, #C4522A 0%, #E8821A 35%, #C9922A 60%, #2D6A4F 100%);
