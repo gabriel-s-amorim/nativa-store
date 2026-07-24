@@ -8,8 +8,8 @@ import {
 import { useRef } from "react";
 import { Link } from "wouter";
 
-/** Foto da artesã com bolsa — coerente com a identidade Nativa. */
-const QUIZ_CTA_BG = "/images/1cad9ce5-deab-4955-8b80-f93e26115088.jpg";
+/** Costura à mão — fundo do CTA do quiz (parallax). */
+const QUIZ_CTA_BG = "/images/quiz-cta-bg.webp";
 
 /** Convite ao Quiz de Curadoria — parallax no desktop e no mobile. */
 export default function QuizCtaSection() {
