@@ -2,10 +2,10 @@ import { z } from "zod";
 
 const imageUrlSchema = z
   .string()
-  .min(1, "Informe a URL da imagem")
   .refine(
-    (value) => value.startsWith("/") || /^https?:\/\//i.test(value),
-    "Use uma URL http(s) ou um path absoluto (ex: /images/foto.jpg)",
+    (value) =>
+      value === "" || value.startsWith("/") || /^https?:\/\//i.test(value),
+    "Use uma URL http(s), um path absoluto (ex: /images/foto.jpg) ou deixe vazio",
   );
 
 export const quizTagWeightSchema = z.object({

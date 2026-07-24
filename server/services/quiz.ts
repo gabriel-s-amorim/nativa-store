@@ -52,6 +52,149 @@ export async function listQuizQuestions(): Promise<QuizQuestion[]> {
   return (await listQuestionRows()).map(mapQuizQuestionRow);
 }
 
+export async function createQuizQuestion(input: QuizQuestionInput): Promise<QuizQuestion> {
+  const { data: existing, error: existingError } = await supabase
+    .from("quiz_questions")
+    .select("id")
+    .eq("id", input.id)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  if (existing) {
+    throw new Error("Já existe uma pergunta com este id");
+  }
+
+  const row = mapQuestionToRow(input);
+  const { data, error } = await supabase
+    .from("quiz_questions")
+    .insert({ ...row, created_at: new Date().toISOString() })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapQuizQuestionRow(data as QuizQuestionRow);
+}
+
+export async function updateQuizQuestion(
+  questionId: string,
+  input: QuizQuestionInput,
+): Promise<QuizQuestion> {
+  const row = mapQuestionToRow({ ...input, id: questionId });
+  const { data, error } = await supabase
+    .from("quiz_questions")
+    .update(row)
+    .eq("id", questionId)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Pergunta não encontrada");
+  }
+
+  return mapQuizQuestionRow(data as QuizQuestionRow);
+}
+
+export async function deleteQuizQuestion(questionId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("quiz_questions")
+    .delete()
+    .eq("id", questionId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Pergunta não encontrada");
+  }
+}
+
+export async function createQuizResult(input: QuizResultInput): Promise<QuizResult> {
+  const { data: existing, error: existingError } = await supabase
+    .from("quiz_results")
+    .select("id")
+    .eq("id", input.id)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  if (existing) {
+    throw new Error("Já existe um perfil com este id");
+  }
+
+  const row = mapResultToRow(input);
+  const { data, error } = await supabase
+    .from("quiz_results")
+    .insert({ ...row, created_at: new Date().toISOString() })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapQuizResultRow(data as QuizResultRow);
+}
+
+export async function updateQuizResult(
+  resultId: string,
+  input: QuizResultInput,
+): Promise<QuizResult> {
+  const row = mapResultToRow({ ...input, id: resultId });
+  const { data, error } = await supabase
+    .from("quiz_results")
+    .update(row)
+    .eq("id", resultId)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Perfil não encontrado");
+  }
+
+  return mapQuizResultRow(data as QuizResultRow);
+}
+
+export async function deleteQuizResult(resultId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("quiz_results")
+    .delete()
+    .eq("id", resultId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if (error.message.toLowerCase().includes("foreign key") || error.code === "23503") {
+      throw new Error(
+        "Não é possível excluir este perfil: já existem conclusões de quiz vinculadas a ele",
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Perfil não encontrado");
+  }
+}
+
 export async function updateQuizOptionImage(
   questionId: string,
   optionId: string,

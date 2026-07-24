@@ -10,22 +10,33 @@ import { z } from "zod";
 import { Router } from "express";
 import { requireAdmin } from "../middleware/requireAdmin";
 import {
+  createQuizQuestion,
+  createQuizResult,
+  deleteQuizQuestion,
+  deleteQuizResult,
   exportQuiz,
   importQuiz,
   listQuizQuestions,
   listQuizResults,
   updateQuizOptionImage,
+  updateQuizQuestion,
+  updateQuizResult,
 } from "../services/quiz";
 
 const optionImageSchema = z.object({
   imageUrl: z
     .string()
-    .min(1)
     .refine(
-      (value) => value.startsWith("/") || /^https?:\/\//i.test(value),
+      (value) => value === "" || value.startsWith("/") || /^https?:\/\//i.test(value),
       "URL de imagem inválida",
     ),
 });
+
+function statusFromMessage(message: string): number {
+  if (message.includes("não encontrad")) return 404;
+  if (message.includes("Já existe") || message.includes("Não é possível excluir")) return 409;
+  return 500;
+}
 
 const router = Router();
 
@@ -37,6 +48,90 @@ router.get("/", requireAdmin, async (_req, res) => {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Erro ao carregar quiz",
     });
+  }
+});
+
+router.post("/questions", requireAdmin, async (req, res) => {
+  try {
+    const parsed = quizQuestionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });
+      return;
+    }
+
+    const question = await createQuizQuestion(parsed.data);
+    res.status(201).json(question);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao criar pergunta";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+
+router.put("/questions/:questionId", requireAdmin, async (req, res) => {
+  try {
+    const parsed = quizQuestionSchema.safeParse({ ...req.body, id: req.params.questionId });
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });
+      return;
+    }
+
+    const question = await updateQuizQuestion(req.params.questionId, parsed.data);
+    res.json(question);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao atualizar pergunta";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+
+router.delete("/questions/:questionId", requireAdmin, async (req, res) => {
+  try {
+    await deleteQuizQuestion(req.params.questionId);
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao excluir pergunta";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+
+router.post("/results", requireAdmin, async (req, res) => {
+  try {
+    const parsed = quizResultSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });
+      return;
+    }
+
+    const result = await createQuizResult(parsed.data);
+    res.status(201).json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao criar perfil";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+
+router.put("/results/:resultId", requireAdmin, async (req, res) => {
+  try {
+    const parsed = quizResultSchema.safeParse({ ...req.body, id: req.params.resultId });
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });
+      return;
+    }
+
+    const result = await updateQuizResult(req.params.resultId, parsed.data);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao atualizar perfil";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+
+router.delete("/results/:resultId", requireAdmin, async (req, res) => {
+  try {
+    await deleteQuizResult(req.params.resultId);
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao excluir perfil";
+    res.status(statusFromMessage(message)).json({ error: message });
   }
 });
 
@@ -60,8 +155,7 @@ router.patch(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Erro ao atualizar imagem da opção";
-      const status = message.includes("não encontrada") ? 404 : 500;
-      res.status(status).json({ error: message });
+      res.status(statusFromMessage(message)).json({ error: message });
     }
   },
 );

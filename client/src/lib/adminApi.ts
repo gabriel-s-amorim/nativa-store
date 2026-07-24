@@ -30,6 +30,7 @@ import type {
 import type { ProductInput } from "@shared/schemas/product";
 import type { Product } from "@shared/types/product";
 import type { QuizExportPayload, QuizImportReport, QuizQuestion, QuizResult } from "@shared/types/quiz";
+import type { QuizQuestionInput, QuizResultInput } from "@shared/schemas/quiz";
 import { supabaseClient } from "@/lib/supabaseClient";
 
 export class AdminApiError extends Error {
@@ -915,6 +916,46 @@ export function sendBrevoTestEmail(input: {
 
 export function fetchAdminQuiz() {
   return request<{ questions: QuizQuestion[]; results: QuizResult[] }>("/api/admin/quiz");
+}
+
+export function createAdminQuizQuestion(input: QuizQuestionInput) {
+  return request<QuizQuestion>("/api/admin/quiz/questions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminQuizQuestion(questionId: string, input: QuizQuestionInput) {
+  return request<QuizQuestion>(`/api/admin/quiz/questions/${encodeURIComponent(questionId)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAdminQuizQuestion(questionId: string) {
+  return request<{ success: true }>(`/api/admin/quiz/questions/${encodeURIComponent(questionId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function createAdminQuizResult(input: QuizResultInput) {
+  return request<QuizResult>("/api/admin/quiz/results", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminQuizResult(resultId: string, input: QuizResultInput) {
+  return request<QuizResult>(`/api/admin/quiz/results/${encodeURIComponent(resultId)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAdminQuizResult(resultId: string) {
+  return request<{ success: true }>(`/api/admin/quiz/results/${encodeURIComponent(resultId)}`, {
+    method: "DELETE",
+  });
 }
 
 export function exportQuiz() {
