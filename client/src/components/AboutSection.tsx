@@ -14,7 +14,6 @@ import { ArrowLeft, ArrowRight, Clapperboard } from "lucide-react";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent,
@@ -388,27 +387,13 @@ function MakingOfBackButton({
 export default function AboutSection() {
   const reduceMotion = useReducedMotion();
   const [view, setView] = useState<AboutView>("story");
-  const measureRef = useRef<HTMLDivElement>(null);
-  const [panelHeight, setPanelHeight] = useState<number | "auto">("auto");
-
-  useLayoutEffect(() => {
-    const el = measureRef.current;
-    if (!el) return;
-
-    // Mede só na troca story ↔ making-of — não acompanha o carrossel
-    // (evita a seção “pular” a cada slide).
-    const measure = () => setPanelHeight(el.offsetHeight);
-    measure();
-    const t = window.setTimeout(measure, 420);
-    return () => window.clearTimeout(t);
-  }, [view]);
 
   return (
     <>
       <WaveDividerUp color="#FAF7F2" />
       <section
         id="sobre"
-        className="py-20 relative overflow-x-hidden"
+        className="py-20 relative"
         style={{ background: "#F5F0E8" }}
       >
         <div className="absolute top-16 left-4 feather-float-delay opacity-30">
@@ -434,75 +419,51 @@ export default function AboutSection() {
               />
             ) : null}
 
-            <motion.div
-              className="overflow-x-hidden"
-              animate={
-                reduceMotion || panelHeight === "auto"
-                  ? undefined
-                  : { height: panelHeight }
-              }
-              transition={
-                reduceMotion
-                  ? { duration: 0 }
-                  : { duration: 0.45, ease: [0.22, 1, 0.36, 1] }
-              }
-            >
-              <div ref={measureRef}>
-                <AnimatePresence mode="wait" initial={false}>
-                  {view === "story" ? (
-                    <motion.div
-                      key="about-story"
-                      initial={
-                        reduceMotion ? false : { opacity: 0, x: -28 }
-                      }
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={
-                        reduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, x: -28 }
-                      }
-                      transition={
-                        reduceMotion
-                          ? { duration: 0 }
-                          : { duration: 0.38, ease: [0.22, 1, 0.36, 1] }
-                      }
-                    >
-                      <AboutStoryContent
-                        desktopCta={
-                          <MakingOfCta
-                            onClick={() => setView("making-of")}
-                            reduceMotion={reduceMotion}
-                          />
-                        }
+            <AnimatePresence mode="wait" initial={false}>
+              {view === "story" ? (
+                <motion.div
+                  key="about-story"
+                  initial={reduceMotion ? false : { opacity: 0, x: -28 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={
+                    reduceMotion ? { opacity: 0 } : { opacity: 0, x: -28 }
+                  }
+                  transition={
+                    reduceMotion
+                      ? { duration: 0 }
+                      : { duration: 0.38, ease: [0.22, 1, 0.36, 1] }
+                  }
+                >
+                  <AboutStoryContent
+                    desktopCta={
+                      <MakingOfCta
+                        onClick={() => setView("making-of")}
+                        reduceMotion={reduceMotion}
                       />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="about-making-of"
-                      initial={
-                        reduceMotion ? false : { opacity: 0, x: 28 }
-                      }
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={
-                        reduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, x: 28 }
-                      }
-                      transition={
-                        reduceMotion
-                          ? { duration: 0 }
-                          : { duration: 0.38, ease: [0.22, 1, 0.36, 1] }
-                      }
-                    >
-                      <StoriesDesktopPanel
-                        active
-                        onReturnToStory={() => setView("story")}
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </motion.div>
+                    }
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="about-making-of"
+                  initial={reduceMotion ? false : { opacity: 0, x: 28 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={
+                    reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28 }
+                  }
+                  transition={
+                    reduceMotion
+                      ? { duration: 0 }
+                      : { duration: 0.38, ease: [0.22, 1, 0.36, 1] }
+                  }
+                >
+                  <StoriesDesktopPanel
+                    active
+                    onReturnToStory={() => setView("story")}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </section>
