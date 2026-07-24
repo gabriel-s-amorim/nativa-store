@@ -67,6 +67,9 @@ function applyDomClasses(state: AccessibilityState) {
   root.classList.remove("a11y-font-large", "a11y-font-xlarge");
   if (state.fontScale === "large") root.classList.add("a11y-font-large");
   if (state.fontScale === "xlarge") root.classList.add("a11y-font-xlarge");
+  root.setAttribute("data-a11y-contrast", state.highContrast ? "high" : "normal");
+  root.setAttribute("data-a11y-font", state.fontScale);
+  root.setAttribute("data-a11y-underline-links", state.underlineLinks ? "true" : "false");
 }
 
 export function AccessibilityProvider({ children }: { children: ReactNode }) {
@@ -87,26 +90,41 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
   }, [state, ready]);
 
   const toggleHighContrast = useCallback(() => {
-    setState((prev) => ({ ...prev, highContrast: !prev.highContrast }));
+    setState((prev) => {
+      const next = { ...prev, highContrast: !prev.highContrast };
+      applyDomClasses(next);
+      return next;
+    });
   }, []);
 
   const setFontScale = useCallback((fontScale: FontScale) => {
-    setState((prev) => ({ ...prev, fontScale }));
+    setState((prev) => {
+      const next = { ...prev, fontScale };
+      applyDomClasses(next);
+      return next;
+    });
   }, []);
 
   const cycleFontScale = useCallback(() => {
     setState((prev) => {
       const idx = FONT_CYCLE.indexOf(prev.fontScale);
-      const next = FONT_CYCLE[(idx + 1) % FONT_CYCLE.length] ?? "normal";
-      return { ...prev, fontScale: next };
+      const fontScale = FONT_CYCLE[(idx + 1) % FONT_CYCLE.length] ?? "normal";
+      const next = { ...prev, fontScale };
+      applyDomClasses(next);
+      return next;
     });
   }, []);
 
   const toggleUnderlineLinks = useCallback(() => {
-    setState((prev) => ({ ...prev, underlineLinks: !prev.underlineLinks }));
+    setState((prev) => {
+      const next = { ...prev, underlineLinks: !prev.underlineLinks };
+      applyDomClasses(next);
+      return next;
+    });
   }, []);
 
   const resetPreferences = useCallback(() => {
+    applyDomClasses(DEFAULT_STATE);
     setState(DEFAULT_STATE);
   }, []);
 

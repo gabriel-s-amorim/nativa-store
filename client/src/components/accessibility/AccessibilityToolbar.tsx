@@ -18,13 +18,15 @@ const FONT_LABEL: Record<FontScale, string> = {
 
 /**
  * Painel de acessibilidade WCAG — canto inferior esquerdo.
- * Mantém a paleta Nativa; só reforça contraste/legibilidade sob demanda.
+ * Preferências persistem em localStorage e aplicam classes no <html>.
  */
 export default function AccessibilityToolbar() {
   const [location] = useLocation();
   const isAdmin = location === "/admin" || location.startsWith("/admin/");
   const [open, setOpen] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
   const panelId = useId();
+  const statusId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const {
     highContrast,
@@ -62,11 +64,21 @@ export default function AccessibilityToolbar() {
 
   if (isAdmin) return null;
 
+  const announce = (message: string) => {
+    setStatusMessage("");
+    // Força releitura do aria-live quando a mensagem se repete
+    requestAnimationFrame(() => setStatusMessage(message));
+  };
+
   return (
     <div
       ref={panelRef}
       className="nativa-a11y-root fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] left-4 z-[46] sm:bottom-8 sm:left-6"
     >
+      <div id={statusId} className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {statusMessage}
+      </div>
+
       {open && (
         <div
           id={panelId}
@@ -97,31 +109,47 @@ export default function AccessibilityToolbar() {
             </button>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2" role="group" aria-label="Preferências de acessibilidade">
             <ToolbarToggle
               pressed={highContrast}
-              onClick={toggleHighContrast}
+              onClick={() => {
+                const next = !highContrast;
+                toggleHighContrast();
+                announce(next ? "Alto contraste ativado" : "Alto contraste desativado");
+              }}
               icon={<Contrast className="size-4" aria-hidden />}
               label="Alto contraste"
               hint={highContrast ? "Ativado" : "Desativado"}
             />
             <ToolbarToggle
               pressed={fontScale !== "normal"}
-              onClick={cycleFontScale}
+              onClick={() => {
+                const idx = (["normal", "large", "xlarge"] as FontScale[]).indexOf(fontScale);
+                const next = (["normal", "large", "xlarge"] as FontScale[])[(idx + 1) % 3] ?? "normal";
+                cycleFontScale();
+                announce(`Tamanho do texto: ${FONT_LABEL[next]}`);
+              }}
               icon={<Type className="size-4" aria-hidden />}
               label="Tamanho do texto"
               hint={FONT_LABEL[fontScale]}
             />
             <ToolbarToggle
               pressed={underlineLinks}
-              onClick={toggleUnderlineLinks}
+              onClick={() => {
+                const next = !underlineLinks;
+                toggleUnderlineLinks();
+                announce(next ? "Links sublinhados ativados" : "Links sublinhados desativados");
+              }}
               icon={<Link2 className="size-4" aria-hidden />}
               label="Sublinhar links"
               hint={underlineLinks ? "Ativado" : "Desativado"}
             />
             <button
               type="button"
-              onClick={resetPreferences}
+              onClick={() => {
+                resetPreferences();
+                announce("Preferências de acessibilidade restauradas");
+              }}
               className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl border border-[#C4522A]/15 bg-transparent px-3 py-2.5 text-xs font-semibold text-[#8B6F5E] transition-colors hover:border-[#C4522A]/35 hover:text-[#3D2B1F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4522A]"
               style={{ fontFamily: "'Nunito', sans-serif" }}
             >
@@ -142,6 +170,7 @@ export default function AccessibilityToolbar() {
         aria-label={open ? "Fechar acessibilidade" : "Abrir acessibilidade"}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
+        aria-describedby={statusId}
         title="Acessibilidade"
         onClick={() => setOpen((prev) => !prev)}
       >
@@ -169,10 +198,10 @@ function ToolbarToggle({
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4522A] ${
+      className={`flex w-full items-center gap-3 rounded-xl border-2 px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4522A] ${
         pressed
-          ? "border-[#C4522A]/40 bg-[#C4522A]/10 text-[#3D2B1F]"
-          : "border-[#C4522A]/12 bg-white/50 text-[#3D2B1F] hover:border-[#C4522A]/25"
+          ? "border-[#C4522A] bg-[#C4522A]/15 text-[#3D2B1F]"
+          : "border-[#C4522A]/20 bg-white/50 text-[#3D2B1F] hover:border-[#C4522A]/40"
       }`}
       style={{ fontFamily: "'Nunito', sans-serif" }}
     >
@@ -180,6 +209,7 @@ function ToolbarToggle({
         className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${
           pressed ? "bg-[#C4522A] text-white" : "bg-[#C4522A]/10 text-[#C4522A]"
         }`}
+        aria-hidden
       >
         {icon}
       </span>
@@ -187,6 +217,7 @@ function ToolbarToggle({
         <span className="block text-sm font-semibold leading-tight">{label}</span>
         <span className="block text-[0.7rem] text-[#8B6F5E]">{hint}</span>
       </span>
+      <span className="sr-only">{pressed ? "ativado" : "desativado"}</span>
     </button>
   );
 }

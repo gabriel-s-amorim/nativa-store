@@ -575,78 +575,261 @@ html.a11y-underline-links a[href] {
 }
 
 /*
- * Alto contraste dentro da identidade Nativa:
- * creme mais claro, marrom mais escuro, terracota/verde reforçados.
- * Não troca para preto/branco genérico.
+ * Alto contraste (WCAG 1.4.3 / 1.4.6 / 1.4.11)
+ * A loja usa muitas cores hex em classes Tailwind; só mudar tokens
+ * semânticos não altera a UI. Remapeamos tokens + hex da marca.
  */
 html.a11y-high-contrast {
-  --background: #fffcf7;
-  --foreground: #140e0a;
+  --background: #ffffff;
+  --foreground: #000000;
   --card: #ffffff;
-  --card-foreground: #140e0a;
+  --card-foreground: #000000;
   --popover: #ffffff;
-  --popover-foreground: #140e0a;
-  --primary: #9a3412;
-  --primary-foreground: #fffaf4;
-  --secondary: #14532d;
-  --secondary-foreground: #fffaf4;
-  --accent: #0e7490;
-  --accent-foreground: #fffaf4;
-  --muted: #efe8dc;
-  --muted-foreground: #3d2b1f;
-  --border: #5c4030;
-  --input: #5c4030;
-  --ring: #9a3412;
+  --popover-foreground: #000000;
+  --primary: #6b1f0a;
+  --primary-foreground: #ffffff;
+  --secondary: #0a3d24;
+  --secondary-foreground: #ffffff;
+  --accent: #084c5e;
+  --accent-foreground: #ffffff;
+  --muted: #f3f3f3;
+  --muted-foreground: #1a1a1a;
+  --destructive: #8b0000;
+  --destructive-foreground: #ffffff;
+  --border: #000000;
+  --input: #000000;
+  --ring: #6b1f0a;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #6b1f0a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f3f3f3;
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #000000;
+  --sidebar-ring: #6b1f0a;
+
+  /* Tokens de marca usados por utilitários Tailwind */
+  --color-nativa-cream: #ffffff;
+  --color-nativa-terracota: #6b1f0a;
+  --color-nativa-verde: #0a3d24;
+  --color-nativa-turquesa: #084c5e;
+  --color-nativa-laranja: #9a3412;
+  --color-nativa-dourado: #6b4c00;
+  --color-nativa-dark: #000000;
+
   color-scheme: light;
 }
 
 html.a11y-high-contrast body {
-  background-color: #fffcf7 !important;
-  color: #140e0a;
+  background-color: #ffffff !important;
+  color: #000000 !important;
 }
 
 html.a11y-high-contrast *:focus-visible {
-  outline: 3px solid #9a3412 !important;
-  outline-offset: 2px;
+  outline: 3px solid #000000 !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px #ffff00 !important;
+}
+
+/* Superfícies e tipografia — hex hardcoded da marca */
+html.a11y-high-contrast [class*="bg-[#F5F0E8]"],
+html.a11y-high-contrast [class*="bg-[#FAF7F2]"],
+html.a11y-high-contrast [class*="bg-[#FFFCF7]"],
+html.a11y-high-contrast [class*="bg-[#fffcf7]"] {
+  background-color: #ffffff !important;
+}
+
+html.a11y-high-contrast [class*="text-[#3D2B1F]"],
+html.a11y-high-contrast [class*="text-[#8B6F5E]"],
+html.a11y-high-contrast [class*="text-[#5C4030]"],
+html.a11y-high-contrast [class*="text-[#6B5344]"] {
+  color: #000000 !important;
+}
+
+html.a11y-high-contrast [class*="text-[#C4522A]"],
+html.a11y-high-contrast [class*="text-[#A33A1A]"],
+html.a11y-high-contrast [class*="text-[#9a3412]"] {
+  color: #6b1f0a !important;
+}
+
+html.a11y-high-contrast [class*="text-[#2D6A4F]"],
+html.a11y-high-contrast [class*="text-[#1A3D2B]"] {
+  color: #0a3d24 !important;
+}
+
+html.a11y-high-contrast [class*="bg-[#C4522A]/"],
+html.a11y-high-contrast [class*="bg-[#A33A1A]/"] {
+  background-color: #fff8e7 !important;
+  color: #000000 !important;
+}
+
+html.a11y-high-contrast [class*="bg-[#C4522A]"]:not([class*="bg-[#C4522A]/"]),
+html.a11y-high-contrast [class*="bg-[#A33A1A]"]:not([class*="bg-[#A33A1A]/"]) {
+  background-color: #6b1f0a !important;
+  color: #ffffff !important;
+}
+
+html.a11y-high-contrast [class*="bg-[#2D6A4F]/"],
+html.a11y-high-contrast [class*="bg-[#1A3D2B]/"] {
+  background-color: #e8fff0 !important;
+  color: #000000 !important;
+}
+
+html.a11y-high-contrast [class*="bg-[#2D6A4F]"]:not([class*="bg-[#2D6A4F]/"]),
+html.a11y-high-contrast [class*="bg-[#1A3D2B]"]:not([class*="bg-[#1A3D2B]/"]) {
+  background-color: #0a3d24 !important;
+  color: #ffffff !important;
+}
+
+html.a11y-high-contrast [class*="border-[#E8D5C4]"],
+html.a11y-high-contrast [class*="border-[#D9C2AF]"],
+html.a11y-high-contrast [class*="border-[#CBB5A4]"],
+html.a11y-high-contrast [class*="border-[#C4522A]"],
+html.a11y-high-contrast [class*="border-[#3D2B1F]"] {
+  border-color: #000000 !important;
+}
+
+html.a11y-high-contrast [class*="ring-[#C4522A]"] {
+  --tw-ring-color: #000000 !important;
+}
+
+html.a11y-high-contrast a[href] {
+  color: #6b1f0a;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+html.a11y-high-contrast a[href]:hover,
+html.a11y-high-contrast a[href]:focus-visible {
+  color: #000000;
 }
 
 html.a11y-high-contrast .nativa-btn-primary {
-  background: #9a3412;
-  box-shadow: none;
+  background: #6b1f0a !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  border: 2px solid #000000;
 }
 
 html.a11y-high-contrast .nativa-btn-outline {
-  border-color: #9a3412;
-  color: #9a3412;
+  border: 2px solid #000000 !important;
+  color: #000000 !important;
+  background: #ffffff !important;
 }
 
 html.a11y-high-contrast .nativa-btn-outline:hover {
-  background: #9a3412;
-  color: #fffaf4;
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+html.a11y-high-contrast .nativa-gradient-text,
+html.a11y-high-contrast .nativa-gradient-text-alt {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  -webkit-text-fill-color: #000000 !important;
+  color: #000000 !important;
 }
 
 html.a11y-high-contrast .product-description,
 html.a11y-high-contrast .product-description p,
-html.a11y-high-contrast .product-description li {
-  color: #3d2b1f;
+html.a11y-high-contrast .product-description li,
+html.a11y-high-contrast .product-description span {
+  color: #000000 !important;
 }
 
+html.a11y-high-contrast .product-description h1,
+html.a11y-high-contrast .product-description h2,
 html.a11y-high-contrast .product-description h3,
 html.a11y-high-contrast .product-description strong {
-  color: #140e0a;
+  color: #000000 !important;
 }
 
 html.a11y-high-contrast .product-description a {
-  color: #9a3412;
+  color: #6b1f0a !important;
 }
 
 html.a11y-high-contrast .nativa-a11y-panel {
-  border-color: #5c4030 !important;
-  background: #fffcf7 !important;
+  border: 2px solid #000000 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+  color: #000000 !important;
 }
 
-html.a11y-high-contrast .nativa-texture {
-  background-image: none;
+html.a11y-high-contrast .nativa-texture,
+html.a11y-high-contrast .nativa-texture::before,
+html.a11y-high-contrast .nativa-texture::after {
+  background-image: none !important;
+  opacity: 1 !important;
+}
+
+/* Texto da marca com opacidade (ex.: text-[#8B6F5E]/90) → 100% legível */
+html.a11y-high-contrast [class*="text-[#8B6F5E]"],
+html.a11y-high-contrast [class*="text-[#3D2B1F]"],
+html.a11y-high-contrast [class*="text-[#C4522A]"] {
+  opacity: 1 !important;
+}
+
+html.a11y-high-contrast img,
+html.a11y-high-contrast video,
+html.a11y-high-contrast canvas {
+  opacity: 1 !important;
+}
+
+html.a11y-high-contrast .lucide {
+  opacity: 1 !important;
+}
+
+/* Estruturas com fundo inline / translúcido */
+html.a11y-high-contrast header {
+  background-color: #ffffff !important;
+  border-bottom: 2px solid #000000 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+html.a11y-high-contrast footer#contato {
+  background: #0a3d24 !important;
+  color: #ffffff !important;
+  border-top: 2px solid #000000;
+}
+
+html.a11y-high-contrast footer#contato a,
+html.a11y-high-contrast footer#contato p,
+html.a11y-high-contrast footer#contato span,
+html.a11y-high-contrast footer#contato h3,
+html.a11y-high-contrast footer#contato h4 {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+html.a11y-high-contrast footer#contato a:hover,
+html.a11y-high-contrast footer#contato a:focus-visible {
+  color: #ffff00 !important;
+}
+
+html.a11y-high-contrast [class*="text-white"]:not(.nativa-a11y-fab) {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+html.a11y-high-contrast .nativa-a11y-fab {
+  background: #000000 !important;
+  color: #ffff00 !important;
+  box-shadow: none !important;
+  border: 2px solid #ffff00;
+}
+
+html.a11y-high-contrast [class*="text-[#E8821A]"] {
+  color: #ffff00 !important;
+}
+
+/* Badges com gradiente inline (carrinho / favoritos) */
+html.a11y-high-contrast header span[style*="linear-gradient"] {
+  background: #6b1f0a !important;
+  color: #ffffff !important;
+  border: 1px solid #000000;
 }
 
 #conteudo:focus {
