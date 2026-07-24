@@ -6,6 +6,7 @@ import {
   checkAdminPassword,
   signAdminToken,
 } from "../lib/adminAuth";
+import { setAnalyticsExcludeCookie } from "../lib/analyticsExclude";
 import { upload } from "../lib/upload";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { createSignedImageUpload, uploadProductImage } from "../services/uploads";
@@ -76,11 +77,15 @@ router.post("/login", (req, res) => {
     path: "/",
   });
 
+  // Exclui este navegador das métricas da loja (mantém após logout).
+  setAnalyticsExcludeCookie(res);
+
   res.json({ authenticated: true });
 });
 
 router.post("/logout", (_req, res) => {
   res.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
+  // Mantém nativa_analytics_exclude — manutenção na loja pública não deve poluir visitas.
   res.json({ authenticated: false });
 });
 

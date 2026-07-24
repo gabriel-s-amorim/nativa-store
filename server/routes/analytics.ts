@@ -1,5 +1,10 @@
 import { Router } from "express";
 import {
+  clearAnalyticsExcludeCookie,
+  setAnalyticsExcludeCookie,
+  shouldExcludeAnalytics,
+} from "../lib/analyticsExclude";
+import {
   generateVisitorSessionId,
   getVisitorSessionFromCookie,
   setVisitorSessionCookie,
@@ -12,6 +17,11 @@ router.post("/page-view", async (req, res) => {
   try {
     const path = typeof req.body?.path === "string" ? req.body.path : "/";
     if (path.startsWith("/admin")) {
+      res.status(204).send();
+      return;
+    }
+
+    if (shouldExcludeAnalytics(req)) {
       res.status(204).send();
       return;
     }
@@ -29,6 +39,19 @@ router.post("/page-view", async (req, res) => {
       error: error instanceof Error ? error.message : "Erro ao registrar visita",
     });
   }
+});
+
+/** Ativa/desativa exclusão de analytics (atalho ?nativa_internal= via cliente). */
+router.post("/exclude", (req, res) => {
+  const enabled = req.body?.enabled === true || req.body?.enabled === "1";
+  if (enabled) {
+    setAnalyticsExcludeCookie(res);
+    res.json({ excluded: true });
+    return;
+  }
+
+  clearAnalyticsExcludeCookie(res);
+  res.json({ excluded: false });
 });
 
 export default router;
