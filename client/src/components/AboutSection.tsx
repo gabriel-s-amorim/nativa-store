@@ -344,14 +344,12 @@ export default function AboutSection() {
     const el = measureRef.current;
     if (!el) return;
 
-    const update = () => {
-      setPanelHeight(el.offsetHeight);
-    };
-    update();
-
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
+    // Mede só na troca story ↔ making-of — não acompanha o carrossel
+    // (evita a seção “pular” a cada slide).
+    const measure = () => setPanelHeight(el.offsetHeight);
+    measure();
+    const t = window.setTimeout(measure, 420);
+    return () => window.clearTimeout(t);
   }, [view]);
 
   return (

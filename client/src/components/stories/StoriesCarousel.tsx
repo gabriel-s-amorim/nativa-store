@@ -1,21 +1,147 @@
-import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Facebook, Instagram } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import type { StoryWithUrls } from "@/content/stories";
 import { StoryVideo } from "./StoryVideo";
 
+const SOCIAL_LINKS = [
+  {
+    label: "Instagram",
+    href: "https://www.instagram.com/nativa_criativa/",
+    icon: Instagram,
+  },
+  {
+    label: "Facebook",
+    href: "https://www.facebook.com/share/1BjeTNQpat/?mibextid=wwXIfr",
+    icon: Facebook,
+  },
+] as const;
+
+const CTA_BORDER = "36px 14px 42px 18px";
+const CTA_SLIDE_ID = "__social-cta__";
+
 type StoriesCarouselProps = {
   stories: StoryWithUrls[];
-  /** Seção próxima da viewport — libera lazy load dos vídeos */
   nearViewport: boolean;
-  /** No último vídeo, seta “próximo” fecha o making-of e volta à história */
+  /** Depois do CTA social, avança de volta à história */
   onCycleComplete?: () => void;
 };
 
+function TikTokGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.8a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V9.01a8.2 8.2 0 0 0 4.76 1.51V7.07a4.84 4.84 0 0 1-1-.38Z" />
+    </svg>
+  );
+}
+
+function SocialCtaCard({
+  active,
+  reduceMotion,
+  onReturnToStory,
+}: {
+  active: boolean;
+  reduceMotion: boolean | null;
+  onReturnToStory?: () => void;
+}) {
+  return (
+    <div
+      className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden px-5 py-8 text-center"
+      style={{
+        borderRadius: CTA_BORDER,
+        background:
+          "linear-gradient(160deg, #3D2B1F 0%, #5C4033 42%, #C4522A 100%)",
+      }}
+    >
+      {/* Brilho animado */}
+      {!reduceMotion ? (
+        <motion.div
+          className="pointer-events-none absolute -left-1/4 top-0 h-full w-1/2 skew-x-12 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+          animate={{ x: ["0%", "280%"] }}
+          transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.2 }}
+          aria-hidden
+        />
+      ) : null}
+
+      <motion.div
+        className="relative z-[1] flex flex-col items-center"
+        animate={
+          active && !reduceMotion
+            ? { y: [0, -4, 0] }
+            : { y: 0 }
+        }
+        transition={
+          active && !reduceMotion
+            ? { duration: 3.2, repeat: Infinity, ease: "easeInOut" }
+            : { duration: 0.3 }
+        }
+      >
+        <p
+          className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#E8821A]"
+          style={{ fontFamily: "'Nunito', sans-serif" }}
+        >
+          Continua lá fora
+        </p>
+        <h4
+          className="mb-3 max-w-[14rem] text-xl font-bold leading-snug text-[#FFF8F0]"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+        >
+          Vem ver mais bastidores nas redes
+        </h4>
+        <p
+          className="mb-6 max-w-[13rem] text-xs leading-relaxed text-white/70"
+          style={{ fontFamily: "'Lora', serif" }}
+        >
+          Reels, novidades e o dia a dia do ateliê — te esperamos por lá.
+        </p>
+
+        <div className="mb-6 flex items-center gap-3">
+          {SOCIAL_LINKS.map(({ label, href, icon: Icon }) => (
+            <motion.a
+              key={label}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition hover:bg-white/25"
+              aria-label={label}
+              whileHover={reduceMotion ? undefined : { scale: 1.08, y: -2 }}
+              whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+            >
+              <Icon className="h-5 w-5" />
+            </motion.a>
+          ))}
+          <motion.a
+            href="https://www.tiktok.com/@nativa.criativa?_r=1&_t=ZS-98HzhNyOEYj"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition hover:bg-white/25"
+            aria-label="TikTok"
+            whileHover={reduceMotion ? undefined : { scale: 1.08, y: -2 }}
+            whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+          >
+            <TikTokGlyph className="h-5 w-5" />
+          </motion.a>
+        </div>
+
+        {onReturnToStory ? (
+          <button
+            type="button"
+            onClick={onReturnToStory}
+            className="rounded-full border border-white/25 bg-white/10 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-[#FFF8F0] transition hover:bg-white/20"
+            style={{ fontFamily: "'Nunito', sans-serif" }}
+          >
+            Voltar à história
+          </button>
+        ) : null}
+      </motion.div>
+    </div>
+  );
+}
+
 /**
- * Carrossel desktop: um slide ativo bem destacado; laterais menores.
- * Snap Embla sem containScroll (evita travar nos últimos).
+ * Carrossel desktop: altura fixa (sem pular a seção), setas simétricas,
+ * slide final = CTA de redes; depois disso volta à história.
  */
 export function StoriesCarousel({
   stories,
@@ -23,18 +149,22 @@ export function StoriesCarousel({
   onCycleComplete,
 }: StoriesCarouselProps) {
   const reduceMotion = useReducedMotion();
+  const slideCount = stories.length + 1; // + CTA
+  const ctaIndex = stories.length;
+
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "center",
     containScroll: false,
     dragFree: false,
     skipSnaps: false,
-    duration: reduceMotion ? 12 : 34,
+    duration: reduceMotion ? 10 : 22,
   });
   const [selected, setSelected] = useState(0);
   const [muted, setMuted] = useState(false);
-  const lastIndex = stories.length - 1;
-  const isLast = selected >= lastIndex;
+
   const isFirst = selected <= 0;
+  const isCta = selected === ctaIndex;
+  const isLastVideo = selected === stories.length - 1;
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
@@ -52,12 +182,11 @@ export function StoriesCarousel({
     };
   }, [emblaApi, onSelect]);
 
-  // Reinit quando o painel monta (swap da About) — evita snaps “fantasmas”
   useEffect(() => {
     if (!emblaApi || !nearViewport) return;
     const id = window.requestAnimationFrame(() => emblaApi.reInit());
     return () => window.cancelAnimationFrame(id);
-  }, [emblaApi, nearViewport, stories.length]);
+  }, [emblaApi, nearViewport, slideCount]);
 
   const scrollPrev = () => {
     if (!emblaApi || isFirst) return;
@@ -65,214 +194,245 @@ export function StoriesCarousel({
   };
 
   const scrollNext = () => {
-    if (isLast) {
+    if (isCta) {
       onCycleComplete?.();
       return;
     }
     emblaApi?.scrollNext();
   };
 
+  const tween = reduceMotion
+    ? { duration: 0 }
+    : { duration: 0.42, ease: [0.25, 0.1, 0.25, 1] as const };
+
   return (
-    <div className="relative">
-      {/* Glow atmosférico atrás do ativo */}
+    <div className="relative mx-auto w-full max-w-5xl">
       <div
-        className="pointer-events-none absolute left-1/2 top-[42%] h-[55%] w-[min(420px,55%)] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70 blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-[46%] h-[52%] w-[min(380px,50%)] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
         style={{
           background:
-            "radial-gradient(circle, rgba(196,82,42,0.22) 0%, rgba(232,130,26,0.08) 45%, transparent 70%)",
+            "radial-gradient(circle, rgba(196,82,42,0.2) 0%, rgba(232,130,26,0.06) 50%, transparent 72%)",
         }}
         aria-hidden
       />
 
-      <div className="overflow-hidden py-6 md:py-8" ref={emblaRef}>
-        <div className="flex items-center">
-          {stories.map((story, index) => {
-            const isActive = index === selected;
-            const dist = Math.abs(index - selected);
-            const isNeighbor = dist === 1;
-            const shouldLoad = nearViewport && dist <= 1;
+      {/* Altura reservada — evita a seção “pular” ao trocar de slide */}
+      <div className="relative h-[min(560px,68vh)] min-h-[420px]">
+        <div className="absolute inset-0 overflow-hidden" ref={emblaRef}>
+          <div className="flex h-full items-center">
+            {stories.map((story, index) => {
+              const isActive = index === selected;
+              const dist = Math.abs(index - selected);
+              const isNeighbor = dist === 1;
+              const shouldLoad = nearViewport && dist <= 1 && !isCta;
 
-            // Hierarquia clara: só UM protagonista
-            const scale = reduceMotion
-              ? isActive
-                ? 1
-                : 0.82
-              : isActive
-                ? 1.08
-                : dist === 1
-                  ? 0.78
-                  : 0.68;
-            const opacity = isActive ? 1 : dist === 1 ? 0.55 : 0.32;
-            const y = reduceMotion ? 0 : isActive ? 0 : dist === 1 ? 10 : 18;
+              const scale = isActive ? 1.06 : dist === 1 ? 0.84 : 0.72;
+              const opacity = isActive ? 1 : dist === 1 ? 0.5 : 0.28;
 
-            return (
-              <div
-                key={story.id}
-                className="min-w-0 shrink-0 grow-0 basis-[58%] px-2 sm:basis-[46%] md:basis-[38%] lg:basis-[280px] xl:basis-[300px]"
-              >
-                <motion.div
-                  className="relative mx-auto w-full max-w-[300px]"
-                  onClick={() => {
-                    if (!isActive) emblaApi?.scrollTo(index);
-                  }}
-                  animate={{ scale, opacity, y }}
-                  transition={
-                    reduceMotion
-                      ? { duration: 0 }
-                      : { type: "spring", stiffness: 260, damping: 28, mass: 0.85 }
-                  }
-                  style={{
-                    zIndex: isActive ? 20 : 10 - dist,
-                    transformOrigin: "center center",
-                    cursor: isActive ? "default" : "pointer",
-                  }}
-                  role={isActive ? undefined : "button"}
-                  tabIndex={isActive ? undefined : 0}
-                  onKeyDown={
-                    isActive
-                      ? undefined
-                      : (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            emblaApi?.scrollTo(index);
-                          }
-                        }
-                  }
-                  aria-label={
-                    isActive
-                      ? undefined
-                      : `Ir para ${story.label ?? `story ${index + 1}`}`
-                  }
-                  aria-current={isActive ? "true" : undefined}
+              return (
+                <div
+                  key={story.id}
+                  className="flex min-w-0 shrink-0 grow-0 basis-[70%] items-center justify-center px-3 sm:basis-[52%] md:basis-[42%] lg:basis-[300px]"
                 >
                   <motion.div
-                    className="relative aspect-[9/16] w-full overflow-hidden"
-                    animate={{
-                      boxShadow: isActive
-                        ? "0 28px 64px rgba(196,82,42,0.35), 0 0 0 2px rgba(255,255,255,0.85), 0 0 40px rgba(232,130,26,0.25)"
-                        : "0 10px 28px rgba(61,43,31,0.14)",
+                    className="relative w-full max-w-[260px] lg:max-w-[280px]"
+                    onClick={() => {
+                      if (!isActive) emblaApi?.scrollTo(index);
                     }}
-                    transition={{ duration: reduceMotion ? 0 : 0.35 }}
-                    style={{ borderRadius: story.borderRadius }}
+                    animate={{ scale, opacity }}
+                    transition={tween}
+                    style={{
+                      zIndex: isActive ? 20 : Math.max(1, 8 - dist),
+                      transformOrigin: "center center",
+                      cursor: isActive ? "default" : "pointer",
+                      willChange: "transform, opacity",
+                    }}
+                    role={isActive ? undefined : "button"}
+                    tabIndex={isActive ? undefined : 0}
+                    onKeyDown={
+                      isActive
+                        ? undefined
+                        : (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              emblaApi?.scrollTo(index);
+                            }
+                          }
+                    }
+                    aria-label={
+                      isActive
+                        ? undefined
+                        : `Ir para ${story.label ?? `story ${index + 1}`}`
+                    }
                   >
-                    <StoryVideo
-                      story={story}
-                      active={isActive && nearViewport}
-                      shouldLoad={shouldLoad}
-                      preload={isActive ? "auto" : isNeighbor ? "metadata" : "none"}
-                      borderRadius={story.borderRadius}
-                      loop
-                      muted={muted}
-                      onMutedChange={setMuted}
-                    />
-
-                    {!isActive ? (
-                      <div
-                        className="pointer-events-none absolute inset-0"
-                        style={{
-                          background:
-                            "linear-gradient(180deg, rgba(61,43,31,0.15) 0%, rgba(61,43,31,0.35) 100%)",
-                          borderRadius: story.borderRadius,
-                        }}
-                        aria-hidden
+                    <div
+                      className="relative aspect-[9/16] w-full overflow-hidden"
+                      style={{
+                        borderRadius: story.borderRadius,
+                        boxShadow: isActive
+                          ? "0 24px 56px rgba(196,82,42,0.32), 0 0 0 2px rgba(255,255,255,0.9)"
+                          : "0 8px 24px rgba(61,43,31,0.12)",
+                        transition: reduceMotion
+                          ? undefined
+                          : "box-shadow 0.4s ease",
+                      }}
+                    >
+                      <StoryVideo
+                        story={story}
+                        active={isActive && nearViewport}
+                        shouldLoad={shouldLoad}
+                        preload={isActive ? "auto" : isNeighbor ? "metadata" : "none"}
+                        borderRadius={story.borderRadius}
+                        loop
+                        muted={muted}
+                        onMutedChange={setMuted}
                       />
-                    ) : null}
+                      {!isActive ? (
+                        <div
+                          className="pointer-events-none absolute inset-0"
+                          style={{
+                            background:
+                              "linear-gradient(180deg, rgba(61,43,31,0.12) 0%, rgba(61,43,31,0.38) 100%)",
+                            borderRadius: story.borderRadius,
+                          }}
+                          aria-hidden
+                        />
+                      ) : null}
+                    </div>
+
+                    {/* Espaço fixo do rótulo — sem mudar altura da seção */}
+                    <p
+                      className="mt-3 h-4 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C4522A]"
+                      style={{
+                        fontFamily: "'Nunito', sans-serif",
+                        opacity: isActive && story.label ? 1 : 0,
+                        transition: "opacity 0.3s ease",
+                      }}
+                    >
+                      {story.label ?? "\u00A0"}
+                    </p>
                   </motion.div>
+                </div>
+              );
+            })}
 
-                  <AnimatePresence>
-                    {isActive && story.label ? (
-                      <motion.p
-                        key={`label-${story.id}`}
-                        className="mt-4 text-center text-xs font-semibold uppercase tracking-[0.18em] text-[#C4522A]"
-                        style={{ fontFamily: "'Nunito', sans-serif" }}
-                        initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 4 }}
-                      >
-                        {story.label}
-                      </motion.p>
-                    ) : (
-                      <div className="mt-4 h-4" aria-hidden />
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              </div>
-            );
-          })}
+            {/* Slide CTA redes */}
+            <div
+              key={CTA_SLIDE_ID}
+              className="flex min-w-0 shrink-0 grow-0 basis-[70%] items-center justify-center px-3 sm:basis-[52%] md:basis-[42%] lg:basis-[300px]"
+            >
+              <motion.div
+                className="relative w-full max-w-[260px] lg:max-w-[280px]"
+                animate={{
+                  scale: isCta ? 1.06 : Math.abs(selected - ctaIndex) === 1 ? 0.84 : 0.72,
+                  opacity: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.5 : 0.28,
+                }}
+                transition={tween}
+                style={{
+                  zIndex: isCta ? 20 : 4,
+                  transformOrigin: "center center",
+                  willChange: "transform, opacity",
+                }}
+                onClick={() => {
+                  if (!isCta) emblaApi?.scrollTo(ctaIndex);
+                }}
+              >
+                <div
+                  className="relative aspect-[9/16] w-full overflow-hidden"
+                  style={{
+                    borderRadius: CTA_BORDER,
+                    boxShadow: isCta
+                      ? "0 24px 56px rgba(196,82,42,0.32), 0 0 0 2px rgba(255,255,255,0.9)"
+                      : "0 8px 24px rgba(61,43,31,0.12)",
+                  }}
+                >
+                  <SocialCtaCard
+                    active={isCta}
+                    reduceMotion={reduceMotion}
+                    onReturnToStory={onCycleComplete}
+                  />
+                </div>
+                <p className="mt-3 h-4 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C4522A]" style={{ opacity: isCta ? 1 : 0, fontFamily: "'Nunito', sans-serif" }}>
+                  Redes
+                </p>
+              </motion.div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Setas */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 right-0 top-0 flex items-center justify-between px-0 sm:px-1">
+        {/* Setas — sempre iguais, perto do carrossel */}
         <button
           type="button"
           onClick={scrollPrev}
           disabled={isFirst}
-          className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/90 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white disabled:pointer-events-none disabled:opacity-25"
-          aria-label="Vídeo anterior"
+          className="absolute left-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white disabled:pointer-events-none disabled:opacity-20 sm:left-1 md:-left-1"
+          aria-label="Anterior"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-
         <button
           type="button"
           onClick={scrollNext}
-          className="pointer-events-auto flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border border-[#E8D5C4]/90 bg-white/90 px-2.5 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white"
-          aria-label={
-            isLast ? "Voltar para Nossa História" : "Próximo vídeo"
-          }
-          title={isLast ? "Voltar à história" : undefined}
+          className="absolute right-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white sm:right-1 md:-right-1"
+          aria-label={isCta ? "Voltar para Nossa História" : "Próximo"}
         >
-          {isLast && onCycleComplete ? (
-            <>
-              <RotateCcw className="h-3.5 w-3.5 text-[#C4522A]" />
-              <span
-                className="hidden text-[10px] font-bold uppercase tracking-wide text-[#C4522A] sm:inline"
-                style={{ fontFamily: "'Nunito', sans-serif" }}
-              >
-                História
-              </span>
-            </>
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
+          <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Indicadores + dica no último */}
-      <div className="mt-2 flex flex-col items-center gap-3">
-        <div className="flex items-center justify-center gap-2" role="tablist" aria-label="Stories">
-          {stories.map((story, index) => (
-            <button
-              key={story.id}
-              type="button"
-              role="tab"
-              aria-selected={index === selected}
-              aria-label={`Ir para story ${index + 1}`}
-              onClick={() => emblaApi?.scrollTo(index)}
-              className="h-1.5 overflow-hidden rounded-full transition-all duration-300"
-              style={{
-                width: index === selected ? 32 : 8,
-                background:
-                  index === selected
-                    ? "linear-gradient(90deg, #C4522A, #E8821A)"
-                    : "#E8D5C4",
-              }}
-            />
-          ))}
-        </div>
-
-        {isLast && onCycleComplete ? (
-          <motion.p
-            className="text-[11px] text-[#8B6F5E]"
-            style={{ fontFamily: "'Lora', serif" }}
-            initial={reduceMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            Próximo → volta à nossa história
-          </motion.p>
-        ) : null}
+      <div className="mt-1 flex items-center justify-center gap-2" role="tablist" aria-label="Stories">
+        {stories.map((story, index) => (
+          <button
+            key={story.id}
+            type="button"
+            role="tab"
+            aria-selected={index === selected}
+            aria-label={`Story ${index + 1}`}
+            onClick={() => emblaApi?.scrollTo(index)}
+            className="h-1.5 rounded-full transition-all duration-300"
+            style={{
+              width: index === selected ? 28 : 7,
+              background:
+                index === selected
+                  ? "linear-gradient(90deg, #C4522A, #E8821A)"
+                  : "#E8D5C4",
+            }}
+          />
+        ))}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isCta}
+          aria-label="Redes sociais"
+          onClick={() => emblaApi?.scrollTo(ctaIndex)}
+          className="h-1.5 rounded-full transition-all duration-300"
+          style={{
+            width: isCta ? 28 : 7,
+            background: isCta
+              ? "linear-gradient(90deg, #2D6A4F, #1B7A8C)"
+              : "#E8D5C4",
+          }}
+        />
       </div>
+
+      {/* hint discreto só no CTA */}
+      {isCta ? (
+        <p
+          className="mt-3 text-center text-[11px] text-[#8B6F5E]"
+          style={{ fontFamily: "'Lora', serif" }}
+        >
+          Próximo volta à nossa história
+        </p>
+      ) : isLastVideo ? (
+        <p
+          className="mt-3 text-center text-[11px] text-[#8B6F5E]"
+          style={{ fontFamily: "'Lora', serif" }}
+        >
+          Próximo: convite às redes
+        </p>
+      ) : (
+        <p className="mt-3 h-[17px]" aria-hidden />
+      )}
     </div>
   );
 }
