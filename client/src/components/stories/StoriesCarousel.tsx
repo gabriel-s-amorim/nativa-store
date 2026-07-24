@@ -66,16 +66,7 @@ function SocialCtaCard({
 
       <motion.div
         className="relative z-[1] flex flex-col items-center"
-        animate={
-          active && !reduceMotion
-            ? { y: [0, -4, 0] }
-            : { y: 0 }
-        }
-        transition={
-          active && !reduceMotion
-            ? { duration: 3.2, repeat: Infinity, ease: "easeInOut" }
-            : { duration: 0.3 }
-        }
+        aria-live={active ? "polite" : undefined}
       >
         <p
           className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#E8821A]"
@@ -216,37 +207,33 @@ export function StoriesCarousel({
         aria-hidden
       />
 
-      {/* Altura folgada: o card ativo NÃO usa scale>1 (evita corte topo/baixo) */}
+      {/* Altura fixa — cards no mesmo tamanho; destaque só por opacidade/glow (sem scale = sem deslocar) */}
       <div className="relative h-[min(640px,78vh)] min-h-[500px]">
         <div className="absolute inset-0 overflow-hidden" ref={emblaRef}>
-          <div className="flex h-full items-center">
+          <div className="flex h-full items-end pb-2">
             {stories.map((story, index) => {
               const isActive = index === selected;
               const dist = Math.abs(index - selected);
               const isNeighbor = dist === 1;
               const shouldLoad = nearViewport && dist <= 1 && !isCta;
-
-              // Destaque = laterais menores; ativo fica em escala 1 (sem clip)
-              const scale = isActive ? 1 : dist === 1 ? 0.86 : 0.74;
-              const opacity = isActive ? 1 : dist === 1 ? 0.55 : 0.32;
+              const opacity = isActive ? 1 : dist === 1 ? 0.58 : 0.34;
 
               return (
                 <div
                   key={story.id}
-                  className="flex min-w-0 shrink-0 grow-0 basis-[58%] items-center justify-center px-2 sm:basis-[46%] md:basis-[38%] lg:basis-[300px] xl:basis-[320px]"
+                  className="flex min-w-0 shrink-0 grow-0 basis-[58%] items-end justify-center px-2 sm:basis-[46%] md:basis-[38%] lg:basis-[300px] xl:basis-[320px]"
                 >
                   <motion.div
                     className="relative w-full max-w-[280px] lg:max-w-[300px]"
                     onClick={() => {
                       if (!isActive) emblaApi?.scrollTo(index);
                     }}
-                    animate={{ scale, opacity }}
+                    animate={{ opacity }}
                     transition={tween}
                     style={{
                       zIndex: isActive ? 20 : Math.max(1, 8 - dist),
-                      transformOrigin: "center center",
                       cursor: isActive ? "default" : "pointer",
-                      willChange: "transform, opacity",
+                      willChange: "opacity",
                     }}
                     role={isActive ? undefined : "button"}
                     tabIndex={isActive ? undefined : 0}
@@ -275,7 +262,8 @@ export function StoriesCarousel({
                           : "0 8px 24px rgba(61,43,31,0.12)",
                         transition: reduceMotion
                           ? undefined
-                          : "box-shadow 0.4s ease",
+                          : "box-shadow 0.35s ease",
+                        transform: isActive ? "translateZ(0)" : undefined,
                       }}
                     >
                       <StoryVideo
@@ -317,22 +305,20 @@ export function StoriesCarousel({
               );
             })}
 
-            {/* Slide CTA redes — um pouco maior que os vídeos */}
+            {/* Slide CTA redes */}
             <div
               key={CTA_SLIDE_ID}
-              className="flex min-w-0 shrink-0 grow-0 basis-[62%] items-center justify-center px-2 sm:basis-[50%] md:basis-[40%] lg:basis-[320px] xl:basis-[340px]"
+              className="flex min-w-0 shrink-0 grow-0 basis-[62%] items-end justify-center px-2 sm:basis-[50%] md:basis-[40%] lg:basis-[320px] xl:basis-[340px]"
             >
               <motion.div
                 className="relative w-full max-w-[300px] lg:max-w-[320px]"
                 animate={{
-                  scale: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.86 : 0.74,
-                  opacity: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.55 : 0.32,
+                  opacity: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.58 : 0.34,
                 }}
                 transition={tween}
                 style={{
                   zIndex: isCta ? 20 : 4,
-                  transformOrigin: "center center",
-                  willChange: "transform, opacity",
+                  willChange: "opacity",
                 }}
                 onClick={() => {
                   if (!isCta) emblaApi?.scrollTo(ctaIndex);
@@ -421,24 +407,17 @@ export function StoriesCarousel({
         />
       </div>
 
-      {/* hint discreto só no CTA */}
-      {isCta ? (
-        <p
-          className="mt-3 text-center text-[11px] text-[#8B6F5E]"
-          style={{ fontFamily: "'Lora', serif" }}
-        >
-          Próximo volta à nossa história
-        </p>
-      ) : isLastVideo ? (
-        <p
-          className="mt-3 text-center text-[11px] text-[#8B6F5E]"
-          style={{ fontFamily: "'Lora', serif" }}
-        >
-          Próximo: convite às redes
-        </p>
-      ) : (
-        <p className="mt-3 h-[17px]" aria-hidden />
-      )}
+      {/* hint — altura sempre reservada (sem pular layout) */}
+      <p
+        className="mt-3 h-[17px] text-center text-[11px] text-[#8B6F5E]"
+        style={{ fontFamily: "'Lora', serif" }}
+      >
+        {isCta
+          ? "Próximo volta à nossa história"
+          : isLastVideo
+            ? "Próximo: convite às redes"
+            : "\u00A0"}
+      </p>
     </div>
   );
 }

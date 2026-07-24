@@ -209,7 +209,7 @@ function AboutStoryContent({
 } = {}) {
   return (
     <div className="grid md:grid-cols-[minmax(0,340px)_1fr] lg:grid-cols-[minmax(0,380px)_1fr] gap-12 lg:gap-16 xl:gap-20 items-center">
-      <div className="relative order-2 md:order-1 flex justify-center md:justify-start py-2">
+      <div className="relative order-2 md:order-1 flex justify-center md:justify-start pt-2 pb-10">
         <AboutPhotoCard />
       </div>
 
@@ -408,7 +408,7 @@ export default function AboutSection() {
       <WaveDividerUp color="#FAF7F2" />
       <section
         id="sobre"
-        className="py-20 relative overflow-hidden"
+        className="py-20 relative overflow-x-hidden"
         style={{ background: "#F5F0E8" }}
       >
         <div className="absolute top-16 left-4 feather-float-delay opacity-30">
@@ -435,7 +435,7 @@ export default function AboutSection() {
             ) : null}
 
             <motion.div
-              className="overflow-hidden"
+              className="overflow-x-hidden"
               animate={
                 reduceMotion || panelHeight === "auto"
                   ? undefined
