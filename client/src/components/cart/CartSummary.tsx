@@ -161,7 +161,7 @@ export default function CartSummary({
                 id="cart-coupon"
                 value={couponInput}
                 onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                placeholder="Ex: NATIVA15"
+                placeholder="Ex: NATIVA10"
                 className="h-10 border-[#E8D5C4] bg-[#FAF7F2] uppercase"
                 style={{ fontFamily: "'Nunito', sans-serif" }}
               />

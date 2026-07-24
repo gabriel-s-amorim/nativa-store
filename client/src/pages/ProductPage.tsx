@@ -55,6 +55,7 @@ import { buildProductJsonLd, usePageMeta } from "@/lib/seo";
 import { stripHtml } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME } from "@shared/const/site";
 import { useCart } from "@/contexts/CartContext";
+import { trackViewContent } from "@/lib/metaPixel";
 import type { Product } from "@shared/types/product";
 import NotFound from "@/pages/NotFound";
 
@@ -150,6 +151,15 @@ export default function ProductPage() {
       window.scrollTo(0, 0);
     }
   }, [product]);
+
+  useEffect(() => {
+    if (!product?.sku) return;
+    trackViewContent({
+      contentIds: [product.sku],
+      value: product.price,
+      contentName: product.name,
+    });
+  }, [product?.sku, product?.price, product?.name]);
 
   useEffect(() => {
     const target = mainCtaRef.current;

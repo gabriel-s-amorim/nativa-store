@@ -1,4 +1,5 @@
 import AuthHashRouter from "@/components/auth/AuthHashRouter";
+import PixelRouteTracker from "@/components/analytics/PixelRouteTracker";
 import StorePageViewTracker from "@/components/analytics/StorePageViewTracker";
 import { Spinner } from "@/components/ui/spinner";
 import { Toaster } from "@/components/ui/sonner";
@@ -96,6 +97,7 @@ function App() {
                 <TooltipProvider>
                   <Toaster />
                   <StorePageViewTracker />
+                  <PixelRouteTracker />
                   <ScrollToTop />
                   <CartDrawer />
                   <StoreSearch />

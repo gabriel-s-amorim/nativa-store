@@ -64,12 +64,12 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- Seed: NATIVA15 (15%) e BORDADO5 (frete grátis)
+-- Seed: NATIVA10 (10%) e BORDADO5 (frete grátis)
 -- ---------------------------------------------------------------------------
 insert into public.coupons (code, type, value, is_active, description)
-select 'NATIVA15', 'percentage', 15, true, '15% de desconto no subtotal'
+select 'NATIVA10', 'percentage', 10, true, '10% de desconto no subtotal'
 where not exists (
-  select 1 from public.coupons where lower(code) = lower('NATIVA15')
+  select 1 from public.coupons where lower(code) = lower('NATIVA10')
 );
 
 insert into public.coupons (code, type, value, is_active, description, is_map_reward)

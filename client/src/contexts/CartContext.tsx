@@ -8,6 +8,7 @@ import {
   updateCartItem as updateCartItemApi,
 } from "@/lib/cartApi";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { trackAddToCart } from "@/lib/metaPixel";
 import { buildCartSummary } from "@shared/lib/cartMapper";
 import type { CartAddItemInput, CartApplyCouponInput } from "@shared/schemas/cart";
 import type { Cart, CartItem, CartSummary } from "@shared/types/cart";
@@ -170,6 +171,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const data = await addCartItemApi(input, token);
         applyCartState(setCart, data);
         setCartPulse((n) => n + 1);
+
+        const color = (input.color ?? "").trim();
+        const added =
+          data.items.find(
+            (item) =>
+              item.productSlug === input.productSlug &&
+              item.sizeLabel === input.size &&
+              (item.colorName || "") === color,
+          ) ?? data.items.find((item) => item.productSlug === input.productSlug);
+
+        if (added) {
+          trackAddToCart({
+            contentIds: [added.productSku || added.productSlug],
+            value: added.unitPrice * input.quantity,
+            quantity: input.quantity,
+            contentName: added.productName,
+          });
+        }
+
         return true;
       } catch (error) {
         toast.error("Não foi possível adicionar", {

@@ -23,6 +23,10 @@ import { fetchCustomerProfile } from "@/lib/customerApi";
 import { fetchCheckoutShippingQuote } from "@/lib/shippingApi";
 import { OrderApiError, checkoutOrder } from "@/lib/orderApi";
 import { fetchCustomerOrder, fetchMercadoPagoConfig } from "@/lib/orderApi";
+import {
+  trackInitiateCheckout,
+  trackPurchase,
+} from "@/lib/metaPixel";
 import { usePageMeta } from "@/lib/seo";
 import { checkoutSchema } from "@shared/schemas/order";
 import { formatCepInput } from "@shared/lib/viacep";
@@ -61,9 +65,19 @@ import {
   Truck,
   User,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
+
+function firePurchaseIfApproved(order: Order) {
+  if (order.paymentStatus !== "approved") return;
+  trackPurchase({
+    orderId: order.id,
+    contentIds: order.items.map((item) => item.productSlug),
+    value: order.totalAmount,
+    numItems: order.items.reduce((sum, item) => sum + item.quantity, 0),
+  });
+}
 
 function addressToFormValues(address: CustomerAddress): AddressFormValues {
   return {
@@ -124,6 +138,26 @@ function CheckoutPageContent() {
     path: "/checkout",
     noIndex: true,
   });
+
+  const initiateCheckoutTracked = useRef(false);
+
+  useEffect(() => {
+    if (initiateCheckoutTracked.current || isLoading || completedOrder) return;
+    if (itemCount === 0) return;
+    initiateCheckoutTracked.current = true;
+    trackInitiateCheckout({
+      contentIds: items.map((item) => item.productSku || item.productSlug),
+      value: summary.subtotal - summary.discountAmount,
+      numItems: itemCount,
+    });
+  }, [
+    completedOrder,
+    isLoading,
+    itemCount,
+    items,
+    summary.discountAmount,
+    summary.subtotal,
+  ]);
 
   useEffect(() => {
     if (!isLoading && itemCount === 0 && !completedOrder) {
@@ -282,6 +316,7 @@ function CheckoutPageContent() {
           }
           return order;
         });
+        firePurchaseIfApproved(order);
       } catch {
         // Mantém a tela de aguardo; tenta de novo no próximo ciclo
       }
@@ -385,6 +420,7 @@ function CheckoutPageContent() {
       }
       await clearCart();
       setCompletedOrder(response.order);
+      firePurchaseIfApproved(response.order);
       toast.success(
         response.payment.outcome === "approved"
           ? "Pagamento aprovado!"

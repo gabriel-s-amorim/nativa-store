@@ -9,7 +9,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { FeatherOrange, FeatherBlue, FeatherGreen } from "./NativaDecorations";
 
-const PROMO_COUPON_CODE = "NATIVA15";
+const PROMO_COUPON_CODE = "NATIVA10";
+const PROMO_COUPON_PERCENT = 10;
 
 export default function PromoSection() {
   const { applyCoupon, isUpdating } = useCart();
@@ -110,20 +111,25 @@ export default function PromoSection() {
                   letterSpacing: "0.08em",
                 }}
               >
-                OFERTA ESPECIAL
+                OFERTA DE BOAS-VINDAS
               </div>
               <h3
                 className="text-3xl md:text-4xl font-bold text-white mb-2"
                 style={{ fontFamily: "'Playfair Display', serif" }}
               >
-                Um presente para a sua<br />
-                <span style={{ color: "#F5D78A" }}>primeira compra</span>
+                Ganhe{" "}
+                <span style={{ color: "#F5D78A" }}>
+                  {PROMO_COUPON_PERCENT}% OFF
+                </span>
+                <br />
+                na sua primeira compra
               </h3>
               <p
                 className="text-white/80 text-sm"
                 style={{ fontFamily: "'Lora', serif" }}
               >
-                Use o código <strong className="text-white">{PROMO_COUPON_CODE}</strong> no carrinho
+                Use o cupom{" "}
+                <strong className="text-white">{PROMO_COUPON_CODE}</strong>
               </p>
             </div>
 

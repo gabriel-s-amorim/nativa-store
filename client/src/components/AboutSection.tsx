@@ -163,17 +163,17 @@ const values = [
   {
     icon: "🪡",
     title: "100% Artesanal",
-    desc: "Cada bolsa é bordada e costurada à mão por artesãs brasileiras.",
+    desc: "Cada bolsa é confeccionada manualmente, com dedicação e atenção a cada detalhe.",
   },
   {
     icon: "🌿",
-    title: "Sustentável",
-    desc: "Usamos tecidos naturais e tingimentos com plantas nativas.",
+    title: "Sustentabilidade",
+    desc: "Escolhemos cuidadosamente nossos tecidos e aviamentos para criar peças bonitas, resistentes e duráveis.",
   },
   {
     icon: "🦜",
     title: "Identidade",
-    desc: "Inspiradas na riqueza cultural e natural do Brasil.",
+    desc: "Nossas bolsas são inspiradas nas cores, formas e na riqueza cultural do Brasil.",
   },
 ];
 

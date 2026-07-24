@@ -283,7 +283,7 @@ export default function AdminCoupons() {
             <AdminEmptyState
               icon={<Ticket className="size-10" />}
               title="Nenhum cupom"
-              description="Crie cupons como NATIVA15 ou BORDADO5 para a loja."
+              description="Crie cupons como NATIVA10 ou BORDADO5 para a loja."
             />
             <div className="flex justify-center">
               <Button type="button" onClick={openCreate}>
@@ -377,7 +377,7 @@ export default function AdminCoupons() {
                 onChange={(e) =>
                   setForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))
                 }
-                placeholder="NATIVA15"
+                placeholder="NATIVA10"
                 className="uppercase"
               />
             </div>
