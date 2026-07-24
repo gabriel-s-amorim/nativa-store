@@ -206,9 +206,9 @@ export function StoriesCarousel({
     : { duration: 0.42, ease: [0.25, 0.1, 0.25, 1] as const };
 
   return (
-    <div className="relative mx-auto w-full max-w-5xl">
+    <div className="relative w-full">
       <div
-        className="pointer-events-none absolute left-1/2 top-[46%] h-[52%] w-[min(380px,50%)] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-[46%] h-[52%] w-[min(420px,55%)] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
         style={{
           background:
             "radial-gradient(circle, rgba(196,82,42,0.2) 0%, rgba(232,130,26,0.06) 50%, transparent 72%)",
@@ -217,7 +217,7 @@ export function StoriesCarousel({
       />
 
       {/* Altura reservada — evita a seção “pular” ao trocar de slide */}
-      <div className="relative h-[min(560px,68vh)] min-h-[420px]">
+      <div className="relative h-[min(580px,70vh)] min-h-[440px]">
         <div className="absolute inset-0 overflow-hidden" ref={emblaRef}>
           <div className="flex h-full items-center">
             {stories.map((story, index) => {
@@ -232,10 +232,10 @@ export function StoriesCarousel({
               return (
                 <div
                   key={story.id}
-                  className="flex min-w-0 shrink-0 grow-0 basis-[70%] items-center justify-center px-3 sm:basis-[52%] md:basis-[42%] lg:basis-[300px]"
+                  className="flex min-w-0 shrink-0 grow-0 basis-[58%] items-center justify-center px-2 sm:basis-[46%] md:basis-[38%] lg:basis-[300px] xl:basis-[320px]"
                 >
                   <motion.div
-                    className="relative w-full max-w-[260px] lg:max-w-[280px]"
+                    className="relative w-full max-w-[280px] lg:max-w-[300px]"
                     onClick={() => {
                       if (!isActive) emblaApi?.scrollTo(index);
                     }}
@@ -300,7 +300,6 @@ export function StoriesCarousel({
                       ) : null}
                     </div>
 
-                    {/* Espaço fixo do rótulo — sem mudar altura da seção */}
                     <p
                       className="mt-3 h-4 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C4522A]"
                       style={{
@@ -316,15 +315,15 @@ export function StoriesCarousel({
               );
             })}
 
-            {/* Slide CTA redes */}
+            {/* Slide CTA redes — um pouco maior que os vídeos */}
             <div
               key={CTA_SLIDE_ID}
-              className="flex min-w-0 shrink-0 grow-0 basis-[70%] items-center justify-center px-3 sm:basis-[52%] md:basis-[42%] lg:basis-[300px]"
+              className="flex min-w-0 shrink-0 grow-0 basis-[62%] items-center justify-center px-2 sm:basis-[50%] md:basis-[40%] lg:basis-[320px] xl:basis-[340px]"
             >
               <motion.div
-                className="relative w-full max-w-[260px] lg:max-w-[280px]"
+                className="relative w-full max-w-[300px] lg:max-w-[320px]"
                 animate={{
-                  scale: isCta ? 1.06 : Math.abs(selected - ctaIndex) === 1 ? 0.84 : 0.72,
+                  scale: isCta ? 1.08 : Math.abs(selected - ctaIndex) === 1 ? 0.84 : 0.72,
                   opacity: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.5 : 0.28,
                 }}
                 transition={tween}
@@ -352,7 +351,13 @@ export function StoriesCarousel({
                     onReturnToStory={onCycleComplete}
                   />
                 </div>
-                <p className="mt-3 h-4 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C4522A]" style={{ opacity: isCta ? 1 : 0, fontFamily: "'Nunito', sans-serif" }}>
+                <p
+                  className="mt-3 h-4 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C4522A]"
+                  style={{
+                    opacity: isCta ? 1 : 0,
+                    fontFamily: "'Nunito', sans-serif",
+                  }}
+                >
                   Redes
                 </p>
               </motion.div>
@@ -360,12 +365,11 @@ export function StoriesCarousel({
           </div>
         </div>
 
-        {/* Setas — sempre iguais, perto do carrossel */}
         <button
           type="button"
           onClick={scrollPrev}
           disabled={isFirst}
-          className="absolute left-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white disabled:pointer-events-none disabled:opacity-20 sm:left-1 md:-left-1"
+          className="absolute left-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white disabled:pointer-events-none disabled:opacity-20 sm:left-1 md:left-2"
           aria-label="Anterior"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -373,7 +377,7 @@ export function StoriesCarousel({
         <button
           type="button"
           onClick={scrollNext}
-          className="absolute right-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white sm:right-1 md:-right-1"
+          className="absolute right-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white sm:right-1 md:right-2"
           aria-label={isCta ? "Voltar para Nossa História" : "Próximo"}
         >
           <ChevronRight className="h-4 w-4" />
