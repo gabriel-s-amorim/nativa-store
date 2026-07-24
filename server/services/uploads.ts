@@ -5,8 +5,14 @@ import { supabase } from "../lib/supabase";
 
 export const PRODUCT_IMAGES_BUCKET = "product-images";
 
+/** Vídeos de stories / making-of (seção Nossa História). */
+export const STORY_VIDEOS_BUCKET = "story-videos";
+
 /** Limite do arquivo no Storage (GIFs animados costumam ser maiores). */
 export const MAX_STORAGE_FILE_BYTES = 15 * 1024 * 1024;
+
+/** Reels costumam ser maiores que fotos — limite dedicado ao bucket de stories. */
+export const MAX_STORY_VIDEO_BYTES = 50 * 1024 * 1024;
 
 /** Qualidade WebP (0–100). Bom equilíbrio tamanho × nitidez para e-commerce. */
 const WEBP_QUALITY = 82;

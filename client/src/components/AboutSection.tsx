@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { StoriesSection } from "./stories/StoriesSection";
 import { ArrowNativa, FeatherGreen, FeatherRed, WaveDividerDown, WaveDividerUp } from "./NativaDecorations";
 
 const ABOUT_IMAGE = "/images/1cad9ce5-deab-4955-8b80-f93e26115088.jpg";
@@ -271,6 +272,9 @@ export default function AboutSection() {
               </div>
             </div>
           </div>
+
+          {/* Stories / making-of — carrossel (md+) e imersivo (mobile) */}
+          <StoriesSection />
         </div>
       </section>
       <WaveDividerDown color="#FAF7F2" />

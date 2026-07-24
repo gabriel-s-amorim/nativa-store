@@ -279,9 +279,11 @@ Run the SQLs in `supabase/` in the Supabase SQL Editor, in this order:
 `setup.sql` → `customers.sql` → `cart.sql` → `orders.sql` → `customer_addresses.sql` → `admin_notifications.sql` → `store_analytics.sql` → `banners.sql` → `regions.sql` → `melhor_envio.sql` → `mercado_pago.sql` → `melhor_envio_checkout.sql` → `coupons.sql` → `coupons_map_reward.sql` → `brevo.sql` → `brevo_merchant_notify.sql` → `brevo_store_templates.sql` → `order_fulfillment.sql` → `quiz.sql` → `quiz_completions.sql`.
 
 ```bash
-pnpm setup:storage   # image bucket (once)
+pnpm setup:storage   # buckets product-images + story-videos (once)
 pnpm dev             # client :3000 + API :3001
 ```
+
+Stories (making-of) in **Our Story**: after `pnpm setup:storage`, upload MP4/WebP files to the public `story-videos` bucket (paths in `client/src/content/stories.ts`). Public URLs use `VITE_SUPABASE_URL`.
 
 | Command | Description |
 |---------|-------------|
@@ -332,6 +334,7 @@ Variable details and pitfalls: see [`.env.example`](.env.example).
 - [ ] Advanced catalog search and filters
 - [ ] Real customer reviews
 - [ ] Finish migrating legacy images from the Nuvemshop CDN to Supabase Storage
+- [ ] **Phase 2 (optional) — Stories via Instagram Graph API:** auto-sync new Reels into the “Our Story” section instead of manual Storage uploads. Requires a Meta app with `instagram_basic` / media permissions, a long-lived token, and **Meta App Review** (business justification before leaving Development mode). Until then, the three videos live in the `story-videos` Supabase Storage bucket and are wired in `client/src/content/stories.ts`.
 
 ---
 
