@@ -1,5 +1,9 @@
 -- Execute no SQL Editor do Supabase (https://supabase.com/dashboard)
 -- Configuração e tokens OAuth do Melhor Envio (produção + sandbox)
+--
+-- Segredos (client_secret, access_token, refresh_token) são gravados
+-- criptografados pelo backend (MELHOR_ENVIO_ENCRYPTION_KEY / AES-256-GCM).
+-- Client ID permanece em texto (não é secreto).
 
 create table if not exists public.melhor_envio_settings (
   id text primary key default 'default' check (id = 'default'),
@@ -8,7 +12,7 @@ create table if not exists public.melhor_envio_settings (
   environment text not null default 'production'
     check (environment in ('production', 'sandbox')),
 
-  -- Credenciais do app em produção
+  -- Credenciais do app em produção (secret/tokens criptografados no app)
   production_client_id text not null default '',
   production_client_secret text not null default '',
   production_access_token text,

@@ -1,3 +1,5 @@
+export { sanitizeProductHtml } from "@shared/lib/sanitizeProductHtml";
+
 export function decodeHtmlEntities(text: string): string {
   if (!text) return "";
 
@@ -31,16 +33,4 @@ export function decodeHtmlEntities(text: string): string {
     .replace(/&ndash;/g, "–")
     .replace(/&mdash;/g, "—")
     .replace(/&bull;/g, "•");
-}
-
-export function sanitizeProductHtml(html: string): string {
-  if (!html) return "";
-
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
-    .replace(/\sdata-[\w-]+=(?:"[^"]*"|'[^']*')/gi, "")
-    .replace(/<h3([^>]*)>\s*\?\s*/gi, "<h3$1>✦ ")
-    .replace(/class="isSelectedEnd"/gi, "")
-    .replace(/\sclass=""/gi, "");
 }

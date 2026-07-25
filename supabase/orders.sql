@@ -123,3 +123,6 @@ begin
   return v_order;
 end;
 $$;
+
+REVOKE ALL ON FUNCTION public.checkout_create_order(uuid, uuid, text, numeric, numeric, text, jsonb, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.checkout_create_order(uuid, uuid, text, numeric, numeric, text, jsonb, text, jsonb) TO service_role;

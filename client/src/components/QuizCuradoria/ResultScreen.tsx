@@ -102,7 +102,7 @@ export default function ResultScreen({ payload, onRestart, onShowCompare }: Resu
         buildQuizShareCaption(payload.result.name),
       );
       if (mode === "shared") {
-        toast.success("Manda nos Stories e marca a @nativastore!");
+        toast.success("Manda nos Stories e marca a @nativa_criativa!");
       } else {
         toast.success("Imagem baixada — posta nos Stories e marca a gente!");
       }
@@ -278,7 +278,7 @@ export default function ResultScreen({ payload, onRestart, onShowCompare }: Resu
         >
           Gostou do resultado? Posta nos Stories, marca{" "}
           <span className="font-semibold" style={{ color: "#C4522A" }}>
-            @nativastore
+            @nativa_criativa
           </span>{" "}
           e desafia as amigas a descobrirem o estilo delas.
         </p>

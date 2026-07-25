@@ -7,7 +7,8 @@ import {
 
 export type SecretEncryptionKey =
   | "MERCADO_PAGO_ENCRYPTION_KEY"
-  | "BREVO_ENCRYPTION_KEY";
+  | "BREVO_ENCRYPTION_KEY"
+  | "MELHOR_ENVIO_ENCRYPTION_KEY";
 
 function encryptionKey(keyName: SecretEncryptionKey): Buffer {
   const source = process.env[keyName]?.trim();
@@ -15,6 +16,13 @@ function encryptionKey(keyName: SecretEncryptionKey): Buffer {
     throw new Error(`${keyName} deve ter pelo menos 32 caracteres`);
   }
   return createHash("sha256").update(source).digest();
+}
+
+/** Formato `v1.<iv>.<tag>.<payload>` gerado por encryptSecret. */
+export function isEncryptedSecret(value: string): boolean {
+  if (!value.startsWith("v1.")) return false;
+  const parts = value.split(".");
+  return parts.length === 4 && parts.every((part) => part.length > 0);
 }
 
 export function encryptSecret(
@@ -54,4 +62,19 @@ export function decryptSecret(
     decipher.update(Buffer.from(payloadRaw, "base64url")),
     decipher.final(),
   ]).toString("utf8");
+}
+
+/**
+ * Lê valor do banco: descriptografa se estiver no formato v1.*,
+ * senão devolve o plaintext legado (para migração gradual).
+ */
+export function decryptStoredSecret(
+  value: string,
+  keyName: SecretEncryptionKey
+): string {
+  if (!value) return value;
+  if (isEncryptedSecret(value)) {
+    return decryptSecret(value, keyName);
+  }
+  return value;
 }

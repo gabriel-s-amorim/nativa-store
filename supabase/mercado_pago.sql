@@ -248,6 +248,12 @@ begin
 end;
 $$;
 
+-- RPCs de pagamento: somente o backend (service_role). Nunca liberar anon/authenticated.
+REVOKE ALL ON FUNCTION public.checkout_accept_payment(uuid, text, text, text, text, timestamptz, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.checkout_accept_payment(uuid, text, text, text, text, timestamptz, jsonb, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.reconcile_mercado_pago_payment(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reconcile_mercado_pago_payment(text, text, text, text, jsonb) TO service_role;
+
 -- A venda só é notificada quando o pagamento muda para aprovado.
 drop trigger if exists trg_notify_admin_new_order on public.orders;
 create or replace function public.notify_admin_paid_order()

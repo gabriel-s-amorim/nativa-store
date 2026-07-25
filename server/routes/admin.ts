@@ -6,6 +6,12 @@ import {
   checkAdminPassword,
   signAdminToken,
 } from "../lib/adminAuth";
+import {
+  checkAdminLoginRateLimit,
+  clearAdminLoginFailures,
+  getClientIp,
+  recordAdminLoginFailure,
+} from "../lib/adminLoginRateLimit";
 import { setAnalyticsExcludeCookie } from "../lib/analyticsExclude";
 import { upload } from "../lib/upload";
 import { requireAdmin } from "../middleware/requireAdmin";
@@ -44,6 +50,16 @@ function handleSingleImageUpload(
 }
 
 router.post("/login", (req, res) => {
+  const rateKey = getClientIp(req);
+  const rate = checkAdminLoginRateLimit(rateKey);
+  if (!rate.allowed) {
+    res.setHeader("Retry-After", String(rate.retryAfterSec ?? 900));
+    res.status(429).json({
+      error: "Muitas tentativas. Aguarde alguns minutos e tente de novo.",
+    });
+    return;
+  }
+
   const password =
     typeof req.body?.password === "string" ? req.body.password : "";
 
@@ -63,10 +79,12 @@ router.post("/login", (req, res) => {
   }
 
   if (!isValid) {
+    recordAdminLoginFailure(rateKey);
     res.status(401).json({ error: "Senha inválida" });
     return;
   }
 
+  clearAdminLoginFailures(rateKey);
   const token = signAdminToken();
 
   res.cookie(ADMIN_COOKIE_NAME, token, {

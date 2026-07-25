@@ -1,9 +1,18 @@
 import { mapProductRowToProduct, mapProductToRow, type ProductRow } from "@shared/lib/productMapper";
+import { sanitizeProductHtml } from "@shared/lib/sanitizeProductHtml";
 import { slugify } from "@shared/lib/slugify";
 import type { ProductInput } from "@shared/schemas/product";
 import type { Product } from "@shared/types/product";
 import { nanoid } from "nanoid";
 import { supabase } from "../lib/supabase";
+
+function sanitizeProductInput(input: ProductInput): ProductInput {
+  return {
+    ...input,
+    shortDescription: sanitizeProductHtml(input.shortDescription),
+    description: sanitizeProductHtml(input.description),
+  };
+}
 
 export async function listProducts(category?: string): Promise<Product[]> {
   let query = supabase.from("products").select("*").order("id", { ascending: true });
@@ -65,9 +74,10 @@ export async function generateUniqueSlug(name: string, excludeSlug?: string): Pr
 }
 
 export async function createProduct(input: ProductInput): Promise<Product> {
+  const safeInput = sanitizeProductInput(input);
   const { data, error } = await supabase
     .from("products")
-    .insert(mapProductToRow(input))
+    .insert(mapProductToRow(safeInput))
     .select("*")
     .single();
 
@@ -82,9 +92,10 @@ export async function updateProduct(
   currentSlug: string,
   input: ProductInput,
 ): Promise<Product | null> {
+  const safeInput = sanitizeProductInput(input);
   const { data, error } = await supabase
     .from("products")
-    .update(mapProductToRow(input))
+    .update(mapProductToRow(safeInput))
     .eq("slug", currentSlug)
     .select("*")
     .maybeSingle();
@@ -131,7 +142,7 @@ export async function bulkUpsertProducts(inputs: ProductInput[]): Promise<BulkUp
   }
 
   const existingSlugs = new Set((existingRows ?? []).map((row) => row.slug as string));
-  const rows = inputs.map(mapProductToRow);
+  const rows = inputs.map((input) => mapProductToRow(sanitizeProductInput(input)));
 
   const { error } = await supabase.from("products").upsert(rows, { onConflict: "slug" });
 

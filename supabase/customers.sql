@@ -16,7 +16,8 @@ begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql
+set search_path = public;
 
 drop trigger if exists trg_customer_profiles_updated_at on public.customer_profiles;
 create trigger trg_customer_profiles_updated_at

@@ -13,9 +13,24 @@ import {
 import { applyFreeShippingCoupon } from "@shared/lib/coupons";
 import { assertCouponApplicable } from "./coupons";
 import jwt from "jsonwebtoken";
+import {
+  decryptStoredSecret,
+  encryptSecret,
+  type SecretEncryptionKey,
+} from "../lib/secretCrypto";
 import { supabase } from "../lib/supabase";
 
 const SETTINGS_ID = "default";
+const ME_KEY: SecretEncryptionKey = "MELHOR_ENVIO_ENCRYPTION_KEY";
+
+function encryptMeSecret(value: string): string {
+  return encryptSecret(value, ME_KEY);
+}
+
+function decryptMeSecret(value: string | null | undefined): string {
+  if (!value) return "";
+  return decryptStoredSecret(value, ME_KEY);
+}
 
 /** Todas as permissões — próximos módulos (etiquetas, carrinho, etc.) já autorizados. */
 export const MELHOR_ENVIO_SCOPES = [
@@ -162,15 +177,23 @@ function getClientId(row: MelhorEnvioSettingsRow, environment = row.environment)
 }
 
 function getClientSecret(row: MelhorEnvioSettingsRow, environment = row.environment): string {
-  return environment === "sandbox" ? row.sandbox_client_secret : row.production_client_secret;
+  const raw =
+    environment === "sandbox" ? row.sandbox_client_secret : row.production_client_secret;
+  return decryptMeSecret(raw);
 }
 
 function getAccessToken(row: MelhorEnvioSettingsRow, environment = row.environment): string | null {
-  return environment === "sandbox" ? row.sandbox_access_token : row.production_access_token;
+  const raw =
+    environment === "sandbox" ? row.sandbox_access_token : row.production_access_token;
+  const value = decryptMeSecret(raw);
+  return value || null;
 }
 
 function getRefreshToken(row: MelhorEnvioSettingsRow, environment = row.environment): string | null {
-  return environment === "sandbox" ? row.sandbox_refresh_token : row.production_refresh_token;
+  const raw =
+    environment === "sandbox" ? row.sandbox_refresh_token : row.production_refresh_token;
+  const value = decryptMeSecret(raw);
+  return value || null;
 }
 
 function getTokenExpiresAt(
@@ -322,7 +345,7 @@ export async function updateMelhorEnvioSettings(
     patch[`${prefix}_client_id`] = input.clientId.trim();
   }
   if (input.clientSecret !== undefined && input.clientSecret.trim() !== "") {
-    patch[`${prefix}_client_secret`] = input.clientSecret.trim();
+    patch[`${prefix}_client_secret`] = encryptMeSecret(input.clientSecret.trim());
   }
 
   const { data, error } = await supabase
@@ -437,8 +460,8 @@ async function saveTokens(
   const { error } = await supabase
     .from("melhor_envio_settings")
     .update({
-      [`${prefix}_access_token`]: tokens.access_token,
-      [`${prefix}_refresh_token`]: tokens.refresh_token,
+      [`${prefix}_access_token`]: encryptMeSecret(tokens.access_token),
+      [`${prefix}_refresh_token`]: encryptMeSecret(tokens.refresh_token),
       [`${prefix}_token_expires_at`]: expiresAt,
       environment,
       updated_at: new Date().toISOString(),
