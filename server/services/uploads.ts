@@ -38,7 +38,7 @@ const EXT_BY_MIME: Record<string, string> = {
  * Mantém transparência (PNG → WebP com alpha).
  * GIFs animados não passam por aqui — a animação seria perdida.
  */
-async function toOptimizedWebp(
+export async function toOptimizedWebp(
   buffer: Buffer,
   folder: UploadFolder,
 ): Promise<Buffer> {

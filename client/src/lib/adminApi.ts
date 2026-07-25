@@ -91,28 +91,33 @@ export async function uploadProductImage(
   file: File,
   folder: "products" | "banners" | "quiz" = "products"
 ): Promise<{ url: string }> {
-  // GIF e arquivos maiores: upload direto ao Supabase (Vercel limita ~4,5MB no body da function).
+  // Converte para WebP no browser (exceto GIF) antes do upload — arquivos >3MB
+  // iam direto ao Storage sem passar pelo sharp do servidor e ficavam em PNG/JPG pesados.
+  const { optimizeImageForUpload } = await import("./optimizeImageForUpload");
+  const optimized = await optimizeImageForUpload(file, folder);
+
+  if (optimized.size > 15 * 1024 * 1024) {
+    throw new AdminApiError("Arquivo muito grande. O limite é 15MB por imagem.");
+  }
+
+  // GIF e arquivos ainda grandes: upload direto ao Supabase (Vercel limita ~4,5MB no body).
   const mustUseDirectUpload =
-    file.type === "image/gif" || file.size > 3 * 1024 * 1024;
+    optimized.type === "image/gif" || optimized.size > 3 * 1024 * 1024;
 
   if (mustUseDirectUpload) {
-    if (file.size > 15 * 1024 * 1024) {
-      throw new AdminApiError("Arquivo muito grande. O limite é 15MB por imagem.");
-    }
-
     const signed = await request<{
       path: string;
       token: string;
       publicUrl: string;
     }>("/api/admin/uploads/sign", {
       method: "POST",
-      body: JSON.stringify({ folder, contentType: file.type || "image/gif" }),
+      body: JSON.stringify({ folder, contentType: optimized.type || "image/gif" }),
     });
 
     const { error } = await supabaseClient.storage
       .from("product-images")
-      .uploadToSignedUrl(signed.path, signed.token, file, {
-        contentType: file.type || "image/gif",
+      .uploadToSignedUrl(signed.path, signed.token, optimized, {
+        contentType: optimized.type || "image/gif",
         upsert: false,
       });
 
@@ -124,7 +129,7 @@ export async function uploadProductImage(
   }
 
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", optimized);
   formData.append("folder", folder);
 
   const response = await fetch("/api/admin/uploads", {

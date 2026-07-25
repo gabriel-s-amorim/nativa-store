@@ -9,6 +9,8 @@ interface QuestionCardProps {
   selected: boolean;
   stitching: boolean;
   disabled: boolean;
+  /** Primeira pergunta: eager + high priority para LCP. */
+  priority?: boolean;
   onSelect: (optionId: string) => void;
   onStitchComplete: (optionId: string) => void;
 }
@@ -18,6 +20,7 @@ export default function QuestionCard({
   selected,
   stitching,
   disabled,
+  priority = false,
   onSelect,
   onStitchComplete,
 }: QuestionCardProps) {
@@ -56,7 +59,10 @@ export default function QuestionCard({
           src={option.imageUrl}
           alt={option.label}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          decoding="async"
+          fetchPriority={priority ? "high" : "auto"}
+          sizes="(max-width: 640px) 50vw, 280px"
         />
       </div>
       <div className="px-4 py-3.5">

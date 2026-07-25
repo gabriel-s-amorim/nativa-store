@@ -52,6 +52,30 @@ export default function QuizCuradoria() {
     }
   }, [phase]);
 
+  // Pré-carrega imagens da pergunta atual e da próxima (reduz wait ao avançar).
+  useEffect(() => {
+    if (phase !== "questions" || questions.length === 0) return;
+
+    const urls = [
+      ...(questions[currentIndex]?.options.map((o) => o.imageUrl) ?? []),
+      ...(questions[currentIndex + 1]?.options.map((o) => o.imageUrl) ?? []),
+    ].filter(Boolean);
+
+    const links: HTMLLinkElement[] = [];
+    for (const href of urls) {
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "image";
+      link.href = href;
+      document.head.appendChild(link);
+      links.push(link);
+    }
+
+    return () => {
+      for (const link of links) link.remove();
+    };
+  }, [phase, questions, currentIndex]);
+
   const livePreviewChoices = useMemo(() => {
     if (!selectedOptionId || !currentQuestion) return previewChoices;
     if (previewChoices.some((c) => c.id === selectedOptionId)) return previewChoices;
@@ -237,6 +261,7 @@ export default function QuizCuradoria() {
                 selected={selectedOptionId === option.id}
                 stitching={stitchingOptionId === option.id}
                 disabled={interactionLocked}
+                priority={currentIndex === 0}
                 onSelect={selectOption}
                 onStitchComplete={onStitchComplete}
               />
