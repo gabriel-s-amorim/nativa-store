@@ -26,7 +26,7 @@ describe("quizCombinations", () => {
 
   it("retorna texto pré-definido para pares conhecidos", () => {
     const text = getCombinationText("r-natureza", "r-classico");
-    expect(text).toMatch(/Sofisticação|acabamento|liberdade/i);
+    expect(text).toMatch(/Sofisticação|acabamento|autenticidade/i);
   });
 
   it("tem fallback para pares desconhecidos", () => {

@@ -93,7 +93,7 @@ const EMPTY_OPTION = (): OptionForm => ({
   id: "",
   label: "",
   imageUrl: "",
-  tags: [{ tag: "natureza", weight: 2 }],
+  tags: [{ tag: "natureza", weight: 5 }],
 });
 
 function emptyQuestionForm(nextOrder: number): QuestionForm {
@@ -1095,7 +1095,7 @@ export default function AdminQuiz() {
                           ))}
                         </div>
                         <p className="text-[11px] text-[var(--admin-text-muted)]">
-                          Sugestões: {SUGGESTED_TAGS.join(", ")}. Use peso 2 na tag principal.
+                          Sugestões: {SUGGESTED_TAGS.join(", ")}. Use peso 5 na tag principal e 2 na secundária.
                         </p>
                       </div>
                     </div>
@@ -1146,7 +1146,7 @@ export default function AdminQuiz() {
                 onChange={(event) =>
                   setResultForm((prev) => ({ ...prev, name: event.target.value }))
                 }
-                placeholder="Ex: Espírito Livre"
+                placeholder="Ex: Essência Natural"
                 className="h-11 rounded-xl"
               />
             </div>
