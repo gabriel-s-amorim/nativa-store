@@ -139,6 +139,9 @@ function AboutPhotoCard() {
             loading="lazy"
             decoding="async"
             draggable={false}
+            width={900}
+            height={1600}
+            sizes="(min-width: 1024px) 42vw, 100vw"
           />
           {tilt.isHovering && !motionReduced && (
             <div

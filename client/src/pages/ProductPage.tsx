@@ -85,7 +85,7 @@ export default function ProductPage() {
           description: stripHtml(product.shortDescription || product.description) || product.name,
           path: `/produto/${product.slug}`,
           image: product.image || product.images[0],
-          type: "product",
+          type: "website",
           keywords: `${product.name}, ${product.category}, ${SITE_KEYWORDS}`,
           product: {
             price: product.price,

@@ -81,7 +81,15 @@ export default function ProductGallery({
                 aria-label={imageLabels[i] ?? `Imagem ${i + 1}`}
                 aria-current={selectedIndex === i}
               >
-                <img src={img} alt="" className="absolute inset-0 size-full object-cover" />
+                <img
+                  src={img}
+                  alt=""
+                  className="absolute inset-0 size-full object-cover"
+                  width={144}
+                  height={144}
+                  loading="lazy"
+                  decoding="async"
+                />
               </button>
             ))}
           </div>
@@ -115,6 +123,12 @@ export default function ProductGallery({
                   alt={`${productName} — ${imageLabels[i] ?? `Imagem ${i + 1}`}`}
                   className="absolute inset-0 size-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
                   draggable={false}
+                  width={1200}
+                  height={1500}
+                  loading={i === 0 ? "eager" : "lazy"}
+                  fetchPriority={i === 0 ? "high" : "low"}
+                  decoding={i === 0 ? "sync" : "async"}
+                  sizes="(min-width: 1024px) 50vw, 100vw"
                 />
               </a>
             ))}
@@ -203,7 +217,15 @@ export default function ProductGallery({
               }`}
               aria-label={imageLabels[i] ?? `Imagem ${i + 1}`}
             >
-              <img src={img} alt="" className="absolute inset-0 size-full object-cover" />
+              <img
+                src={img}
+                alt=""
+                className="absolute inset-0 size-full object-cover"
+                width={112}
+                height={112}
+                loading="lazy"
+                decoding="async"
+              />
             </button>
           ))}
         </div>

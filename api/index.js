@@ -3,7 +3,7 @@ import cookieParser from "cookie-parser";
 import express from "express";
 
 // server/routes/admin.ts
-import { Router as Router10 } from "express";
+import { Router as Router14 } from "express";
 
 // server/lib/adminAuth.ts
 import crypto from "node:crypto";
@@ -45,6 +45,153 @@ function verifyAdminToken(token) {
   } catch {
     return false;
   }
+}
+
+// server/lib/adminLoginRateLimit.ts
+var WINDOW_MS = 15 * 60 * 1e3;
+var MAX_ATTEMPTS = 8;
+var LOCKOUT_MS = 15 * 60 * 1e3;
+var attemptsByKey = /* @__PURE__ */ new Map();
+function prune(now) {
+  if (attemptsByKey.size < 500) return;
+  for (const [key, state] of Array.from(attemptsByKey.entries())) {
+    if (state.lockedUntil < now && state.windowStartedAt + WINDOW_MS < now) {
+      attemptsByKey.delete(key);
+    }
+  }
+}
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0]?.trim() || "unknown";
+  }
+  if (Array.isArray(forwarded) && typeof forwarded[0] === "string") {
+    return forwarded[0].split(",")[0]?.trim() || "unknown";
+  }
+  return req.ip?.trim() || "unknown";
+}
+function checkAdminLoginRateLimit(key) {
+  const now = Date.now();
+  prune(now);
+  const state = attemptsByKey.get(key);
+  if (!state) {
+    return { allowed: true };
+  }
+  if (state.lockedUntil > now) {
+    return {
+      allowed: false,
+      retryAfterSec: Math.ceil((state.lockedUntil - now) / 1e3)
+    };
+  }
+  if (now - state.windowStartedAt > WINDOW_MS) {
+    attemptsByKey.delete(key);
+    return { allowed: true };
+  }
+  if (state.failures >= MAX_ATTEMPTS) {
+    state.lockedUntil = now + LOCKOUT_MS;
+    return {
+      allowed: false,
+      retryAfterSec: Math.ceil(LOCKOUT_MS / 1e3)
+    };
+  }
+  return { allowed: true };
+}
+function recordAdminLoginFailure(key) {
+  const now = Date.now();
+  const state = attemptsByKey.get(key);
+  if (!state || now - state.windowStartedAt > WINDOW_MS) {
+    attemptsByKey.set(key, {
+      failures: 1,
+      windowStartedAt: now,
+      lockedUntil: 0
+    });
+    return;
+  }
+  state.failures += 1;
+  if (state.failures >= MAX_ATTEMPTS) {
+    state.lockedUntil = now + LOCKOUT_MS;
+  }
+}
+function clearAdminLoginFailures(key) {
+  attemptsByKey.delete(key);
+}
+
+// shared/const/analytics.ts
+var VISITOR_SESSION_COOKIE = "nativa_visitor_session";
+var VISITOR_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+var ANALYTICS_EXCLUDE_COOKIE = "nativa_analytics_exclude";
+var ANALYTICS_EXCLUDE_COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1e3;
+var ANALYTICS_EXCLUDE_COOKIE_VALUE = "1";
+var ABANDONED_CART_HOURS = 24;
+
+// server/lib/clientIp.ts
+function getClientIp2(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return normalizeIp(first);
+  }
+  if (Array.isArray(forwarded) && forwarded[0]) {
+    const first = forwarded[0].split(",")[0]?.trim();
+    if (first) return normalizeIp(first);
+  }
+  const realIp = req.headers["x-real-ip"];
+  if (typeof realIp === "string" && realIp.trim()) {
+    return normalizeIp(realIp.trim());
+  }
+  const remote = req.socket.remoteAddress;
+  if (remote) return normalizeIp(remote);
+  return null;
+}
+function normalizeIp(ip) {
+  if (ip.startsWith("::ffff:")) {
+    return ip.slice(7);
+  }
+  return ip;
+}
+
+// server/lib/analyticsExclude.ts
+function parseExcludeIps() {
+  const raw = process.env.ANALYTICS_EXCLUDE_IPS?.trim() ?? "";
+  if (!raw) return /* @__PURE__ */ new Set();
+  return new Set(
+    raw.split(",").map((part) => part.trim()).filter(Boolean).map((ip) => ip.startsWith("::ffff:") ? ip.slice(7) : ip)
+  );
+}
+function hasAnalyticsExcludeCookie(cookies) {
+  return cookies?.[ANALYTICS_EXCLUDE_COOKIE] === ANALYTICS_EXCLUDE_COOKIE_VALUE;
+}
+function hasValidAdminSession(cookies) {
+  const token = cookies?.[ADMIN_COOKIE_NAME];
+  if (!token) return false;
+  return verifyAdminToken(token);
+}
+function isExcludedClientIp(req) {
+  const excluded = parseExcludeIps();
+  if (excluded.size === 0) return false;
+  const ip = getClientIp2(req);
+  if (!ip) return false;
+  return excluded.has(ip);
+}
+function shouldExcludeAnalytics(req) {
+  const cookies = req.cookies ?? {};
+  if (hasValidAdminSession(cookies)) return true;
+  if (hasAnalyticsExcludeCookie(cookies)) return true;
+  if (isExcludedClientIp(req)) return true;
+  return false;
+}
+function setAnalyticsExcludeCookie(res) {
+  const isProduction = process.env.NODE_ENV === "production";
+  res.cookie(ANALYTICS_EXCLUDE_COOKIE, ANALYTICS_EXCLUDE_COOKIE_VALUE, {
+    httpOnly: false,
+    secure: isProduction,
+    sameSite: "lax",
+    maxAge: ANALYTICS_EXCLUDE_COOKIE_MAX_AGE_MS,
+    path: "/"
+  });
+}
+function clearAnalyticsExcludeCookie(res) {
+  res.clearCookie(ANALYTICS_EXCLUDE_COOKIE, { path: "/" });
 }
 
 // server/lib/upload.ts
@@ -106,10 +253,12 @@ var supabase = createClient(url, secretKey, {
 // server/services/uploads.ts
 var PRODUCT_IMAGES_BUCKET = "product-images";
 var MAX_STORAGE_FILE_BYTES = 15 * 1024 * 1024;
+var MAX_STORY_VIDEO_BYTES = 50 * 1024 * 1024;
 var WEBP_QUALITY = 82;
 var MAX_DIMENSION_BY_FOLDER = {
   products: 1600,
-  banners: 2400
+  banners: 2400,
+  quiz: 1400
 };
 var EXT_BY_MIME = {
   "image/jpeg": "jpg",
@@ -401,14 +550,35 @@ var brevoSettingsSchema = z2.object({
   defaultSenderEmail: z2.union([z2.literal(""), z2.email().max(320)]).optional(),
   defaultSenderName: z2.string().trim().max(150).optional(),
   replyTo: z2.union([z2.literal(""), z2.email().max(320)]).optional(),
+  merchantNotifyEmail: z2.union([z2.literal(""), z2.email().max(320)]).optional(),
   defaultListId: nullablePositiveInteger.optional(),
   templateOrderReceived: nullablePositiveInteger.optional(),
+  templateOrderReceivedMerchant: nullablePositiveInteger.optional(),
   templatePaymentApproved: nullablePositiveInteger.optional(),
   templatePaymentFailed: nullablePositiveInteger.optional(),
   templatePaymentRefunded: nullablePositiveInteger.optional(),
   templateOrderProcessing: nullablePositiveInteger.optional(),
   templateOrderShipped: nullablePositiveInteger.optional(),
   templateOrderDelivered: nullablePositiveInteger.optional()
+});
+var brevoTemplateTestSchema = z2.object({
+  event: z2.enum([
+    "order_received",
+    "order_received_merchant",
+    "payment_approved"
+  ]),
+  email: z2.email().max(320)
+});
+var brevoStoreTemplateUpdateSchema = z2.object({
+  event: z2.enum([
+    "order_received",
+    "order_received_merchant",
+    "payment_approved"
+  ]),
+  name: z2.string().trim().min(1).max(150).optional(),
+  subject: z2.string().trim().min(1).max(998),
+  htmlContent: z2.string().trim().min(1).max(1e6),
+  enabled: z2.boolean().optional()
 });
 var brevoContactSchema = z2.object({
   email: z2.email().max(320),
@@ -498,6 +668,12 @@ var brevoNewsletterSchema = z2.object({
   source: z2.string().trim().min(1).max(100).optional(),
   website: z2.string().max(200).optional()
 });
+var brevoContactListsSchema = z2.object({
+  listIds: z2.array(z2.number().int().positive()).max(100)
+});
+var brevoMarketingResyncSchema = z2.object({
+  emails: z2.array(z2.email().max(320)).max(200).optional()
+});
 var brevoListCreateSchema = z2.object({
   name: z2.string().trim().min(1).max(150),
   folderId: z2.number().int().positive().optional()
@@ -530,6 +706,11 @@ function encryptionKey(keyName) {
   }
   return createHash("sha256").update(source).digest();
 }
+function isEncryptedSecret(value) {
+  if (!value.startsWith("v1.")) return false;
+  const parts = value.split(".");
+  return parts.length === 4 && parts.every((part) => part.length > 0);
+}
 function encryptSecret(value, keyName = "MERCADO_PAGO_ENCRYPTION_KEY") {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(keyName), iv);
@@ -560,6 +741,13 @@ function decryptSecret(value, keyName = "MERCADO_PAGO_ENCRYPTION_KEY") {
     decipher.update(Buffer.from(payloadRaw, "base64url")),
     decipher.final()
   ]).toString("utf8");
+}
+function decryptStoredSecret(value, keyName) {
+  if (!value) return value;
+  if (isEncryptedSecret(value)) {
+    return decryptSecret(value, keyName);
+  }
+  return value;
 }
 
 // server/services/brevo.ts
@@ -602,8 +790,10 @@ function adminStatus(row) {
     defaultSenderEmail: row.default_sender_email,
     defaultSenderName: row.default_sender_name,
     replyTo: row.reply_to,
+    merchantNotifyEmail: row.merchant_notify_email,
     defaultListId: row.default_list_id,
     templateOrderReceived: row.template_order_received,
+    templateOrderReceivedMerchant: row.template_order_received_merchant,
     templatePaymentApproved: row.template_payment_approved,
     templatePaymentFailed: row.template_payment_failed,
     templatePaymentRefunded: row.template_payment_refunded,
@@ -639,10 +829,14 @@ async function updateBrevoSettings(input) {
     update.default_sender_name = input.defaultSenderName.trim();
   }
   if (input.replyTo !== void 0) update.reply_to = input.replyTo.trim().toLowerCase();
+  if (input.merchantNotifyEmail !== void 0) {
+    update.merchant_notify_email = input.merchantNotifyEmail.trim().toLowerCase();
+  }
   if (input.defaultListId !== void 0)
     update.default_list_id = input.defaultListId;
   const templateColumns = {
     templateOrderReceived: "template_order_received",
+    templateOrderReceivedMerchant: "template_order_received_merchant",
     templatePaymentApproved: "template_payment_approved",
     templatePaymentFailed: "template_payment_failed",
     templatePaymentRefunded: "template_payment_refunded",
@@ -693,7 +887,7 @@ async function configureBrevoWebhooks() {
         "invalid",
         "blocked",
         "error",
-        "complaint",
+        "spam",
         "unsubscribed"
       ]
     },
@@ -715,17 +909,33 @@ async function configureBrevoWebhooks() {
     const existing = await brevoRequest(
       `/webhooks${queryString({ type: definition.type, sort: "desc" })}`
     );
-    const match = existing.webhooks?.find((webhook) => webhook.url === url2);
+    const match = existing.webhooks?.find(
+      (webhook) => webhook.url === url2 && Number.isFinite(webhook.id) && webhook.id > 0 && (webhook.type == null || webhook.type === definition.type)
+    );
     const body = {
       description: `Nativa Store (${definition.type})`,
       url: url2,
-      events: definition.events,
+      events: [...definition.events],
       type: definition.type,
       auth: { type: "bearer", token }
     };
+    if (match) {
+      try {
+        configured.push(
+          await brevoRequest(`/webhooks/${match.id}`, {
+            method: "PUT",
+            body: JSON.stringify(body)
+          })
+        );
+        continue;
+      } catch (error) {
+        const missing = error instanceof BrevoApiError && (error.status === 404 || /does not exist|not found/i.test(error.message));
+        if (!missing) throw error;
+      }
+    }
     configured.push(
-      await brevoRequest(match ? `/webhooks/${match.id}` : "/webhooks", {
-        method: match ? "PUT" : "POST",
+      await brevoRequest("/webhooks", {
+        method: "POST",
         body: JSON.stringify(body)
       })
     );
@@ -737,8 +947,10 @@ async function getBrevoTransactionalConfig() {
   return {
     enabled: settings.enabled,
     replyTo: settings.reply_to,
+    merchantNotifyEmail: settings.merchant_notify_email,
     templates: {
       order_received: settings.template_order_received,
+      order_received_merchant: settings.template_order_received_merchant,
       payment_approved: settings.template_payment_approved,
       payment_failed: settings.template_payment_failed,
       payment_refunded: settings.template_payment_refunded,
@@ -837,12 +1049,14 @@ async function createBrevoList(input) {
 function deleteBrevoList(listId) {
   return brevoRequest(`/contacts/lists/${listId}`, { method: "DELETE" });
 }
-function mapContact(contact) {
+function mapContact(contact, fallbackListIds) {
   return {
     ...contact,
     id: String(contact.id ?? contact.email),
-    firstName: contact.attributes?.FIRSTNAME ?? contact.attributes?.NOME,
-    lastName: contact.attributes?.LASTNAME ?? contact.attributes?.SOBRENOME,
+    email: String(contact.email ?? "").toLowerCase(),
+    firstName: contact.attributes?.FIRSTNAME ?? contact.attributes?.NOME ?? contact.firstName,
+    lastName: contact.attributes?.LASTNAME ?? contact.attributes?.SOBRENOME ?? contact.lastName,
+    listIds: Array.isArray(contact.listIds) ? contact.listIds : fallbackListIds ?? [],
     subscribed: !contact.emailBlacklisted
   };
 }
@@ -856,23 +1070,86 @@ async function listBrevoContacts(limit = 50, offset = 0, filters = {}) {
       "filter[query]": filters.search
     })}`
   );
-  return (result.contacts ?? []).map(mapContact);
+  const fallbackListIds = filters.listId ? [filters.listId] : void 0;
+  return (result.contacts ?? []).map(
+    (contact) => mapContact(contact, fallbackListIds)
+  );
+}
+async function getBrevoContact(email) {
+  const contact = await brevoRequest(
+    `/contacts/${encodeURIComponent(email.trim().toLowerCase())}`
+  );
+  return mapContact(contact);
+}
+async function addContactsToBrevoList(listId, emails) {
+  const normalized = Array.from(
+    new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean))
+  );
+  if (!normalized.length) return { contacts: { success: [], failure: [] } };
+  try {
+    return await brevoRequest(`/contacts/lists/${listId}/contacts/add`, {
+      method: "POST",
+      body: JSON.stringify({ emails: normalized })
+    });
+  } catch (error) {
+    if (error instanceof BrevoApiError && error.status < 500) {
+      return { contacts: { success: normalized, failure: [] } };
+    }
+    throw error;
+  }
+}
+async function removeContactsFromBrevoList(listId, emails) {
+  const normalized = Array.from(
+    new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean))
+  );
+  if (!normalized.length) return { contacts: { success: [], failure: [] } };
+  return brevoRequest(`/contacts/lists/${listId}/contacts/remove`, {
+    method: "POST",
+    body: JSON.stringify({ emails: normalized })
+  });
 }
 function upsertBrevoContact(input) {
+  const payload = {
+    email: input.email.toLowerCase(),
+    attributes: {
+      ...input.attributes ?? {},
+      ...input.firstName ? { FIRSTNAME: input.firstName } : {},
+      ...input.lastName ? { LASTNAME: input.lastName } : {}
+    },
+    updateEnabled: input.updateEnabled ?? true
+  };
+  if (input.listIds?.length) payload.listIds = input.listIds;
+  if (input.unlinkListIds?.length) payload.unlinkListIds = input.unlinkListIds;
   return brevoRequest("/contacts", {
     method: "POST",
-    body: JSON.stringify({
-      email: input.email.toLowerCase(),
-      attributes: {
-        ...input.attributes ?? {},
-        ...input.firstName ? { FIRSTNAME: input.firstName } : {},
-        ...input.lastName ? { LASTNAME: input.lastName } : {}
-      },
-      listIds: input.listIds,
-      unlinkListIds: input.unlinkListIds,
-      updateEnabled: input.updateEnabled ?? true
-    })
+    body: JSON.stringify(payload)
   });
+}
+async function updateBrevoContactLists(email, listIds) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const uniqueListIds = Array.from(new Set(listIds.filter((id) => id > 0)));
+  let currentListIds = [];
+  try {
+    const current = await getBrevoContact(normalizedEmail);
+    currentListIds = current.listIds ?? [];
+  } catch (error) {
+    if (!(error instanceof BrevoApiError) || error.status !== 404) throw error;
+  }
+  const toAdd = uniqueListIds.filter((id) => !currentListIds.includes(id));
+  const toRemove = currentListIds.filter((id) => !uniqueListIds.includes(id));
+  await upsertBrevoContact({
+    email: normalizedEmail,
+    listIds: toAdd,
+    unlinkListIds: toRemove,
+    updateEnabled: true
+  });
+  await Promise.all([
+    ...toAdd.map((listId) => addContactsToBrevoList(listId, [normalizedEmail])),
+    ...toRemove.map(
+      (listId) => removeContactsFromBrevoList(listId, [normalizedEmail])
+    )
+  ]);
+  return getBrevoContact(normalizedEmail);
 }
 function deleteBrevoContact(email) {
   return brevoRequest(`/contacts/${encodeURIComponent(email)}`, {
@@ -1081,23 +1358,7 @@ async function subscribeToNewsletter(input, context) {
   );
   if (error) throw new Error(error.message);
   try {
-    const settings = await getActiveSettings();
-    const listIds = settings.default_list_id ? [settings.default_list_id] : [];
-    const result = await upsertBrevoContact({
-      email,
-      attributes: input.name ? { NOME: input.name.trim() } : void 0,
-      listIds,
-      updateEnabled: true
-    });
-    const { error: syncedError } = await supabase.from("marketing_subscriptions").update({
-      brevo_contact_id: result?.id == null ? null : String(result.id),
-      brevo_list_ids: listIds,
-      sync_status: "synced",
-      sync_error: null,
-      synced_at: (/* @__PURE__ */ new Date()).toISOString(),
-      updated_at: (/* @__PURE__ */ new Date()).toISOString()
-    }).eq("email", email);
-    if (syncedError) throw new Error(syncedError.message);
+    await syncMarketingSubscriptionToBrevo(email, input.name?.trim());
   } catch (syncError) {
     const message = syncError instanceof Error ? syncError.message : "Falha ao sincronizar";
     const { error: failedError } = await supabase.from("marketing_subscriptions").update({
@@ -1107,6 +1368,413 @@ async function subscribeToNewsletter(input, context) {
     }).eq("email", email);
     if (failedError) throw new Error(failedError.message);
   }
+}
+async function syncMarketingSubscriptionToBrevo(email, name) {
+  const settings = await getActiveSettings();
+  if (!settings.default_list_id) {
+    throw new Error(
+      "Lista padr\xE3o da newsletter n\xE3o configurada. Em Integra\xE7\xF5es \u2192 Brevo, escolha a lista e salve."
+    );
+  }
+  const listIds = [settings.default_list_id];
+  await upsertBrevoContact({
+    email,
+    attributes: name ? { NOME: name, FIRSTNAME: name } : void 0,
+    listIds,
+    updateEnabled: true
+  });
+  await addContactsToBrevoList(settings.default_list_id, [email]);
+  let contactId = null;
+  let syncedListIds = listIds;
+  try {
+    const contact = await getBrevoContact(email);
+    contactId = contact.id ? String(contact.id) : null;
+    if (Array.isArray(contact.listIds) && contact.listIds.length) {
+      syncedListIds = contact.listIds;
+    }
+  } catch {
+  }
+  const { error: syncedError } = await supabase.from("marketing_subscriptions").update({
+    brevo_contact_id: contactId,
+    brevo_list_ids: syncedListIds,
+    sync_status: "synced",
+    sync_error: null,
+    synced_at: (/* @__PURE__ */ new Date()).toISOString(),
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  }).eq("email", email);
+  if (syncedError) throw new Error(syncedError.message);
+}
+async function listMarketingSubscriptions(limit = 100) {
+  const { data, error } = await supabase.from("marketing_subscriptions").select(
+    "id, email, name, status, source, sync_status, sync_error, brevo_contact_id, brevo_list_ids, consented_at, synced_at, created_at"
+  ).order("created_at", { ascending: false }).limit(limit);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+async function resyncMarketingSubscriptions(emails) {
+  const settings = await getActiveSettings();
+  if (!settings.default_list_id) {
+    throw new Error(
+      "Lista padr\xE3o da newsletter n\xE3o configurada. Em Integra\xE7\xF5es \u2192 Brevo, escolha a lista e salve."
+    );
+  }
+  let query = supabase.from("marketing_subscriptions").select("email, name, status, sync_status, brevo_list_ids").eq("status", "subscribed").order("created_at", { ascending: false }).limit(500);
+  if (emails?.length) {
+    query = query.in(
+      "email",
+      emails.map((email) => email.trim().toLowerCase())
+    );
+  }
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  const targets = (data ?? []).filter((row) => {
+    if (emails?.length) return true;
+    const listIds = Array.isArray(row.brevo_list_ids) ? row.brevo_list_ids : [];
+    return row.sync_status !== "synced" || !listIds.includes(settings.default_list_id);
+  });
+  const results = [];
+  for (const row of targets) {
+    try {
+      await syncMarketingSubscriptionToBrevo(row.email, row.name);
+      results.push({ email: row.email, ok: true });
+    } catch (syncError) {
+      const message = syncError instanceof Error ? syncError.message : "Falha ao sincronizar";
+      await supabase.from("marketing_subscriptions").update({
+        sync_status: "failed",
+        sync_error: message.slice(0, 2e3),
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      }).eq("email", row.email);
+      results.push({ email: row.email, ok: false, error: message });
+    }
+  }
+  return {
+    total: targets.length,
+    synced: results.filter((item) => item.ok).length,
+    failed: results.filter((item) => !item.ok).length,
+    results
+  };
+}
+
+// server/lib/storeEmailTemplate.ts
+function escapeHtml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+function buildItemsHtml(items) {
+  if (!items?.length) return "<li>Nenhum item</li>";
+  return items.map((item) => {
+    const label = [
+      `${item.quantity ?? 1}x ${item.name ?? "Item"}`,
+      item.size ? `Tam. ${item.size}` : "",
+      item.color ? item.color : "",
+      item.price ?? ""
+    ].filter(Boolean).join(" \u2014 ");
+    return `<li>${escapeHtml(label)}</li>`;
+  }).join("");
+}
+function renderStoreEmailTemplate(template, params) {
+  const values = {
+    ITEMS_HTML: buildItemsHtml(params.ITEMS)
+  };
+  for (const [key, value] of Object.entries(params)) {
+    if (key === "ITEMS") continue;
+    values[key] = value == null ? "" : String(value);
+  }
+  return template.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_match, key) => {
+    return values[key] ?? "";
+  });
+}
+
+// server/services/storeEmailTemplates.ts
+function mapRow(row) {
+  return {
+    event: row.event,
+    name: row.name,
+    subject: row.subject,
+    htmlContent: row.html_content,
+    enabled: row.enabled,
+    updatedAt: row.updated_at
+  };
+}
+async function listStoreEmailTemplates() {
+  const { data, error } = await supabase.from("brevo_store_templates").select("*").order("event", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapRow);
+}
+async function getStoreEmailTemplate(event) {
+  const { data, error } = await supabase.from("brevo_store_templates").select("*").eq("event", event).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapRow(data) : null;
+}
+async function updateStoreEmailTemplate(input) {
+  const update = {
+    subject: input.subject.trim(),
+    html_content: input.htmlContent,
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  if (input.name !== void 0) update.name = input.name.trim();
+  if (input.enabled !== void 0) update.enabled = input.enabled;
+  const { data, error } = await supabase.from("brevo_store_templates").update(update).eq("event", input.event).select("*").single();
+  if (error) throw new Error(error.message);
+  return mapRow(data);
+}
+
+// server/services/orderEmails.ts
+var STORE_EVENTS = /* @__PURE__ */ new Set([
+  "order_received",
+  "order_received_merchant",
+  "payment_approved"
+]);
+function appUrl() {
+  const raw = process.env.APP_URL?.trim() || process.env.VITE_APP_URL?.trim() || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
+  return (raw.startsWith("http") ? raw : `https://${raw}`).replace(/\/$/, "");
+}
+function money(value) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  }).format(Number(value ?? 0));
+}
+function paymentMethodLabel(value) {
+  if (value === "pix") return "Pix";
+  if (value === "boleto") return "Boleto";
+  if (value === "credit_card") return "Cart\xE3o de cr\xE9dito";
+  return value;
+}
+function sampleOrderEmailParams() {
+  const shortId = "TESTE001";
+  return {
+    ORDER_ID: "00000000-0000-0000-0000-000000000001",
+    ORDER_SHORT_ID: shortId,
+    CUSTOMER_NAME: "Cliente Teste",
+    ORDER_URL: `${appUrl()}/conta`,
+    TOTAL: money(189.9),
+    SUBTOTAL: money(159.9),
+    SHIPPING_AMOUNT: money(30),
+    PAYMENT_METHOD: "Pix",
+    PAYMENT_STATUS: "pending",
+    ITEMS: [
+      {
+        name: "Produto de teste",
+        quantity: 1,
+        price: money(159.9),
+        size: "M",
+        color: "Natural"
+      }
+    ],
+    SHIPPING_COMPANY: "Correios",
+    DELIVERY_DAYS: "5",
+    TRACKING_CODE: "",
+    TRACKING_URL: "",
+    ADDRESS: "Rua Exemplo, 100, Centro, S\xE3o Paulo, SP, 01000-000"
+  };
+}
+async function loadOrderEmailContext(orderId) {
+  const [{ data: order, error: orderError }, { data: items, error: itemsError }] = await Promise.all([
+    supabase.from("orders").select("*").eq("id", orderId).maybeSingle(),
+    supabase.from("order_items").select("name, quantity, price, size, color").eq("order_id", orderId).order("id", { ascending: true })
+  ]);
+  if (orderError || itemsError || !order) return null;
+  const recipient = order.shipping_recipient ?? {};
+  let email = recipient.email?.trim().toLowerCase() ?? "";
+  let customerName = recipient.name?.trim() ?? "";
+  if ((!email || !customerName) && order.customer_id) {
+    const [{ data: profile }, authResult] = await Promise.all([
+      supabase.from("customer_profiles").select("full_name").eq("id", order.customer_id).maybeSingle(),
+      supabase.auth.admin.getUserById(order.customer_id)
+    ]);
+    email ||= authResult.data.user?.email?.toLowerCase() ?? "";
+    customerName ||= profile?.full_name ?? "";
+  }
+  const address = order.shipping_address ?? {};
+  const itemParams = (items ?? []).map((item) => ({
+    name: item.name,
+    quantity: Number(item.quantity),
+    price: money(item.price),
+    size: item.size,
+    color: item.color
+  }));
+  const shortId = String(order.id).slice(0, 8).toUpperCase();
+  const params = {
+    ORDER_ID: order.id,
+    ORDER_SHORT_ID: shortId,
+    CUSTOMER_NAME: customerName || "Cliente Nativa",
+    ORDER_URL: `${appUrl()}/conta`,
+    TOTAL: money(order.total_amount),
+    SUBTOTAL: money(Number(order.total_amount) - Number(order.shipping_amount)),
+    SHIPPING_AMOUNT: money(order.shipping_amount),
+    PAYMENT_METHOD: paymentMethodLabel(order.payment_method),
+    PAYMENT_STATUS: order.payment_status,
+    ITEMS: itemParams,
+    SHIPPING_COMPANY: order.shipping_company ?? "",
+    DELIVERY_DAYS: order.shipping_delivery_days ?? "",
+    TRACKING_CODE: order.tracking_code ?? "",
+    TRACKING_URL: order.tracking_url ?? "",
+    ADDRESS: [
+      address.rua,
+      address.numero,
+      address.complemento,
+      address.bairro,
+      address.cidade,
+      address.estado,
+      address.cep
+    ].filter(Boolean).join(", ")
+  };
+  return { order, email, customerName, params };
+}
+async function resolveEmailContent(event, params, brevoTemplateId) {
+  if (STORE_EVENTS.has(event)) {
+    const store = await getStoreEmailTemplate(event);
+    if (store?.enabled && store.htmlContent.trim()) {
+      return {
+        mode: "html",
+        subject: renderStoreEmailTemplate(store.subject, params),
+        htmlContent: renderStoreEmailTemplate(store.htmlContent, params)
+      };
+    }
+  }
+  if (brevoTemplateId) {
+    return { mode: "brevo", templateId: brevoTemplateId };
+  }
+  return null;
+}
+async function dispatchOrderEmail(orderId, event) {
+  let config;
+  try {
+    config = await getBrevoTransactionalConfig();
+  } catch {
+    return "skipped";
+  }
+  const context = await loadOrderEmailContext(orderId);
+  if (!context) return "failed";
+  const resolved = await resolveEmailContent(
+    event,
+    context.params,
+    config.templates[event]
+  );
+  if (!resolved) return "skipped";
+  const isMerchant = event === "order_received_merchant";
+  const email = isMerchant ? config.merchantNotifyEmail.trim().toLowerCase() : context.email;
+  const recipientName = isMerchant ? "Loja Nativa" : context.customerName || void 0;
+  if (!email) return "skipped";
+  const idempotencyKey = `${orderId}:${event}`;
+  const { data: insertedDelivery, error: deliveryError } = await supabase.from("brevo_email_deliveries").upsert(
+    {
+      order_id: orderId,
+      event,
+      idempotency_key: idempotencyKey,
+      kind: "transactional",
+      recipient_email: email,
+      template_id: resolved.mode === "brevo" ? resolved.templateId : null,
+      subject: resolved.mode === "html" ? resolved.subject : null,
+      status: "queued",
+      metadata: { orderId, event, mode: resolved.mode }
+    },
+    { onConflict: "idempotency_key", ignoreDuplicates: true }
+  ).select("id, attempt_count").maybeSingle();
+  if (deliveryError) return "failed";
+  let delivery = insertedDelivery;
+  if (!delivery) {
+    const { data: failedDelivery } = await supabase.from("brevo_email_deliveries").select("id, attempt_count").eq("idempotency_key", idempotencyKey).eq("status", "failed").lt("attempt_count", 3).maybeSingle();
+    if (!failedDelivery) return "duplicate";
+    const { data: claimed } = await supabase.from("brevo_email_deliveries").update({
+      status: "sending",
+      error_message: null,
+      attempt_count: Number(failedDelivery.attempt_count) + 1,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("id", failedDelivery.id).eq("status", "failed").select("id, attempt_count").maybeSingle();
+    if (!claimed) return "duplicate";
+    delivery = claimed;
+  } else {
+    await supabase.from("brevo_email_deliveries").update({
+      status: "sending",
+      attempt_count: 1,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("id", delivery.id);
+  }
+  try {
+    const payload = resolved.mode === "html" ? {
+      to: [{ email, name: recipientName }],
+      replyTo: config.replyTo ? { email: config.replyTo } : void 0,
+      subject: resolved.subject,
+      htmlContent: resolved.htmlContent,
+      tags: ["order", event]
+    } : {
+      to: [{ email, name: recipientName }],
+      replyTo: config.replyTo ? { email: config.replyTo } : void 0,
+      templateId: resolved.templateId,
+      params: context.params,
+      tags: ["order", event]
+    };
+    const result = await sendBrevoTransactionalEmail(
+      payload,
+      "transactional",
+      { record: false }
+    );
+    await supabase.from("brevo_email_deliveries").update({
+      message_id: result.messageId ?? null,
+      status: "sent",
+      sent_at: (/* @__PURE__ */ new Date()).toISOString(),
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("id", delivery.id);
+    return "sent";
+  } catch (error) {
+    await supabase.from("brevo_email_deliveries").update({
+      status: "failed",
+      failed_at: (/* @__PURE__ */ new Date()).toISOString(),
+      error_message: error instanceof Error ? error.message.slice(0, 2e3) : "Erro desconhecido",
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("id", delivery.id);
+    return "failed";
+  }
+}
+async function dispatchOrderCreatedEmails(orderId) {
+  const customer = await dispatchOrderEmail(orderId, "order_received");
+  const merchant = await dispatchOrderEmail(orderId, "order_received_merchant");
+  return { customer, merchant };
+}
+function dispatchPaymentStatusEmail(orderId, status) {
+  if (status === "approved") {
+    return dispatchOrderEmail(orderId, "payment_approved");
+  }
+  if (status === "refunded") {
+    return dispatchOrderEmail(orderId, "payment_refunded");
+  }
+  if (["rejected", "canceled", "expired"].includes(status)) {
+    return dispatchOrderEmail(orderId, "payment_failed");
+  }
+  return Promise.resolve("skipped");
+}
+async function retryOrderEmail(orderId, deliveryId) {
+  const { data, error } = await supabase.from("brevo_email_deliveries").select("event").eq("id", deliveryId).eq("order_id", orderId).eq("status", "failed").maybeSingle();
+  if (error || !data?.event) return "failed";
+  return dispatchOrderEmail(orderId, data.event);
+}
+async function sendOrderTemplateTest(input) {
+  const config = await getBrevoTransactionalConfig();
+  const store = await getStoreEmailTemplate(input.event);
+  if (!store?.enabled || !store.htmlContent.trim()) {
+    throw new Error("Edite e salve este e-mail no admin antes de testar");
+  }
+  const email = input.email.trim().toLowerCase();
+  const params = {
+    ...sampleOrderEmailParams(),
+    ...input.event === "payment_approved" ? { PAYMENT_STATUS: "approved" } : {}
+  };
+  return sendBrevoTransactionalEmail(
+    {
+      to: [
+        {
+          email,
+          name: input.event === "order_received_merchant" ? "Loja Nativa" : "Cliente Teste"
+        }
+      ],
+      replyTo: config.replyTo ? { email: config.replyTo } : void 0,
+      subject: renderStoreEmailTemplate(store.subject, params),
+      htmlContent: renderStoreEmailTemplate(store.htmlContent, params),
+      tags: ["order", "test", input.event]
+    },
+    "test"
+  );
 }
 
 // server/routes/adminBrevo.ts
@@ -1218,13 +1886,56 @@ router2.get("/contacts", async (req, res) => {
     failure(res, error, "Erro ao listar contatos");
   }
 });
+router2.get("/contacts/:email", async (req, res) => {
+  const parsed = z3.string().trim().min(1).max(320).safeParse(req.params.email);
+  if (!parsed.success) return invalid(res, parsed.error.issues);
+  try {
+    res.json(await getBrevoContact(parsed.data));
+  } catch (error) {
+    failure(res, error, "Erro ao carregar contato");
+  }
+});
 router2.post("/contacts", async (req, res) => {
   const parsed = brevoContactSchema.safeParse(req.body);
   if (!parsed.success) return invalid(res, parsed.error.issues);
   try {
-    res.status(201).json(await upsertBrevoContact(parsed.data));
+    await upsertBrevoContact(parsed.data);
+    if (parsed.data.listIds?.length) {
+      await Promise.all(
+        parsed.data.listIds.map(
+          (listId) => addContactsToBrevoList(listId, [parsed.data.email])
+        )
+      );
+    }
+    try {
+      res.status(201).json(await getBrevoContact(parsed.data.email));
+    } catch {
+      res.status(201).json({
+        id: parsed.data.email,
+        email: parsed.data.email.toLowerCase(),
+        listIds: parsed.data.listIds ?? [],
+        subscribed: true
+      });
+    }
   } catch (error) {
     failure(res, error, "Erro ao salvar contato");
+  }
+});
+router2.put("/contacts/:email/lists", async (req, res) => {
+  const emailParsed = z3.string().trim().min(1).max(320).safeParse(req.params.email);
+  const bodyParsed = brevoContactListsSchema.safeParse(req.body);
+  if (!emailParsed.success || !bodyParsed.success) {
+    return invalid(
+      res,
+      emailParsed.success ? bodyParsed.error?.issues : emailParsed.error.issues
+    );
+  }
+  try {
+    res.json(
+      await updateBrevoContactLists(emailParsed.data, bodyParsed.data.listIds)
+    );
+  } catch (error) {
+    failure(res, error, "Erro ao atualizar listas do contato");
   }
 });
 router2.delete("/contacts/:email", async (req, res) => {
@@ -1235,6 +1946,24 @@ router2.delete("/contacts/:email", async (req, res) => {
     res.status(204).send();
   } catch (error) {
     failure(res, error, "Erro ao excluir contato");
+  }
+});
+router2.get("/marketing-subscriptions", async (req, res) => {
+  const parsed = paginationSchema.safeParse(req.query);
+  if (!parsed.success) return invalid(res, parsed.error.issues);
+  try {
+    res.json(await listMarketingSubscriptions(parsed.data.limit));
+  } catch (error) {
+    failure(res, error, "Erro ao listar inscritos da newsletter");
+  }
+});
+router2.post("/marketing-subscriptions/resync", async (req, res) => {
+  const parsed = brevoMarketingResyncSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return invalid(res, parsed.error.issues);
+  try {
+    res.json(await resyncMarketingSubscriptions(parsed.data.emails));
+  } catch (error) {
+    failure(res, error, "Erro ao reenviar inscritos ao Brevo");
   }
 });
 router2.post("/emails/send", async (req, res) => {
@@ -1258,6 +1987,31 @@ router2.post("/emails/test", async (req, res) => {
     );
   } catch (error) {
     failure(res, error, "Erro ao testar e-mail");
+  }
+});
+router2.post("/emails/test-template", async (req, res) => {
+  const parsed = brevoTemplateTestSchema.safeParse(req.body);
+  if (!parsed.success) return invalid(res, parsed.error.issues);
+  try {
+    res.status(201).json(await sendOrderTemplateTest(parsed.data));
+  } catch (error) {
+    failure(res, error, "Erro ao enviar teste do template");
+  }
+});
+router2.get("/store-templates", async (_req, res) => {
+  try {
+    res.json(await listStoreEmailTemplates());
+  } catch (error) {
+    failure(res, error, "Erro ao listar e-mails da loja");
+  }
+});
+router2.put("/store-templates", async (req, res) => {
+  const parsed = brevoStoreTemplateUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return invalid(res, parsed.error.issues);
+  try {
+    res.json(await updateStoreEmailTemplate(parsed.data));
+  } catch (error) {
+    failure(res, error, "Erro ao salvar e-mail da loja");
   }
 });
 router2.get("/campaigns", async (req, res) => {
@@ -1371,17 +2125,467 @@ router2.get("/campaigns/:id/metrics", async (req, res) => {
 });
 var adminBrevo_default = router2;
 
-// server/routes/adminCustomers.ts
+// shared/schemas/coupon.ts
+import { z as z4 } from "zod";
+var optionalNullableNumber = z4.union([z4.number(), z4.null(), z4.literal("")]).optional().transform((value) => {
+  if (value == null || value === "") return null;
+  return value;
+});
+var optionalNullableDatetime = z4.union([z4.string(), z4.null(), z4.literal("")]).optional().transform((value) => {
+  if (value == null || value === "") return null;
+  return value;
+});
+var couponSchema = z4.object({
+  code: z4.string().trim().min(1, "Informe o c\xF3digo do cupom").max(50, "C\xF3digo muito longo").regex(/^[A-Za-z0-9_-]+$/, "Use apenas letras, n\xFAmeros, _ ou -"),
+  type: z4.enum(["percentage", "fixed", "free_shipping"]),
+  value: z4.number().finite("Informe um valor v\xE1lido"),
+  isActive: z4.boolean().optional().default(true),
+  startsAt: optionalNullableDatetime,
+  endsAt: optionalNullableDatetime,
+  minSubtotal: optionalNullableNumber,
+  maxUses: optionalNullableNumber,
+  maxUsesPerCustomer: optionalNullableNumber,
+  isMapReward: z4.boolean().optional().default(false),
+  description: z4.union([z4.string(), z4.null()]).optional().transform((value) => {
+    if (value == null) return null;
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed.slice(0, 200);
+  })
+}).superRefine((data, ctx) => {
+  if (data.type === "percentage") {
+    if (data.value <= 0 || data.value > 100) {
+      ctx.addIssue({
+        code: z4.ZodIssueCode.custom,
+        path: ["value"],
+        message: "Percentual deve ser entre 0,01 e 100"
+      });
+    }
+  } else if (data.type === "fixed") {
+    if (data.value < 0) {
+      ctx.addIssue({
+        code: z4.ZodIssueCode.custom,
+        path: ["value"],
+        message: "Valor fixo n\xE3o pode ser negativo"
+      });
+    }
+  } else if (data.type === "free_shipping" && data.value < 0) {
+    ctx.addIssue({
+      code: z4.ZodIssueCode.custom,
+      path: ["value"],
+      message: "Valor inv\xE1lido para frete gr\xE1tis"
+    });
+  }
+  if (data.minSubtotal != null && data.minSubtotal < 0) {
+    ctx.addIssue({
+      code: z4.ZodIssueCode.custom,
+      path: ["minSubtotal"],
+      message: "Subtotal m\xEDnimo n\xE3o pode ser negativo"
+    });
+  }
+  if (data.maxUses != null && (!Number.isInteger(data.maxUses) || data.maxUses <= 0)) {
+    ctx.addIssue({
+      code: z4.ZodIssueCode.custom,
+      path: ["maxUses"],
+      message: "Limite total deve ser um inteiro positivo"
+    });
+  }
+  if (data.maxUsesPerCustomer != null && (!Number.isInteger(data.maxUsesPerCustomer) || data.maxUsesPerCustomer <= 0)) {
+    ctx.addIssue({
+      code: z4.ZodIssueCode.custom,
+      path: ["maxUsesPerCustomer"],
+      message: "Limite por cliente deve ser um inteiro positivo"
+    });
+  }
+  if (data.startsAt && data.endsAt && new Date(data.startsAt) > new Date(data.endsAt)) {
+    ctx.addIssue({
+      code: z4.ZodIssueCode.custom,
+      path: ["endsAt"],
+      message: "Data final deve ser ap\xF3s a data inicial"
+    });
+  }
+});
+
+// server/routes/adminCoupons.ts
 import { Router as Router3 } from "express";
+
+// shared/const/cart.ts
+var FREE_SHIPPING_THRESHOLD = 299;
+var CART_SESSION_COOKIE = "nativa_cart_session";
+var CART_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+var CART_STATUS_ACTIVE = "active";
+
+// shared/lib/shipping.ts
+function applyCheapestOptionFree(options) {
+  const sorted = options.map((option) => ({ ...option, packages: [...option.packages] }));
+  if (sorted.length === 0) {
+    return { options: sorted, applied: false };
+  }
+  sorted[0] = { ...sorted[0], price: 0, customPrice: 0 };
+  return { options: sorted, applied: true };
+}
+function applyFreeShipping(options, subtotal, enabled = true, threshold = FREE_SHIPPING_THRESHOLD) {
+  const cloned = options.map((option) => ({ ...option, packages: [...option.packages] }));
+  if (!enabled || subtotal < threshold || cloned.length === 0) {
+    return { options: cloned, applied: false };
+  }
+  return applyCheapestOptionFree(cloned);
+}
+function groupShipmentVolumes(company, volumes) {
+  return /(correios|j&t|loggi)/i.test(company) ? volumes.map((volume) => [volume]) : [volumes];
+}
+
+// shared/lib/coupons.ts
+function normalizeCouponCode(code) {
+  return code.trim().toUpperCase();
+}
+var CouponEvalError = class extends Error {
+  code;
+  minSubtotal;
+  constructor(code, message, minSubtotal) {
+    super(message);
+    this.name = "CouponEvalError";
+    this.code = code;
+    this.minSubtotal = minSubtotal;
+  }
+};
+function couponErrorMessage(error) {
+  switch (error.code) {
+    case "invalid":
+      return "Cupom inv\xE1lido";
+    case "inactive":
+      return "Cupom inativo";
+    case "not_started":
+      return "Cupom ainda n\xE3o est\xE1 v\xE1lido";
+    case "expired":
+      return "Cupom expirado";
+    case "min_subtotal":
+      return error.minSubtotal != null ? `Pedido m\xEDnimo de R$ ${error.minSubtotal.toFixed(2).replace(".", ",")}` : "Subtotal abaixo do m\xEDnimo do cupom";
+    case "exhausted":
+      return "Cupom esgotado";
+    case "customer_limit":
+      return "Limite de uso atingido";
+    default:
+      return "Cupom inv\xE1lido";
+  }
+}
+function evaluateCoupon(coupon, ctx) {
+  const now = ctx.now ?? /* @__PURE__ */ new Date();
+  if (!coupon.isActive) {
+    throw new CouponEvalError("inactive", "Cupom inativo");
+  }
+  if (coupon.startsAt && new Date(coupon.startsAt) > now) {
+    throw new CouponEvalError("not_started", "Cupom ainda n\xE3o est\xE1 v\xE1lido");
+  }
+  if (coupon.endsAt && new Date(coupon.endsAt) < now) {
+    throw new CouponEvalError("expired", "Cupom expirado");
+  }
+  if (coupon.minSubtotal != null && ctx.subtotal < coupon.minSubtotal) {
+    throw new CouponEvalError(
+      "min_subtotal",
+      "Subtotal abaixo do m\xEDnimo do cupom",
+      coupon.minSubtotal
+    );
+  }
+  if (coupon.maxUses != null && coupon.usageCount >= coupon.maxUses) {
+    throw new CouponEvalError("exhausted", "Cupom esgotado");
+  }
+  if (coupon.maxUsesPerCustomer != null && ctx.customerUsageCount != null && ctx.customerUsageCount >= coupon.maxUsesPerCustomer) {
+    throw new CouponEvalError("customer_limit", "Limite de uso atingido");
+  }
+}
+function computeItemDiscount(type, value, subtotal) {
+  if (subtotal <= 0) return 0;
+  if (type === "free_shipping") return 0;
+  let discount = 0;
+  if (type === "percentage") {
+    discount = subtotal * value / 100;
+  } else if (type === "fixed") {
+    discount = value;
+  }
+  const rounded = Math.round(discount * 100) / 100;
+  return Math.min(rounded, subtotal);
+}
+function applyCouponToSubtotal(coupon, ctx) {
+  evaluateCoupon(coupon, ctx);
+  const discountAmount = computeItemDiscount(coupon.type, coupon.value, ctx.subtotal);
+  return {
+    code: coupon.code,
+    type: coupon.type,
+    discountAmount,
+    description: coupon.description,
+    grantsFreeShipping: coupon.type === "free_shipping"
+  };
+}
+function applyFreeShippingCoupon(options) {
+  return applyCheapestOptionFree(options);
+}
+
+// shared/lib/couponMapper.ts
+function toNumber(value) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return parseFloat(value);
+  return 0;
+}
+function toNullableNumber(value) {
+  if (value == null || value === "") return null;
+  const n = toNumber(value);
+  return Number.isFinite(n) ? n : null;
+}
+function mapCouponRowToCoupon(row) {
+  return {
+    id: row.id,
+    code: row.code,
+    type: row.type,
+    value: toNumber(row.value),
+    isActive: row.is_active,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    minSubtotal: toNullableNumber(row.min_subtotal),
+    maxUses: row.max_uses,
+    maxUsesPerCustomer: row.max_uses_per_customer,
+    usageCount: row.usage_count,
+    description: row.description,
+    isMapReward: Boolean(row.is_map_reward),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+function mapCouponInputToRow(input) {
+  const type = input.type;
+  const value = type === "free_shipping" ? 0 : input.value;
+  return {
+    code: normalizeCouponCode(input.code),
+    type,
+    value,
+    is_active: input.isActive ?? true,
+    starts_at: input.startsAt ?? null,
+    ends_at: input.endsAt ?? null,
+    min_subtotal: input.minSubtotal ?? null,
+    max_uses: input.maxUses ?? null,
+    max_uses_per_customer: input.maxUsesPerCustomer ?? null,
+    description: input.description ?? null,
+    is_map_reward: type === "free_shipping" ? Boolean(input.isMapReward) : false,
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+
+// server/services/coupons.ts
+var COUPON_SELECT = "id, code, type, value, is_active, starts_at, ends_at, min_subtotal, max_uses, max_uses_per_customer, usage_count, description, is_map_reward, created_at, updated_at";
+async function clearOtherMapRewards(exceptId) {
+  let query = supabase.from("coupons").update({ is_map_reward: false, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("is_map_reward", true);
+  if (exceptId) {
+    query = query.neq("id", exceptId);
+  }
+  const { error } = await query;
+  if (error) {
+    throw new Error(`Erro ao atualizar recompensa do mapa: ${error.message}`);
+  }
+}
+async function getMapRewardCoupon() {
+  const { data: marked, error: markedError } = await supabase.from("coupons").select("code, description").eq("is_map_reward", true).eq("is_active", true).maybeSingle();
+  if (markedError) {
+    throw new Error(`Erro ao buscar cupom do mapa: ${markedError.message}`);
+  }
+  if (marked) {
+    return { code: marked.code, description: marked.description };
+  }
+  const { data: freeShipping, error: freeError } = await supabase.from("coupons").select("code, description").eq("type", "free_shipping").eq("is_active", true).order("created_at", { ascending: true }).limit(2);
+  if (freeError) {
+    throw new Error(`Erro ao buscar cupom do mapa: ${freeError.message}`);
+  }
+  if ((freeShipping ?? []).length === 1) {
+    const only = freeShipping[0];
+    return { code: only.code, description: only.description };
+  }
+  return null;
+}
+async function listAllCoupons() {
+  const { data, error } = await supabase.from("coupons").select(COUPON_SELECT).order("created_at", { ascending: false });
+  if (error) {
+    throw new Error(`Erro ao listar cupons: ${error.message}`);
+  }
+  return (data ?? []).map(mapCouponRowToCoupon);
+}
+async function getCouponById(id) {
+  const { data, error } = await supabase.from("coupons").select(COUPON_SELECT).eq("id", id).single();
+  if (error) {
+    throw new Error(error.code === "PGRST116" ? "Cupom n\xE3o encontrado" : error.message);
+  }
+  return mapCouponRowToCoupon(data);
+}
+async function findCouponByCode(code) {
+  const normalized = normalizeCouponCode(code);
+  if (!normalized) return null;
+  const { data, error } = await supabase.from("coupons").select(COUPON_SELECT).ilike("code", normalized).maybeSingle();
+  if (error) {
+    throw new Error(`Erro ao buscar cupom: ${error.message}`);
+  }
+  return data ? mapCouponRowToCoupon(data) : null;
+}
+async function countCustomerCouponUses(customerId, code) {
+  const { count, error } = await supabase.from("orders").select("id", { count: "exact", head: true }).eq("customer_id", customerId).ilike("coupon_code", normalizeCouponCode(code)).neq("status", "canceled");
+  if (error) {
+    throw new Error(`Erro ao contar usos do cupom: ${error.message}`);
+  }
+  return count ?? 0;
+}
+async function assertCouponApplicable(params) {
+  const coupon = await findCouponByCode(params.code);
+  if (!coupon) {
+    throw new CouponEvalError("invalid", "Cupom inv\xE1lido");
+  }
+  let customerUsageCount;
+  if (params.customerId && coupon.maxUsesPerCustomer != null) {
+    customerUsageCount = await countCustomerCouponUses(params.customerId, coupon.code);
+  }
+  try {
+    return applyCouponToSubtotal(coupon, {
+      subtotal: params.subtotal,
+      customerUsageCount
+    });
+  } catch (error) {
+    if (error instanceof CouponEvalError) {
+      throw new CouponEvalError(error.code, couponErrorMessage(error), error.minSubtotal);
+    }
+    throw error;
+  }
+}
+async function createCoupon(input) {
+  const row = mapCouponInputToRow(input);
+  if (row.is_map_reward) {
+    await clearOtherMapRewards();
+  }
+  const { data, error } = await supabase.from("coupons").insert(row).select(COUPON_SELECT).single();
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("J\xE1 existe um cupom com este c\xF3digo");
+    }
+    throw new Error(`Erro ao criar cupom: ${error.message}`);
+  }
+  return mapCouponRowToCoupon(data);
+}
+async function updateCoupon(id, input) {
+  const row = mapCouponInputToRow(input);
+  if (row.is_map_reward) {
+    await clearOtherMapRewards(id);
+  }
+  const { data, error } = await supabase.from("coupons").update(row).eq("id", id).select(COUPON_SELECT).single();
+  if (error) {
+    if (error.code === "PGRST116") {
+      throw new Error("Cupom n\xE3o encontrado");
+    }
+    if (error.code === "23505") {
+      throw new Error("J\xE1 existe um cupom com este c\xF3digo");
+    }
+    throw new Error(`Erro ao atualizar cupom: ${error.message}`);
+  }
+  return mapCouponRowToCoupon(data);
+}
+async function deleteCoupon(id) {
+  const { error, count } = await supabase.from("coupons").delete({ count: "exact" }).eq("id", id);
+  if (error) {
+    throw new Error(`Erro ao excluir cupom: ${error.message}`);
+  }
+  if (count === 0) {
+    throw new Error("Cupom n\xE3o encontrado");
+  }
+}
+async function incrementCouponUsage(code) {
+  const coupon = await findCouponByCode(code);
+  if (!coupon) return;
+  const { error } = await supabase.from("coupons").update({
+    usage_count: coupon.usageCount + 1,
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  }).eq("id", coupon.id);
+  if (error) {
+    throw new Error(`Erro ao registrar uso do cupom: ${error.message}`);
+  }
+}
+
+// server/routes/adminCoupons.ts
+var router3 = Router3();
+router3.get("/", requireAdmin, async (_req, res) => {
+  try {
+    const coupons = await listAllCoupons();
+    res.json(coupons);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao carregar cupons"
+    });
+  }
+});
+router3.get("/:id", requireAdmin, async (req, res) => {
+  try {
+    const coupon = await getCouponById(req.params.id);
+    res.json(coupon);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao carregar cupom";
+    const status = message.includes("n\xE3o encontrado") ? 404 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+router3.post("/", requireAdmin, async (req, res) => {
+  try {
+    const parsed = couponSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inv\xE1lidos", issues: parsed.error.issues });
+      return;
+    }
+    const coupon = await createCoupon(parsed.data);
+    res.status(201).json(coupon);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao criar cupom";
+    const status = message.includes("J\xE1 existe") ? 409 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+router3.put("/:id", requireAdmin, async (req, res) => {
+  try {
+    const parsed = couponSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inv\xE1lidos", issues: parsed.error.issues });
+      return;
+    }
+    const coupon = await updateCoupon(req.params.id, parsed.data);
+    res.json(coupon);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao atualizar cupom";
+    const status = message.includes("n\xE3o encontrado") ? 404 : message.includes("J\xE1 existe") ? 409 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+router3.delete("/:id", requireAdmin, async (req, res) => {
+  try {
+    await deleteCoupon(req.params.id);
+    res.status(204).send();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao excluir cupom";
+    const status = message.includes("n\xE3o encontrado") ? 404 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+var adminCoupons_default = router3;
+
+// server/routes/adminCustomers.ts
+import { Router as Router4 } from "express";
 
 // shared/const/order.ts
 var VISIBLE_ORDER_FILTER = "and(mercado_pago_order_id.not.is.null,payment_status.neq.rejected),status.eq.paid";
 
 // shared/lib/orderMapper.ts
-function toNumber(value) {
+function toNumber2(value) {
   if (typeof value === "number") return value;
   if (typeof value === "string") return parseFloat(value);
   return 0;
+}
+function buildOrderTotals(subtotal, shippingAmount, discountAmount = 0) {
+  const safeDiscount = Math.max(0, Math.min(discountAmount, subtotal));
+  return {
+    subtotal,
+    shippingAmount,
+    discountAmount: safeDiscount,
+    totalAmount: Math.round((subtotal - safeDiscount + shippingAmount) * 100) / 100
+  };
 }
 function mapOrderItemRowToOrderItem(row) {
   return {
@@ -1390,7 +2594,7 @@ function mapOrderItemRowToOrderItem(row) {
     productSlug: row.product_slug,
     name: row.name,
     quantity: row.quantity,
-    price: toNumber(row.price),
+    price: toNumber2(row.price),
     size: row.size,
     color: row.color,
     image: row.image
@@ -1401,8 +2605,9 @@ function mapOrderRowToOrder(row, items) {
     id: row.id,
     customerId: row.customer_id,
     status: row.status,
-    totalAmount: toNumber(row.total_amount),
-    shippingAmount: toNumber(row.shipping_amount),
+    totalAmount: toNumber2(row.total_amount),
+    shippingAmount: toNumber2(row.shipping_amount),
+    discountAmount: toNumber2(row.discount_amount ?? 0),
     shippingQuoteId: row.shipping_quote_id ?? null,
     shippingServiceId: row.shipping_service_id ?? null,
     shippingServiceName: row.shipping_service_name ?? null,
@@ -1432,8 +2637,9 @@ function mapOrderRowToSummary(row, itemCount) {
   return {
     id: row.id,
     status: row.status,
-    totalAmount: toNumber(row.total_amount),
-    shippingAmount: toNumber(row.shipping_amount),
+    totalAmount: toNumber2(row.total_amount),
+    shippingAmount: toNumber2(row.shipping_amount),
+    discountAmount: toNumber2(row.discount_amount ?? 0),
     couponCode: row.coupon_code,
     paymentMethod: row.payment_method,
     paymentStatus: row.payment_status ?? "pending",
@@ -1447,7 +2653,7 @@ function mapCartItemToOrderItemPayload(item) {
     product_slug: item.product_slug,
     name: item.product_name,
     quantity: item.quantity,
-    price: toNumber(item.unit_price),
+    price: toNumber2(item.unit_price),
     size: item.size_label,
     color: item.color_name || null,
     image: item.product_image
@@ -1656,8 +2862,8 @@ async function listCustomerOrdersForAdmin(customerId) {
 }
 
 // server/routes/adminCustomers.ts
-var router3 = Router3();
-router3.get("/", requireAdmin, async (_req, res) => {
+var router4 = Router4();
+router4.get("/", requireAdmin, async (_req, res) => {
   try {
     const customers = await listAllCustomers();
     res.json(customers);
@@ -1667,7 +2873,7 @@ router3.get("/", requireAdmin, async (_req, res) => {
     });
   }
 });
-router3.get("/:id", requireAdmin, async (req, res) => {
+router4.get("/:id", requireAdmin, async (req, res) => {
   try {
     const customer = await getCustomerById(req.params.id);
     res.json(customer);
@@ -1677,15 +2883,10 @@ router3.get("/:id", requireAdmin, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-var adminCustomers_default = router3;
+var adminCustomers_default = router4;
 
 // server/routes/adminDashboard.ts
-import { Router as Router4 } from "express";
-
-// shared/const/analytics.ts
-var VISITOR_SESSION_COOKIE = "nativa_visitor_session";
-var VISITOR_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
-var ABANDONED_CART_HOURS = 24;
+import { Router as Router5 } from "express";
 
 // shared/lib/orderLabels.ts
 var ORDER_STATUS_LABELS = {
@@ -1713,38 +2914,66 @@ function formatOrderShortId(orderId) {
 
 // server/services/adminDashboard.ts
 var MS_DAY = 24 * 60 * 60 * 1e3;
+var STORE_TZ = "America/Sao_Paulo";
 function periodToDays(period) {
   if (period === "7d") return 7;
   if (period === "30d") return 30;
   if (period === "90d") return 90;
   return null;
 }
-function startDateForPeriod(period) {
-  const days = periodToDays(period);
-  if (days === null) return null;
-  return new Date(Date.now() - days * MS_DAY);
+function dateKeyInStoreTz(date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: STORE_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
 }
-function previousStartDateForPeriod(period) {
+function startOfStoreDay(dateKey) {
+  return /* @__PURE__ */ new Date(`${dateKey}T00:00:00-03:00`);
+}
+function shiftStoreDay(dateKey, deltaDays) {
+  const base = startOfStoreDay(dateKey);
+  return dateKeyInStoreTz(new Date(base.getTime() + deltaDays * MS_DAY));
+}
+function getPeriodBounds(period) {
+  const now = /* @__PURE__ */ new Date();
+  if (period === "today") {
+    const todayKey = dateKeyInStoreTz(now);
+    const start2 = startOfStoreDay(todayKey);
+    const prevStart2 = startOfStoreDay(shiftStoreDay(todayKey, -1));
+    return { start: start2, end: null, prevStart: prevStart2, prevEnd: start2 };
+  }
+  if (period === "yesterday") {
+    const todayKey = dateKeyInStoreTz(now);
+    const todayStart = startOfStoreDay(todayKey);
+    const yesterdayKey = shiftStoreDay(todayKey, -1);
+    const start2 = startOfStoreDay(yesterdayKey);
+    const prevStart2 = startOfStoreDay(shiftStoreDay(yesterdayKey, -1));
+    return { start: start2, end: todayStart, prevStart: prevStart2, prevEnd: start2 };
+  }
   const days = periodToDays(period);
-  if (days === null) return null;
-  return new Date(Date.now() - days * 2 * MS_DAY);
+  if (days === null) {
+    return { start: null, end: null, prevStart: null, prevEnd: null };
+  }
+  const start = new Date(Date.now() - days * MS_DAY);
+  const prevStart = new Date(Date.now() - days * 2 * MS_DAY);
+  return { start, end: null, prevStart, prevEnd: start };
 }
 function pctChange(current, previous) {
   if (previous === 0) return current > 0 ? 100 : null;
   return Math.round((current - previous) / previous * 1e3) / 10;
 }
 function toDateKey(iso) {
-  return iso.slice(0, 10);
+  return dateKeyInStoreTz(new Date(iso));
 }
 function buildDateRange(start, end) {
   const keys = [];
-  const cursor = new Date(start);
-  cursor.setHours(0, 0, 0, 0);
-  const endDay = new Date(end);
-  endDay.setHours(0, 0, 0, 0);
-  while (cursor <= endDay) {
-    keys.push(cursor.toISOString().slice(0, 10));
-    cursor.setDate(cursor.getDate() + 1);
+  let cursorKey = dateKeyInStoreTz(start);
+  const endKey = dateKeyInStoreTz(end);
+  while (cursorKey <= endKey) {
+    keys.push(cursorKey);
+    cursorKey = shiftStoreDay(cursorKey, 1);
   }
   return keys;
 }
@@ -1809,10 +3038,10 @@ async function fetchCartConversion() {
   const rate = denominator === 0 ? 0 : Math.round(converted / denominator * 1e3) / 10;
   return rate;
 }
-async function fetchTopProducts(start) {
+async function fetchTopProducts(start, end = null) {
   const { data: orders, error } = await supabase.from("orders").select("id, status, created_at").eq("status", "paid");
   if (error) throw new Error(error.message);
-  const orderIds = (orders ?? []).filter((o) => inRange(o.created_at, start)).map((o) => o.id);
+  const orderIds = (orders ?? []).filter((o) => inRange(o.created_at, start, end)).map((o) => o.id);
   if (!orderIds.length) return [];
   const { data: items, error: itemsError } = await supabase.from("order_items").select("product_slug, name, quantity, price").in("order_id", orderIds);
   if (itemsError) throw new Error(itemsError.message);
@@ -1843,11 +3072,9 @@ async function fetchProductStockCounts() {
   return { inStock, outOfStock };
 }
 function computeOverview(period, orders, customers, pageViews, abandoned, cartConversionRate, stock) {
-  const start = startDateForPeriod(period);
-  const prevStart = previousStartDateForPeriod(period);
-  const prevEnd = start;
+  const { start, end, prevStart, prevEnd } = getPeriodBounds(period);
   const paidInPeriod = orders.filter(
-    (o) => o.status === "paid" && inRange(o.created_at, start)
+    (o) => o.status === "paid" && inRange(o.created_at, start, end)
   );
   const paidPrevPeriod = orders.filter(
     (o) => o.status === "paid" && inRange(o.created_at, prevStart, prevEnd)
@@ -1859,14 +3086,14 @@ function computeOverview(period, orders, customers, pageViews, abandoned, cartCo
   );
   const ordersCount = paidInPeriod.length;
   const ordersPrev = paidPrevPeriod.length;
-  const viewsInPeriod = pageViews.filter((v) => inRange(v.created_at, start));
+  const viewsInPeriod = pageViews.filter((v) => inRange(v.created_at, start, end));
   const viewsPrevPeriod = pageViews.filter(
     (v) => inRange(v.created_at, prevStart, prevEnd)
   );
   const uniqueSessions = new Set(viewsInPeriod.map((v) => v.session_id)).size;
   const uniqueSessionsPrev = new Set(viewsPrevPeriod.map((v) => v.session_id)).size;
   const newCustomers = customers.filter(
-    (c) => inRange(c.created_at, start)
+    (c) => inRange(c.created_at, start, end)
   ).length;
   const newCustomersPrev = customers.filter(
     (c) => inRange(c.created_at, prevStart, prevEnd)
@@ -1890,10 +3117,10 @@ function computeOverview(period, orders, customers, pageViews, abandoned, cartCo
   };
 }
 function buildTimeSeries(period, orders, pageViews) {
-  const days = periodToDays(period) ?? 30;
-  const end = /* @__PURE__ */ new Date();
-  const start = startDateForPeriod(period) ?? new Date(Date.now() - days * MS_DAY);
-  const keys = buildDateRange(start, end);
+  const { start, end } = getPeriodBounds(period);
+  const seriesEnd = end ?? /* @__PURE__ */ new Date();
+  const seriesStart = start ?? (period === "all" ? new Date(Date.now() - 30 * MS_DAY) : new Date(Date.now() - 30 * MS_DAY));
+  const keys = buildDateRange(seriesStart, seriesEnd);
   const revenueByDay = /* @__PURE__ */ new Map();
   const ordersByDay = /* @__PURE__ */ new Map();
   const visitsByDay = /* @__PURE__ */ new Map();
@@ -1929,8 +3156,8 @@ function buildTimeSeries(period, orders, pageViews) {
   }));
 }
 function buildStatusSlices(period, orders) {
-  const start = startDateForPeriod(period);
-  const filtered = orders.filter((o) => inRange(o.created_at, start));
+  const { start, end } = getPeriodBounds(period);
+  const filtered = orders.filter((o) => inRange(o.created_at, start, end));
   const counts = /* @__PURE__ */ new Map();
   for (const order of filtered) {
     const status = order.status;
@@ -1943,9 +3170,9 @@ function buildStatusSlices(period, orders) {
   }));
 }
 function buildPaymentSlices(period, orders) {
-  const start = startDateForPeriod(period);
+  const { start, end } = getPeriodBounds(period);
   const filtered = orders.filter(
-    (o) => o.status === "paid" && inRange(o.created_at, start)
+    (o) => o.status === "paid" && inRange(o.created_at, start, end)
   );
   const map = /* @__PURE__ */ new Map();
   for (const order of filtered) {
@@ -1975,6 +3202,7 @@ async function buildRecentOrders(orders, customers) {
   }));
 }
 async function getDashboardStats(period) {
+  const bounds = getPeriodBounds(period);
   const [
     orders,
     customers,
@@ -1990,7 +3218,7 @@ async function getDashboardStats(period) {
     fetchAbandonedCarts(),
     fetchCartConversion(),
     fetchProductStockCounts(),
-    fetchTopProducts(startDateForPeriod(period))
+    fetchTopProducts(bounds.start, bounds.end)
   ]);
   return {
     period,
@@ -2012,9 +3240,16 @@ async function getDashboardStats(period) {
 }
 
 // server/routes/adminDashboard.ts
-var router4 = Router4();
-var VALID_PERIODS = /* @__PURE__ */ new Set(["7d", "30d", "90d", "all"]);
-router4.get("/", requireAdmin, async (req, res) => {
+var router5 = Router5();
+var VALID_PERIODS = /* @__PURE__ */ new Set([
+  "today",
+  "yesterday",
+  "7d",
+  "30d",
+  "90d",
+  "all"
+]);
+router5.get("/", requireAdmin, async (req, res) => {
   try {
     const raw = typeof req.query.period === "string" ? req.query.period : "30d";
     const period = VALID_PERIODS.has(raw) ? raw : "30d";
@@ -2026,83 +3261,72 @@ router4.get("/", requireAdmin, async (req, res) => {
     });
   }
 });
-var adminDashboard_default = router4;
+var adminDashboard_default = router5;
 
 // shared/schemas/melhorEnvio.ts
-import { z as z4 } from "zod";
-var melhorEnvioEnvironmentSchema = z4.enum(["production", "sandbox"]);
-var postalCodeSchema = z4.string().transform((v) => v.replace(/\D/g, "")).refine((v) => v === "" || v.length === 8, "CEP deve ter 8 d\xEDgitos");
-var melhorEnvioSettingsSchema = z4.object({
+import { z as z5 } from "zod";
+var melhorEnvioEnvironmentSchema = z5.enum(["production", "sandbox"]);
+var postalCodeSchema = z5.string().transform((v) => v.replace(/\D/g, "")).refine((v) => v === "" || v.length === 8, "CEP deve ter 8 d\xEDgitos");
+var melhorEnvioSettingsSchema = z5.object({
   environment: melhorEnvioEnvironmentSchema.optional(),
-  redirectUri: z4.union([z4.literal(""), z4.string().url("Informe uma URL v\xE1lida")]).optional(),
-  userAgent: z4.string().min(5, "Informe o User-Agent (ex: Nativa Store (email@dominio.com))").optional(),
+  redirectUri: z5.union([z5.literal(""), z5.string().url("Informe uma URL v\xE1lida")]).optional(),
+  userAgent: z5.string().min(5, "Informe o User-Agent (ex: Nativa Store (email@dominio.com))").optional(),
   originPostalCode: postalCodeSchema.optional(),
-  defaultWidthCm: z4.number().positive("Largura deve ser positiva").max(200).optional(),
-  defaultHeightCm: z4.number().positive("Altura deve ser positiva").max(200).optional(),
-  defaultLengthCm: z4.number().positive("Comprimento deve ser positivo").max(200).optional(),
-  defaultWeightKg: z4.number().positive("Peso deve ser positivo").max(100).optional(),
-  freeShippingEnabled: z4.boolean().optional(),
-  freeShippingThreshold: z4.number().positive("O valor m\xEDnimo deve ser maior que zero").max(1e5).optional(),
-  senderName: z4.string().max(120).optional(),
-  senderEmail: z4.union([z4.literal(""), z4.string().email("E-mail inv\xE1lido")]).optional(),
-  senderPhone: z4.string().max(20).optional(),
-  senderDocumentType: z4.enum(["cpf", "cnpj"]).optional(),
-  senderDocument: z4.string().max(18).optional(),
-  senderStateRegister: z4.string().max(30).optional(),
-  senderAddress: z4.string().max(160).optional(),
-  senderNumber: z4.string().max(20).optional(),
-  senderComplement: z4.string().max(80).optional(),
-  senderDistrict: z4.string().max(80).optional(),
-  senderCity: z4.string().max(80).optional(),
-  senderStateAbbr: z4.string().max(2).optional(),
-  clientId: z4.string().optional(),
-  clientSecret: z4.string().optional()
+  defaultWidthCm: z5.number().positive("Largura deve ser positiva").max(200).optional(),
+  defaultHeightCm: z5.number().positive("Altura deve ser positiva").max(200).optional(),
+  defaultLengthCm: z5.number().positive("Comprimento deve ser positivo").max(200).optional(),
+  defaultWeightKg: z5.number().positive("Peso deve ser positivo").max(100).optional(),
+  freeShippingEnabled: z5.boolean().optional(),
+  freeShippingThreshold: z5.number().positive("O valor m\xEDnimo deve ser maior que zero").max(1e5).optional(),
+  senderName: z5.string().max(120).optional(),
+  senderEmail: z5.union([z5.literal(""), z5.string().email("E-mail inv\xE1lido")]).optional(),
+  senderPhone: z5.string().max(20).optional(),
+  senderDocumentType: z5.enum(["cpf", "cnpj"]).optional(),
+  senderDocument: z5.string().max(18).optional(),
+  senderStateRegister: z5.string().max(30).optional(),
+  senderAddress: z5.string().max(160).optional(),
+  senderNumber: z5.string().max(20).optional(),
+  senderComplement: z5.string().max(80).optional(),
+  senderDistrict: z5.string().max(80).optional(),
+  senderCity: z5.string().max(80).optional(),
+  senderStateAbbr: z5.string().max(2).optional(),
+  clientId: z5.string().optional(),
+  clientSecret: z5.string().optional()
 });
-var shippingQuoteProductSchema = z4.object({
-  id: z4.string().min(1),
-  width: z4.number().positive().optional(),
-  height: z4.number().positive().optional(),
-  length: z4.number().positive().optional(),
-  weight: z4.number().positive().optional(),
-  insuranceValue: z4.number().nonnegative(),
-  quantity: z4.number().int().positive().default(1)
+var shippingQuoteProductSchema = z5.object({
+  id: z5.string().min(1),
+  width: z5.number().positive().optional(),
+  height: z5.number().positive().optional(),
+  length: z5.number().positive().optional(),
+  weight: z5.number().positive().optional(),
+  insuranceValue: z5.number().nonnegative(),
+  quantity: z5.number().int().positive().default(1)
 });
-var shippingQuoteSchema = z4.object({
+var shippingQuoteSchema = z5.object({
   toPostalCode: postalCodeSchema.refine((v) => v.length === 8, "CEP de destino inv\xE1lido"),
-  products: z4.array(shippingQuoteProductSchema).min(1, "Informe ao menos um produto"),
-  services: z4.string().optional(),
-  receipt: z4.boolean().optional(),
-  ownHand: z4.boolean().optional()
+  products: z5.array(shippingQuoteProductSchema).min(1, "Informe ao menos um produto"),
+  services: z5.string().optional(),
+  receipt: z5.boolean().optional(),
+  ownHand: z5.boolean().optional()
 });
-var checkoutShippingQuoteSchema = z4.object({
+var checkoutShippingQuoteSchema = z5.object({
   toPostalCode: postalCodeSchema.refine((v) => v.length === 8, "CEP de destino inv\xE1lido")
 });
 
 // server/routes/adminMelhorEnvio.ts
-import { Router as Router5 } from "express";
-
-// shared/const/cart.ts
-var FREE_SHIPPING_THRESHOLD = 299;
-var CART_SESSION_COOKIE = "nativa_cart_session";
-var CART_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
-var CART_STATUS_ACTIVE = "active";
-
-// shared/lib/shipping.ts
-function applyFreeShipping(options, subtotal, enabled = true, threshold = FREE_SHIPPING_THRESHOLD) {
-  const sorted = options.map((option) => ({ ...option, packages: [...option.packages] }));
-  if (!enabled || subtotal < threshold || sorted.length === 0) {
-    return { options: sorted, applied: false };
-  }
-  sorted[0] = { ...sorted[0], price: 0, customPrice: 0 };
-  return { options: sorted, applied: true };
-}
-function groupShipmentVolumes(company, volumes) {
-  return /(correios|j&t|loggi)/i.test(company) ? volumes.map((volume) => [volume]) : [volumes];
-}
+import { Router as Router6 } from "express";
 
 // server/services/melhorEnvio.ts
 import jwt2 from "jsonwebtoken";
 var SETTINGS_ID = "default";
+var ME_KEY = "MELHOR_ENVIO_ENCRYPTION_KEY";
+function encryptMeSecret(value) {
+  return encryptSecret(value, ME_KEY);
+}
+function decryptMeSecret(value) {
+  if (!value) return "";
+  return decryptStoredSecret(value, ME_KEY);
+}
 var MELHOR_ENVIO_SCOPES = [
   "cart-read",
   "cart-write",
@@ -2157,13 +3381,18 @@ function getClientId(row, environment = row.environment) {
   return environment === "sandbox" ? row.sandbox_client_id : row.production_client_id;
 }
 function getClientSecret(row, environment = row.environment) {
-  return environment === "sandbox" ? row.sandbox_client_secret : row.production_client_secret;
+  const raw = environment === "sandbox" ? row.sandbox_client_secret : row.production_client_secret;
+  return decryptMeSecret(raw);
 }
 function getAccessToken(row, environment = row.environment) {
-  return environment === "sandbox" ? row.sandbox_access_token : row.production_access_token;
+  const raw = environment === "sandbox" ? row.sandbox_access_token : row.production_access_token;
+  const value = decryptMeSecret(raw);
+  return value || null;
 }
 function getRefreshToken(row, environment = row.environment) {
-  return environment === "sandbox" ? row.sandbox_refresh_token : row.production_refresh_token;
+  const raw = environment === "sandbox" ? row.sandbox_refresh_token : row.production_refresh_token;
+  const value = decryptMeSecret(raw);
+  return value || null;
 }
 function getTokenExpiresAt(row, environment = row.environment) {
   return environment === "sandbox" ? row.sandbox_token_expires_at : row.production_token_expires_at;
@@ -2281,7 +3510,7 @@ async function updateMelhorEnvioSettings(input) {
     patch[`${prefix}_client_id`] = input.clientId.trim();
   }
   if (input.clientSecret !== void 0 && input.clientSecret.trim() !== "") {
-    patch[`${prefix}_client_secret`] = input.clientSecret.trim();
+    patch[`${prefix}_client_secret`] = encryptMeSecret(input.clientSecret.trim());
   }
   const { data, error } = await supabase.from("melhor_envio_settings").update(patch).eq("id", SETTINGS_ID).select("*").single();
   if (error) {
@@ -2354,8 +3583,8 @@ async function saveTokens(environment, tokens) {
   const prefix = envPrefix(environment);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1e3).toISOString();
   const { error } = await supabase.from("melhor_envio_settings").update({
-    [`${prefix}_access_token`]: tokens.access_token,
-    [`${prefix}_refresh_token`]: tokens.refresh_token,
+    [`${prefix}_access_token`]: encryptMeSecret(tokens.access_token),
+    [`${prefix}_refresh_token`]: encryptMeSecret(tokens.refresh_token),
     [`${prefix}_token_expires_at`]: expiresAt,
     environment,
     updated_at: (/* @__PURE__ */ new Date()).toISOString()
@@ -2440,7 +3669,7 @@ async function disconnectMelhorEnvio() {
   }
   return getMelhorEnvioStatus();
 }
-function toNumber2(value, fallback = 0) {
+function toNumber3(value, fallback = 0) {
   if (typeof value === "number") return value;
   if (typeof value === "string") {
     const n = Number(value.replace(",", "."));
@@ -2496,17 +3725,17 @@ async function calculateShippingDetailed(input) {
     id: String(item.id),
     name: item.name,
     company: item.company?.name ?? "",
-    price: toNumber2(item.price),
-    customPrice: toNumber2(item.custom_price ?? item.price),
+    price: toNumber3(item.price),
+    customPrice: toNumber3(item.custom_price ?? item.price),
     deliveryTime: item.delivery_time,
     customDeliveryTime: item.custom_delivery_time ?? item.delivery_time,
     currency: item.currency || "R$",
     companyId: item.company?.id ?? null,
     packages: (item.packages ?? []).map((entry) => ({
-      height: toNumber2(entry.height ?? entry.dimensions?.height),
-      width: toNumber2(entry.width ?? entry.dimensions?.width),
-      length: toNumber2(entry.length ?? entry.dimensions?.length),
-      weight: toNumber2(entry.weight)
+      height: toNumber3(entry.height ?? entry.dimensions?.height),
+      width: toNumber3(entry.width ?? entry.dimensions?.width),
+      length: toNumber3(entry.length ?? entry.dimensions?.length),
+      weight: toNumber3(entry.weight)
     })),
     error: item.error ?? null
   })).sort((a, b) => a.customPrice - b.customPrice);
@@ -2535,7 +3764,7 @@ async function calculateShipping(input) {
   return (await calculateShippingDetailed(input)).result;
 }
 async function createCheckoutShippingQuote(customerId, toPostalCode) {
-  const { data: cart, error: cartError } = await supabase.from("carts").select("id").eq("customer_id", customerId).eq("status", "active").maybeSingle();
+  const { data: cart, error: cartError } = await supabase.from("carts").select("id, coupon_code").eq("customer_id", customerId).eq("status", "active").maybeSingle();
   if (cartError) throw new Error(cartError.message);
   if (!cart) throw new Error("Carrinho vazio");
   const { data: items, error: itemsError } = await supabase.from("cart_items").select("product_id, product_slug, quantity, unit_price").eq("cart_id", cart.id);
@@ -2568,6 +3797,23 @@ async function createCheckoutShippingQuote(customerId, toPostalCode) {
     (total, item) => total + Number(item.unit_price) * item.quantity,
     0
   );
+  let options = calculation.result.options;
+  let freeShippingApplied = calculation.result.freeShippingApplied;
+  if (cart.coupon_code) {
+    try {
+      const application = await assertCouponApplicable({
+        code: cart.coupon_code,
+        subtotal,
+        customerId
+      });
+      if (application.grantsFreeShipping) {
+        const couponShipping = applyFreeShippingCoupon(options);
+        options = couponShipping.options;
+        freeShippingApplied = freeShippingApplied || couponShipping.applied;
+      }
+    } catch {
+    }
+  }
   const expiresAt = new Date(Date.now() + 30 * 60 * 1e3).toISOString();
   const { data: quote, error: quoteError } = await supabase.from("shipping_quotes").insert({
     customer_id: customerId,
@@ -2576,15 +3822,17 @@ async function createCheckoutShippingQuote(customerId, toPostalCode) {
     from_postal_code: calculation.fromPostalCode,
     to_postal_code: toPostalCode,
     subtotal,
-    free_shipping_applied: calculation.result.freeShippingApplied,
+    free_shipping_applied: freeShippingApplied,
     request_payload: calculation.requestPayload,
     response_payload: calculation.responsePayload,
-    options: calculation.result.options,
+    options,
     expires_at: expiresAt
   }).select("id, expires_at").single();
   if (quoteError) throw new Error(quoteError.message);
   return {
-    ...calculation.result,
+    options,
+    environment: calculation.result.environment,
+    freeShippingApplied,
     quoteId: quote.id,
     expiresAt: quote.expires_at
   };
@@ -2674,10 +3922,10 @@ async function ensurePaidOrderInMelhorEnvioCart(orderId) {
   let volumes = snapshot.option?.packages ?? [];
   if (!volumes.length) {
     volumes = quotedProducts.map((product) => ({
-      height: toNumber2(product.height),
-      width: toNumber2(product.width),
-      length: toNumber2(product.length),
-      weight: toNumber2(product.weight) * Math.max(1, toNumber2(product.quantity, 1))
+      height: toNumber3(product.height),
+      width: toNumber3(product.width),
+      length: toNumber3(product.length),
+      weight: toNumber3(product.weight) * Math.max(1, toNumber3(product.quantity, 1))
     }));
   }
   if (!volumes.length) throw new Error("Cota\xE7\xE3o sem volumes para a etiqueta");
@@ -2813,14 +4061,14 @@ async function ensurePaidOrderInMelhorEnvioCart(orderId) {
 }
 
 // server/routes/adminMelhorEnvio.ts
-var router5 = Router5();
+var router6 = Router6();
 function adminIntegrationsUrl(query) {
   const base = process.env.APP_URL?.trim() || process.env.VITE_APP_URL?.trim() || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
   const origin = base.replace(/\/$/, "").startsWith("http") ? base.replace(/\/$/, "") : `https://${base.replace(/\/$/, "")}`;
   const params = new URLSearchParams(query);
   return `${origin}/admin/integracoes?${params.toString()}`;
 }
-router5.get("/status", requireAdmin, async (_req, res) => {
+router6.get("/status", requireAdmin, async (_req, res) => {
   try {
     const status = await getMelhorEnvioStatus();
     res.json({
@@ -2833,7 +4081,7 @@ router5.get("/status", requireAdmin, async (_req, res) => {
     });
   }
 });
-router5.put("/settings", requireAdmin, async (req, res) => {
+router6.put("/settings", requireAdmin, async (req, res) => {
   try {
     const parsed = melhorEnvioSettingsSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -2851,7 +4099,7 @@ router5.put("/settings", requireAdmin, async (req, res) => {
     });
   }
 });
-router5.get("/connect", requireAdmin, async (_req, res) => {
+router6.get("/connect", requireAdmin, async (_req, res) => {
   try {
     const url2 = await buildAuthorizeUrl();
     res.redirect(url2);
@@ -2860,7 +4108,7 @@ router5.get("/connect", requireAdmin, async (_req, res) => {
     res.redirect(adminIntegrationsUrl({ me_error: message }));
   }
 });
-router5.get("/callback", async (req, res) => {
+router6.get("/callback", async (req, res) => {
   try {
     const code = typeof req.query.code === "string" ? req.query.code : "";
     const state = typeof req.query.state === "string" ? req.query.state : "";
@@ -2881,7 +4129,7 @@ router5.get("/callback", async (req, res) => {
     res.redirect(adminIntegrationsUrl({ me_error: message }));
   }
 });
-router5.post("/disconnect", requireAdmin, async (_req, res) => {
+router6.post("/disconnect", requireAdmin, async (_req, res) => {
   try {
     const status = await disconnectMelhorEnvio();
     res.json({
@@ -2894,31 +4142,31 @@ router5.post("/disconnect", requireAdmin, async (_req, res) => {
     });
   }
 });
-var adminMelhorEnvio_default = router5;
+var adminMelhorEnvio_default = router6;
 
 // shared/schemas/mercadoPago.ts
-import { z as z5 } from "zod";
-var mercadoPagoSettingsSchema = z5.object({
-  environment: z5.enum(["test", "production"]),
-  enabled: z5.boolean(),
-  publicKey: z5.string().trim().max(300),
-  accessToken: z5.string().trim().max(500).optional(),
-  webhookSecret: z5.string().trim().max(500).optional(),
-  pixEnabled: z5.boolean(),
-  boletoEnabled: z5.boolean(),
-  creditCardEnabled: z5.boolean(),
-  maxInstallments: z5.number().int().min(1).max(12),
-  boletoExpirationDays: z5.number().int().min(1).max(30)
+import { z as z6 } from "zod";
+var mercadoPagoSettingsSchema = z6.object({
+  environment: z6.enum(["test", "production"]),
+  enabled: z6.boolean(),
+  publicKey: z6.string().trim().max(300),
+  accessToken: z6.string().trim().max(500).optional(),
+  webhookSecret: z6.string().trim().max(500).optional(),
+  pixEnabled: z6.boolean(),
+  boletoEnabled: z6.boolean(),
+  creditCardEnabled: z6.boolean(),
+  maxInstallments: z6.number().int().min(1).max(12),
+  boletoExpirationDays: z6.number().int().min(1).max(30)
 });
-var cardPaymentDataSchema = z5.object({
-  token: z5.string().trim().min(1),
-  paymentMethodId: z5.string().trim().min(1).max(50),
-  installments: z5.number().int().min(1).max(12),
-  issuerId: z5.string().trim().max(50).optional()
+var cardPaymentDataSchema = z6.object({
+  token: z6.string().trim().min(1),
+  paymentMethodId: z6.string().trim().min(1).max(50),
+  installments: z6.number().int().min(1).max(12),
+  issuerId: z6.string().trim().max(50).optional()
 });
 
 // server/routes/adminMercadoPago.ts
-import { Router as Router6 } from "express";
+import { Router as Router7 } from "express";
 
 // server/lib/mercadoPagoSignature.ts
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -3220,11 +4468,11 @@ async function verifyMercadoPagoSignature(params) {
 }
 
 // server/routes/adminMercadoPago.ts
-var router6 = Router6();
+var router7 = Router7();
 function environmentFrom(value) {
   return value === "production" ? "production" : "test";
 }
-router6.get("/status", requireAdmin, async (req, res) => {
+router7.get("/status", requireAdmin, async (req, res) => {
   try {
     res.json(
       await getMercadoPagoAdminStatus(environmentFrom(req.query.environment))
@@ -3235,7 +4483,7 @@ router6.get("/status", requireAdmin, async (req, res) => {
     });
   }
 });
-router6.put("/settings", requireAdmin, async (req, res) => {
+router7.put("/settings", requireAdmin, async (req, res) => {
   const parsed = mercadoPagoSettingsSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Dados inv\xE1lidos", issues: parsed.error.issues });
@@ -3249,7 +4497,7 @@ router6.put("/settings", requireAdmin, async (req, res) => {
     });
   }
 });
-router6.post("/test", requireAdmin, async (req, res) => {
+router7.post("/test", requireAdmin, async (req, res) => {
   try {
     res.json(
       await testMercadoPagoCredentials(environmentFrom(req.body?.environment))
@@ -3260,10 +4508,671 @@ router6.post("/test", requireAdmin, async (req, res) => {
     });
   }
 });
-var adminMercadoPago_default = router6;
+var adminMercadoPago_default = router7;
+
+// shared/schemas/metaCatalog.ts
+import { z as z7 } from "zod";
+var metaCatalogSettingsSchema = z7.object({
+  enabled: z7.boolean(),
+  feedToken: z7.string().trim().max(120).nullable().optional().transform((value) => value === "" ? null : value),
+  regenerateFeedToken: z7.boolean().optional(),
+  defaultBrand: z7.string().trim().min(1).max(80),
+  googleProductCategory: z7.string().trim().max(200)
+});
+
+// server/routes/adminMetaCatalog.ts
+import { Router as Router8 } from "express";
+
+// shared/lib/seo.ts
+function stripHtml(value) {
+  return value.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/\s+/g, " ").trim();
+}
+function truncateMeta(text, max = 160) {
+  const clean = stripHtml(text);
+  if (clean.length <= max) return clean;
+  const sliced = clean.slice(0, max - 1);
+  const lastSpace = sliced.lastIndexOf(" ");
+  return `${(lastSpace > 80 ? sliced.slice(0, lastSpace) : sliced).trim()}\u2026`;
+}
+function escapeHtmlAttr(value) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function normalizeBaseUrl(url2) {
+  let value = url2.trim();
+  if (!value) return value;
+  if (!/^https?:\/\//i.test(value)) {
+    value = `https://${value}`;
+  }
+  return value.replace(/\/$/, "");
+}
+function absoluteUrl(baseUrl, pathOrUrl) {
+  const base = normalizeBaseUrl(baseUrl);
+  if (!pathOrUrl) return base;
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const path2 = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  return `${base}${path2}`;
+}
+
+// server/services/metaCatalog.ts
+import { nanoid as nanoid4 } from "nanoid";
+
+// server/lib/xmlBuilder.ts
+function escapeXml(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+function cdata(value) {
+  return `<![CDATA[${value.replace(/]]>/g, "]]]]><![CDATA[>")}]]>`;
+}
+function itemXml(item) {
+  const lines = [
+    "    <item>",
+    `      <g:id>${escapeXml(item.id)}</g:id>`,
+    `      <g:title>${cdata(item.title)}</g:title>`,
+    `      <g:description>${cdata(item.description)}</g:description>`,
+    `      <g:link>${escapeXml(item.link)}</g:link>`,
+    `      <g:image_link>${escapeXml(item.imageLink)}</g:image_link>`
+  ];
+  for (const extra of item.additionalImageLinks) {
+    lines.push(
+      `      <g:additional_image_link>${escapeXml(extra)}</g:additional_image_link>`
+    );
+  }
+  lines.push(
+    `      <g:price>${escapeXml(item.price)}</g:price>`,
+    `      <g:availability>${escapeXml(item.availability)}</g:availability>`,
+    `      <g:condition>${escapeXml(item.condition)}</g:condition>`,
+    `      <g:brand>${escapeXml(item.brand)}</g:brand>`
+  );
+  if (item.googleProductCategory) {
+    lines.push(
+      `      <g:google_product_category>${escapeXml(item.googleProductCategory)}</g:google_product_category>`
+    );
+  }
+  if (item.productType) {
+    lines.push(
+      `      <g:product_type>${escapeXml(item.productType)}</g:product_type>`
+    );
+  }
+  lines.push("    </item>");
+  return lines.join("\n");
+}
+function buildProductFeedXml(params) {
+  const channelItems = params.items.map(itemXml).join("\n");
+  return [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">`,
+    `  <channel>`,
+    `    <title>${escapeXml(params.title)}</title>`,
+    `    <link>${escapeXml(params.link)}</link>`,
+    `    <description>${escapeXml(params.description)}</description>`,
+    channelItems,
+    `  </channel>`,
+    `</rss>`,
+    ``
+  ].join("\n");
+}
+
+// server/services/feedService.ts
+var CACHE_TTL_MS = 20 * 60 * 1e3;
+var feedCache = null;
+function invalidateFeedCache() {
+  feedCache = null;
+}
+function formatFeedPrice(price) {
+  return `${price.toFixed(2)} BRL`;
+}
+function resolveFeedProductId(product) {
+  const sku = product.sku?.trim();
+  return sku || String(product.id);
+}
+function isProductInStock(product) {
+  return Boolean(product.inStock && product.stockCount > 0);
+}
+function classifyProductForFeed(product) {
+  if (!product.image?.trim()) {
+    return { ok: false, reason: "sem imagem" };
+  }
+  if (!(typeof product.price === "number") || !(product.price > 0)) {
+    return { ok: false, reason: "sem pre\xE7o" };
+  }
+  return { ok: true };
+}
+function uniqueAbsoluteImages(baseUrl, primary, extras) {
+  const imageLink = absoluteUrl(baseUrl, primary.trim());
+  const seen = /* @__PURE__ */ new Set([imageLink]);
+  const additionalImageLinks = [];
+  for (const raw of extras) {
+    const trimmed = raw?.trim();
+    if (!trimmed) continue;
+    const url2 = absoluteUrl(baseUrl, trimmed);
+    if (seen.has(url2)) continue;
+    seen.add(url2);
+    additionalImageLinks.push(url2);
+  }
+  return { imageLink, additionalImageLinks };
+}
+function mapProductToFeedItem(product, options) {
+  const { imageLink, additionalImageLinks } = uniqueAbsoluteImages(
+    options.baseUrl,
+    product.image,
+    product.images ?? []
+  );
+  const descriptionSource = product.description?.trim() || product.shortDescription?.trim() || product.name;
+  return {
+    id: resolveFeedProductId(product),
+    title: product.name.trim(),
+    description: stripHtml(descriptionSource),
+    link: absoluteUrl(options.baseUrl, `/produto/${product.slug}`),
+    imageLink,
+    additionalImageLinks,
+    price: formatFeedPrice(product.price),
+    availability: isProductInStock(product) ? "in stock" : "out of stock",
+    condition: "new",
+    brand: options.brand,
+    googleProductCategory: options.googleProductCategory?.trim() || void 0,
+    productType: product.category || void 0
+  };
+}
+function buildFeedFromProducts(products, options) {
+  const items = [];
+  const exclusions = [];
+  for (const product of products) {
+    const classification = classifyProductForFeed(product);
+    if (!classification.ok) {
+      exclusions.push({
+        id: resolveFeedProductId(product),
+        name: product.name,
+        reason: classification.reason
+      });
+      continue;
+    }
+    items.push(mapProductToFeedItem(product, options));
+  }
+  const xml = buildProductFeedXml({
+    title: `${options.brand} \u2014 Cat\xE1logo de produtos`,
+    link: normalizeBaseUrl(options.baseUrl),
+    description: `Feed de produtos da ${options.brand} para Instagram e Facebook Shopping`,
+    items
+  });
+  return { items, exclusions, xml };
+}
+function getCachedFeed() {
+  if (!feedCache) return null;
+  if (Date.now() > feedCache.expiresAt) {
+    feedCache = null;
+    return null;
+  }
+  return feedCache;
+}
+function setCachedFeed(entry) {
+  feedCache = {
+    ...entry,
+    expiresAt: Date.now() + CACHE_TTL_MS
+  };
+  return feedCache;
+}
+
+// shared/lib/productMapper.ts
+function asStringArray(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+}
+function asSizes(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item) => typeof item === "object" && item !== null && "label" in item && "available" in item && typeof item.label === "string" && typeof item.available === "boolean"
+  );
+}
+function asColors(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item) => typeof item === "object" && item !== null && "name" in item && "hex" in item && typeof item.name === "string" && typeof item.hex === "string"
+  );
+}
+function asFaq(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item) => typeof item === "object" && item !== null && "question" in item && "answer" in item && typeof item.question === "string" && typeof item.answer === "string"
+  );
+}
+function asArtisan(value) {
+  if (typeof value !== "object" || value === null) {
+    return { name: "", region: "", story: "" };
+  }
+  const artisan = value;
+  return {
+    name: typeof artisan.name === "string" ? artisan.name : "",
+    region: typeof artisan.region === "string" ? artisan.region : "",
+    story: typeof artisan.story === "string" ? artisan.story : ""
+  };
+}
+function mapProductRowToProduct(row) {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    category: row.category,
+    price: Number(row.price),
+    originalPrice: row.original_price === null ? null : Number(row.original_price),
+    image: row.image,
+    images: asStringArray(row.images),
+    badge: row.badge,
+    badgeColor: row.badge_color,
+    rating: Number(row.rating),
+    reviews: row.reviews,
+    featured: row.featured,
+    shortDescription: row.short_description,
+    description: row.description,
+    materials: asStringArray(row.materials),
+    careInstructions: asStringArray(row.care_instructions),
+    artisan: asArtisan(row.artisan),
+    sizes: asSizes(row.sizes),
+    colors: asColors(row.colors),
+    sku: row.sku,
+    inStock: row.in_stock,
+    stockCount: row.stock_count,
+    widthCm: row.width_cm == null ? null : Number(row.width_cm),
+    heightCm: row.height_cm == null ? null : Number(row.height_cm),
+    lengthCm: row.length_cm == null ? null : Number(row.length_cm),
+    weightKg: row.weight_kg == null ? null : Number(row.weight_kg),
+    faq: asFaq(row.faq),
+    highlights: asStringArray(row.highlights),
+    styleTags: asStringArray(row.style_tags),
+    regionId: row.region_id ?? null
+  };
+}
+function mapProductToRow(product) {
+  return {
+    slug: product.slug,
+    name: product.name,
+    category: product.category,
+    price: product.price,
+    original_price: product.originalPrice,
+    image: product.image,
+    images: product.images,
+    badge: product.badge,
+    badge_color: product.badgeColor,
+    rating: product.rating,
+    reviews: product.reviews,
+    featured: product.featured,
+    short_description: product.shortDescription,
+    description: product.description,
+    materials: product.materials,
+    care_instructions: product.careInstructions,
+    artisan: product.artisan,
+    sizes: product.sizes,
+    colors: product.colors,
+    sku: product.sku,
+    in_stock: product.inStock,
+    stock_count: product.stockCount,
+    width_cm: product.widthCm,
+    height_cm: product.heightCm,
+    length_cm: product.lengthCm,
+    weight_kg: product.weightKg,
+    faq: product.faq,
+    highlights: product.highlights,
+    style_tags: product.styleTags ?? [],
+    region_id: product.regionId ?? null
+  };
+}
+
+// shared/lib/sanitizeProductHtml.ts
+var ALLOWED_TAGS = /* @__PURE__ */ new Set([
+  "p",
+  "br",
+  "strong",
+  "b",
+  "em",
+  "i",
+  "u",
+  "s",
+  "ul",
+  "ol",
+  "li",
+  "h2",
+  "h3",
+  "h4",
+  "blockquote",
+  "a",
+  "span",
+  "div"
+]);
+var VOID_TAGS = /* @__PURE__ */ new Set(["br"]);
+function isSafeUrl(raw) {
+  const value = raw.trim().replace(/[\u0000-\u001f\u007f]/g, "");
+  if (!value || value.startsWith("#")) return true;
+  const lower = value.toLowerCase();
+  if (lower.startsWith("javascript:") || lower.startsWith("vbscript:") || lower.startsWith("data:")) {
+    return false;
+  }
+  return /^(https?:|mailto:|\/|\.\/|\.\.\/)/i.test(value);
+}
+function sanitizeAttributes(tag, attrsRaw) {
+  if (!attrsRaw.trim()) {
+    return tag === "a" ? ' rel="noopener noreferrer"' : "";
+  }
+  const kept = [];
+  const attrRe = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/gi;
+  let match;
+  while ((match = attrRe.exec(attrsRaw)) !== null) {
+    const name = match[1].toLowerCase();
+    const value = match[2] ?? match[3] ?? match[4] ?? "";
+    if (name.startsWith("on")) continue;
+    if (name === "style" || name.startsWith("data-")) continue;
+    if (tag === "a" && (name === "href" || name === "title" || name === "target")) {
+      if (name === "href" && !isSafeUrl(value)) continue;
+      if (name === "target" && value !== "_blank" && value !== "_self") continue;
+      kept.push(`${name}="${value.replace(/"/g, "&quot;")}"`);
+      continue;
+    }
+    if ((tag === "span" || tag === "div" || tag === "p" || tag === "h2" || tag === "h3" || tag === "h4") && name === "class") {
+      const safeClass = value.replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
+      if (safeClass) kept.push(`class="${safeClass}"`);
+    }
+  }
+  if (tag === "a") {
+    const hasRel = kept.some((item) => item.startsWith("rel="));
+    if (!hasRel) kept.push('rel="noopener noreferrer"');
+  }
+  return kept.length > 0 ? ` ${kept.join(" ")}` : "";
+}
+function sanitizeProductHtml(html) {
+  if (!html) return "";
+  let out = html.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
+  out = out.replace(/<\/?([a-zA-Z][\w:-]*)\b([^>]*)>/g, (full, rawTag, attrs) => {
+    const tag = rawTag.toLowerCase();
+    const closing = full.startsWith("</");
+    if (!ALLOWED_TAGS.has(tag)) {
+      return "";
+    }
+    if (closing) {
+      return VOID_TAGS.has(tag) ? "" : `</${tag}>`;
+    }
+    if (VOID_TAGS.has(tag)) {
+      return `<${tag}>`;
+    }
+    return `<${tag}${sanitizeAttributes(tag, attrs)}>`;
+  });
+  return out.replace(/<h3([^>]*)>\s*\?\s*/gi, "<h3$1>\u2726 ").replace(/class="isSelectedEnd"/gi, "").replace(/\sclass=""/gi, "");
+}
+
+// shared/lib/slugify.ts
+import { nanoid as nanoid2 } from "nanoid";
+function slugify(text) {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+// server/services/products.ts
+import { nanoid as nanoid3 } from "nanoid";
+function sanitizeProductInput(input) {
+  return {
+    ...input,
+    shortDescription: sanitizeProductHtml(input.shortDescription),
+    description: sanitizeProductHtml(input.description)
+  };
+}
+async function listProducts(category) {
+  let query = supabase.from("products").select("*").order("id", { ascending: true });
+  if (category) {
+    query = query.eq("category", category);
+  }
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data.map(mapProductRowToProduct);
+}
+async function getProductBySlug(slug) {
+  const { data, error } = await supabase.from("products").select("*").eq("slug", slug).maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) return null;
+  return mapProductRowToProduct(data);
+}
+async function slugExists(slug, excludeSlug) {
+  let query = supabase.from("products").select("slug", { count: "exact", head: true }).eq("slug", slug);
+  if (excludeSlug) {
+    query = query.neq("slug", excludeSlug);
+  }
+  const { count, error } = await query;
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (count ?? 0) > 0;
+}
+async function generateUniqueSlug(name, excludeSlug) {
+  const base = slugify(name) || "produto";
+  let candidate = base;
+  while (await slugExists(candidate, excludeSlug)) {
+    candidate = `${base}-${nanoid3(5).toLowerCase()}`;
+  }
+  return candidate;
+}
+async function createProduct(input) {
+  const safeInput = sanitizeProductInput(input);
+  const { data, error } = await supabase.from("products").insert(mapProductToRow(safeInput)).select("*").single();
+  if (error) {
+    throw new Error(error.message);
+  }
+  return mapProductRowToProduct(data);
+}
+async function updateProduct(currentSlug, input) {
+  const safeInput = sanitizeProductInput(input);
+  const { data, error } = await supabase.from("products").update(mapProductToRow(safeInput)).eq("slug", currentSlug).select("*").maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) return null;
+  return mapProductRowToProduct(data);
+}
+async function deleteProduct(slug) {
+  const { data, error } = await supabase.from("products").delete().eq("slug", slug).select("slug");
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data?.length ?? 0) > 0;
+}
+async function bulkUpsertProducts(inputs) {
+  if (inputs.length === 0) {
+    return { created: 0, updated: 0, total: 0 };
+  }
+  const slugs = inputs.map((input) => input.slug);
+  const { data: existingRows, error: existingError } = await supabase.from("products").select("slug").in("slug", slugs);
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+  const existingSlugs = new Set((existingRows ?? []).map((row) => row.slug));
+  const rows = inputs.map((input) => mapProductToRow(sanitizeProductInput(input)));
+  const { error } = await supabase.from("products").upsert(rows, { onConflict: "slug" });
+  if (error) {
+    throw new Error(error.message);
+  }
+  const updated = slugs.filter((slug) => existingSlugs.has(slug)).length;
+  const created = slugs.length - updated;
+  return { created, updated, total: slugs.length };
+}
+
+// server/services/metaCatalog.ts
+var SYNC_WINDOW_MS = 36 * 60 * 60 * 1e3;
+function appBaseUrl() {
+  return normalizeBaseUrl(
+    process.env.APP_URL?.trim() || process.env.VITE_APP_URL?.trim() || "http://localhost:5000"
+  );
+}
+function buildFeedUrl(token) {
+  const base = `${appBaseUrl()}/api/feed/products.xml`;
+  if (!token) return base;
+  return `${base}?token=${encodeURIComponent(token)}`;
+}
+function isSynced(row) {
+  if (!row.enabled || !row.last_generated_at) return false;
+  const generatedAt = Date.parse(row.last_generated_at);
+  if (Number.isNaN(generatedAt)) return false;
+  return Date.now() - generatedAt <= SYNC_WINDOW_MS;
+}
+function toAdminStatus2(row) {
+  return {
+    enabled: row.enabled,
+    hasFeedToken: Boolean(row.feed_token),
+    feedToken: row.feed_token,
+    defaultBrand: row.default_brand || "Nativa",
+    googleProductCategory: row.google_product_category || "",
+    lastGeneratedAt: row.last_generated_at,
+    productCount: row.product_count,
+    excludedCount: row.excluded_count,
+    feedUrl: buildFeedUrl(row.feed_token),
+    synced: isSynced(row)
+  };
+}
+async function getSettingsRow3() {
+  const { data, error } = await supabase.from("meta_catalog_settings").select("*").eq("id", true).single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function persistGenerationStats(params) {
+  const { data, error } = await supabase.from("meta_catalog_settings").update({
+    product_count: params.productCount,
+    excluded_count: params.excludedCount,
+    last_generated_at: params.generatedAt,
+    updated_at: params.generatedAt
+  }).eq("id", true).select("*").single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function getMetaCatalogAdminStatus() {
+  return toAdminStatus2(await getSettingsRow3());
+}
+async function updateMetaCatalogSettings(input) {
+  const current = await getSettingsRow3();
+  let feedToken = current.feed_token;
+  if (input.regenerateFeedToken) {
+    feedToken = nanoid4(32);
+  } else if (input.feedToken !== void 0) {
+    feedToken = input.feedToken;
+  }
+  if (input.enabled && !feedToken) {
+    feedToken = nanoid4(32);
+  }
+  const { data, error } = await supabase.from("meta_catalog_settings").update({
+    enabled: input.enabled,
+    feed_token: feedToken,
+    default_brand: input.defaultBrand,
+    google_product_category: input.googleProductCategory,
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  }).eq("id", true).select("*").single();
+  if (error) throw new Error(error.message);
+  invalidateFeedCache();
+  return toAdminStatus2(data);
+}
+async function generateMetaCatalogFeed(options) {
+  const settings = await getSettingsRow3();
+  if (!options?.force) {
+    const cached = getCachedFeed();
+    if (cached) {
+      return {
+        xml: cached.xml,
+        productCount: cached.productCount,
+        excludedCount: cached.excludedCount,
+        generatedAt: cached.generatedAt,
+        exclusions: []
+      };
+    }
+  }
+  const products = await listProducts();
+  const built = buildFeedFromProducts(products, {
+    baseUrl: appBaseUrl(),
+    brand: settings.default_brand || "Nativa",
+    googleProductCategory: settings.google_product_category || void 0
+  });
+  const generatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const productCount = built.items.length;
+  const excludedCount = built.exclusions.length;
+  await persistGenerationStats({
+    productCount,
+    excludedCount,
+    generatedAt
+  });
+  setCachedFeed({
+    xml: built.xml,
+    productCount,
+    excludedCount,
+    generatedAt
+  });
+  return {
+    xml: built.xml,
+    productCount,
+    excludedCount,
+    generatedAt,
+    exclusions: built.exclusions
+  };
+}
+async function getPublicProductFeedXml(tokenFromQuery) {
+  const settings = await getSettingsRow3();
+  if (!settings.enabled) {
+    const error = new Error("Feed do cat\xE1logo Meta desativado");
+    error.status = 404;
+    throw error;
+  }
+  if (settings.feed_token) {
+    if (!tokenFromQuery || tokenFromQuery !== settings.feed_token) {
+      const error = new Error("Token do feed inv\xE1lido");
+      error.status = 401;
+      throw error;
+    }
+  }
+  const result = await generateMetaCatalogFeed();
+  return result.xml;
+}
+async function testMetaCatalogFeed() {
+  const result = await generateMetaCatalogFeed({ force: true });
+  return {
+    included: result.productCount,
+    excluded: result.excludedCount,
+    exclusions: result.exclusions,
+    productCount: result.productCount,
+    excludedCount: result.excludedCount,
+    lastGeneratedAt: result.generatedAt
+  };
+}
+
+// server/routes/adminMetaCatalog.ts
+var router8 = Router8();
+router8.get("/status", requireAdmin, async (_req, res) => {
+  try {
+    res.json(await getMetaCatalogAdminStatus());
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao carregar"
+    });
+  }
+});
+router8.put("/settings", requireAdmin, async (req, res) => {
+  const parsed = metaCatalogSettingsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Dados inv\xE1lidos", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    res.json(await updateMetaCatalogSettings(parsed.data));
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao salvar"
+    });
+  }
+});
+router8.post("/test", requireAdmin, async (_req, res) => {
+  try {
+    res.json(await testMetaCatalogFeed());
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao testar feed"
+    });
+  }
+});
+var adminMetaCatalog_default = router8;
 
 // server/routes/adminNotifications.ts
-import { Router as Router7 } from "express";
+import { Router as Router9 } from "express";
 
 // server/services/adminNotifications.ts
 function mapNotificationRow(row) {
@@ -3313,8 +5222,8 @@ async function getUnreadCountByType() {
 }
 
 // server/routes/adminNotifications.ts
-var router7 = Router7();
-router7.get("/", requireAdmin, async (_req, res) => {
+var router9 = Router9();
+router9.get("/", requireAdmin, async (_req, res) => {
   try {
     const notifications = await listAdminNotifications();
     res.json(notifications);
@@ -3324,7 +5233,7 @@ router7.get("/", requireAdmin, async (_req, res) => {
     });
   }
 });
-router7.get("/unread-count", requireAdmin, async (_req, res) => {
+router9.get("/unread-count", requireAdmin, async (_req, res) => {
   try {
     const [count, byType] = await Promise.all([
       getUnreadNotificationCount(),
@@ -3337,7 +5246,7 @@ router7.get("/unread-count", requireAdmin, async (_req, res) => {
     });
   }
 });
-router7.patch("/read-all", requireAdmin, async (_req, res) => {
+router9.patch("/read-all", requireAdmin, async (_req, res) => {
   try {
     await markAllNotificationsAsRead();
     res.json({ success: true });
@@ -3347,7 +5256,7 @@ router7.patch("/read-all", requireAdmin, async (_req, res) => {
     });
   }
 });
-router7.patch("/:id/read", requireAdmin, async (req, res) => {
+router9.patch("/:id/read", requireAdmin, async (req, res) => {
   try {
     const notification = await markNotificationAsRead(req.params.id);
     res.json(notification);
@@ -3357,28 +5266,28 @@ router7.patch("/:id/read", requireAdmin, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-var adminNotifications_default = router7;
+var adminNotifications_default = router9;
 
 // shared/schemas/order.ts
-import { z as z7 } from "zod";
+import { z as z9 } from "zod";
 
 // shared/schemas/address.ts
-import { z as z6 } from "zod";
+import { z as z8 } from "zod";
 function normalizeCep(value) {
   return value.replace(/\D/g, "").slice(0, 8);
 }
-var shippingAddressSchema = z6.object({
-  cep: z6.string().trim().min(1, "Informe o CEP").transform(normalizeCep).refine((value) => value.length === 8, { message: "CEP deve ter 8 d\xEDgitos" }),
-  rua: z6.string().trim().min(2, "Informe a rua").max(200, "Rua muito longa"),
-  numero: z6.string().trim().min(1, "Informe o n\xFAmero").max(20, "N\xFAmero muito longo"),
-  complemento: z6.string().trim().max(100, "Complemento muito longo").optional().transform((value) => value || void 0),
-  bairro: z6.string().trim().min(2, "Informe o bairro").max(100, "Bairro muito longo"),
-  cidade: z6.string().trim().min(2, "Informe a cidade").max(100, "Cidade muito longa"),
-  estado: z6.string().trim().length(2, "Informe a UF com 2 letras").transform((value) => value.toUpperCase())
+var shippingAddressSchema = z8.object({
+  cep: z8.string().trim().min(1, "Informe o CEP").transform(normalizeCep).refine((value) => value.length === 8, { message: "CEP deve ter 8 d\xEDgitos" }),
+  rua: z8.string().trim().min(2, "Informe a rua").max(200, "Rua muito longa"),
+  numero: z8.string().trim().min(1, "Informe o n\xFAmero").max(20, "N\xFAmero muito longo"),
+  complemento: z8.string().trim().max(100, "Complemento muito longo").optional().transform((value) => value || void 0),
+  bairro: z8.string().trim().min(2, "Informe o bairro").max(100, "Bairro muito longo"),
+  cidade: z8.string().trim().min(2, "Informe a cidade").max(100, "Cidade muito longa"),
+  estado: z8.string().trim().length(2, "Informe a UF com 2 letras").transform((value) => value.toUpperCase())
 });
 var customerAddressSchema = shippingAddressSchema.extend({
-  label: z6.string().trim().min(1, "Informe um nome para o endere\xE7o").max(40, "Nome muito longo"),
-  isDefault: z6.boolean().optional().default(false)
+  label: z8.string().trim().min(1, "Informe um nome para o endere\xE7o").max(40, "Nome muito longo"),
+  isDefault: z8.boolean().optional().default(false)
 });
 var customerAddressUpdateSchema = customerAddressSchema.partial();
 
@@ -3395,22 +5304,22 @@ function isValidCpf(value) {
   };
   return digit(9) === Number(value[9]) && digit(10) === Number(value[10]);
 }
-var checkoutSchema = z7.object({
+var checkoutSchema = z9.object({
   shippingAddress: shippingAddressSchema,
-  shipping: z7.object({
-    quoteId: z7.string().uuid("Cota\xE7\xE3o de frete inv\xE1lida"),
-    serviceId: z7.string().min(1, "Escolha uma transportadora")
+  shipping: z9.object({
+    quoteId: z9.string().uuid("Cota\xE7\xE3o de frete inv\xE1lida"),
+    serviceId: z9.string().min(1, "Escolha uma transportadora")
   }),
-  recipient: z7.object({
-    name: z7.string().trim().min(3, "Informe o nome do destinat\xE1rio"),
-    email: z7.string().trim().email("Informe um e-mail v\xE1lido"),
-    phone: z7.string().transform((value) => value.replace(/\D/g, "")).refine((value) => value.length >= 10 && value.length <= 11, "Informe um telefone v\xE1lido"),
-    document: z7.string().transform((value) => value.replace(/\D/g, "")).refine(isValidCpf, "Informe um CPF v\xE1lido")
+  recipient: z9.object({
+    name: z9.string().trim().min(3, "Informe o nome do destinat\xE1rio"),
+    email: z9.string().trim().email("Informe um e-mail v\xE1lido"),
+    phone: z9.string().transform((value) => value.replace(/\D/g, "")).refine((value) => value.length >= 10 && value.length <= 11, "Informe um telefone v\xE1lido"),
+    document: z9.string().transform((value) => value.replace(/\D/g, "")).refine(isValidCpf, "Informe um CPF v\xE1lido")
   }),
-  paymentMethod: z7.enum(["pix", "credit_card", "boleto"]),
-  idempotencyKey: z7.string().uuid(),
-  payer: z7.object({
-    identificationNumber: z7.string().transform((value) => value.replace(/\D/g, "")).refine(isValidCpf, "Informe um CPF v\xE1lido")
+  paymentMethod: z9.enum(["pix", "credit_card", "boleto"]),
+  idempotencyKey: z9.string().uuid(),
+  payer: z9.object({
+    identificationNumber: z9.string().transform((value) => value.replace(/\D/g, "")).refine(isValidCpf, "Informe um CPF v\xE1lido")
   }),
   card: cardPaymentDataSchema.optional()
 }).superRefine((value, context) => {
@@ -3422,19 +5331,19 @@ var checkoutSchema = z7.object({
     });
   }
 });
-var orderStatusUpdateSchema = z7.object({
-  status: z7.enum(["pending", "paid", "canceled"])
+var orderStatusUpdateSchema = z9.object({
+  status: z9.enum(["pending", "paid", "canceled"])
 });
-var fulfillmentUpdateSchema = z7.object({
-  status: z7.enum([
+var fulfillmentUpdateSchema = z9.object({
+  status: z9.enum([
     "unfulfilled",
     "processing",
     "shipped",
     "delivered",
     "canceled"
   ]),
-  trackingCode: z7.string().trim().max(120).optional().nullable(),
-  trackingUrl: z7.string().trim().url("URL de rastreio inv\xE1lida").optional().nullable()
+  trackingCode: z9.string().trim().max(120).optional().nullable(),
+  trackingUrl: z9.string().trim().url("URL de rastreio inv\xE1lida").optional().nullable()
 }).superRefine((value, context) => {
   if (value.status === "shipped" && !value.trackingCode?.trim()) {
     context.addIssue({
@@ -3444,173 +5353,15 @@ var fulfillmentUpdateSchema = z7.object({
     });
   }
 });
-var orderBulkIdsSchema = z7.object({
-  ids: z7.array(z7.string().uuid("ID de pedido inv\xE1lido")).min(1, "Selecione ao menos um pedido").max(200, "M\xE1ximo de 200 pedidos por opera\xE7\xE3o")
+var orderBulkIdsSchema = z9.object({
+  ids: z9.array(z9.string().uuid("ID de pedido inv\xE1lido")).min(1, "Selecione ao menos um pedido").max(200, "M\xE1ximo de 200 pedidos por opera\xE7\xE3o")
 });
 var orderBulkExportSchema = orderBulkIdsSchema.extend({
-  format: z7.enum(["csv", "pdf"])
+  format: z9.enum(["csv", "pdf"])
 });
 
 // server/routes/adminOrders.ts
-import { Router as Router8 } from "express";
-
-// server/services/orderEmails.ts
-function appUrl() {
-  const raw = process.env.APP_URL?.trim() || process.env.VITE_APP_URL?.trim() || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
-  return (raw.startsWith("http") ? raw : `https://${raw}`).replace(/\/$/, "");
-}
-function money(value) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  }).format(Number(value ?? 0));
-}
-function paymentMethodLabel(value) {
-  if (value === "pix") return "Pix";
-  if (value === "boleto") return "Boleto";
-  if (value === "credit_card") return "Cart\xE3o de cr\xE9dito";
-  return value;
-}
-async function dispatchOrderEmail(orderId, event) {
-  let config;
-  try {
-    config = await getBrevoTransactionalConfig();
-  } catch {
-    return "skipped";
-  }
-  const templateId = config.templates[event];
-  if (!templateId) return "skipped";
-  const [{ data: order, error: orderError }, { data: items, error: itemsError }] = await Promise.all([
-    supabase.from("orders").select("*").eq("id", orderId).maybeSingle(),
-    supabase.from("order_items").select("name, quantity, price, size, color").eq("order_id", orderId).order("id", { ascending: true })
-  ]);
-  if (orderError || itemsError || !order) return "failed";
-  const recipient = order.shipping_recipient ?? {};
-  let email = recipient.email?.trim().toLowerCase() ?? "";
-  let customerName = recipient.name?.trim() ?? "";
-  if ((!email || !customerName) && order.customer_id) {
-    const [{ data: profile }, authResult] = await Promise.all([
-      supabase.from("customer_profiles").select("full_name").eq("id", order.customer_id).maybeSingle(),
-      supabase.auth.admin.getUserById(order.customer_id)
-    ]);
-    email ||= authResult.data.user?.email?.toLowerCase() ?? "";
-    customerName ||= profile?.full_name ?? "";
-  }
-  if (!email) return "skipped";
-  const idempotencyKey = `${orderId}:${event}`;
-  const { data: insertedDelivery, error: deliveryError } = await supabase.from("brevo_email_deliveries").upsert(
-    {
-      order_id: orderId,
-      event,
-      idempotency_key: idempotencyKey,
-      kind: "transactional",
-      recipient_email: email,
-      template_id: templateId,
-      status: "queued",
-      metadata: { orderId, event }
-    },
-    { onConflict: "idempotency_key", ignoreDuplicates: true }
-  ).select("id, attempt_count").maybeSingle();
-  if (deliveryError) return "failed";
-  let delivery = insertedDelivery;
-  if (!delivery) {
-    const { data: failedDelivery } = await supabase.from("brevo_email_deliveries").select("id, attempt_count").eq("idempotency_key", idempotencyKey).eq("status", "failed").lt("attempt_count", 3).maybeSingle();
-    if (!failedDelivery) return "duplicate";
-    const { data: claimed } = await supabase.from("brevo_email_deliveries").update({
-      status: "sending",
-      error_message: null,
-      attempt_count: Number(failedDelivery.attempt_count) + 1,
-      updated_at: (/* @__PURE__ */ new Date()).toISOString()
-    }).eq("id", failedDelivery.id).eq("status", "failed").select("id, attempt_count").maybeSingle();
-    if (!claimed) return "duplicate";
-    delivery = claimed;
-  } else {
-    await supabase.from("brevo_email_deliveries").update({
-      status: "sending",
-      attempt_count: 1,
-      updated_at: (/* @__PURE__ */ new Date()).toISOString()
-    }).eq("id", delivery.id);
-  }
-  const address = order.shipping_address ?? {};
-  const itemParams = (items ?? []).map((item) => ({
-    name: item.name,
-    quantity: Number(item.quantity),
-    price: money(item.price),
-    size: item.size,
-    color: item.color
-  }));
-  const shortId = String(order.id).slice(0, 8).toUpperCase();
-  const params = {
-    ORDER_ID: order.id,
-    ORDER_SHORT_ID: shortId,
-    CUSTOMER_NAME: customerName || "Cliente Nativa",
-    ORDER_URL: `${appUrl()}/conta`,
-    TOTAL: money(order.total_amount),
-    SUBTOTAL: money(Number(order.total_amount) - Number(order.shipping_amount)),
-    SHIPPING_AMOUNT: money(order.shipping_amount),
-    PAYMENT_METHOD: paymentMethodLabel(order.payment_method),
-    PAYMENT_STATUS: order.payment_status,
-    ITEMS: itemParams,
-    SHIPPING_COMPANY: order.shipping_company ?? "",
-    DELIVERY_DAYS: order.shipping_delivery_days ?? "",
-    TRACKING_CODE: order.tracking_code ?? "",
-    TRACKING_URL: order.tracking_url ?? "",
-    ADDRESS: [
-      address.rua,
-      address.numero,
-      address.complemento,
-      address.bairro,
-      address.cidade,
-      address.estado,
-      address.cep
-    ].filter(Boolean).join(", ")
-  };
-  try {
-    const result = await sendBrevoTransactionalEmail(
-      {
-        to: [{ email, name: customerName || void 0 }],
-        replyTo: config.replyTo ? { email: config.replyTo } : void 0,
-        templateId,
-        params,
-        tags: ["order", event]
-      },
-      "transactional",
-      { record: false }
-    );
-    await supabase.from("brevo_email_deliveries").update({
-      message_id: result.messageId ?? null,
-      status: "sent",
-      sent_at: (/* @__PURE__ */ new Date()).toISOString(),
-      updated_at: (/* @__PURE__ */ new Date()).toISOString()
-    }).eq("id", delivery.id);
-    return "sent";
-  } catch (error) {
-    await supabase.from("brevo_email_deliveries").update({
-      status: "failed",
-      failed_at: (/* @__PURE__ */ new Date()).toISOString(),
-      error_message: error instanceof Error ? error.message.slice(0, 2e3) : "Erro desconhecido",
-      updated_at: (/* @__PURE__ */ new Date()).toISOString()
-    }).eq("id", delivery.id);
-    return "failed";
-  }
-}
-function dispatchPaymentStatusEmail(orderId, status) {
-  if (status === "approved") {
-    return dispatchOrderEmail(orderId, "payment_approved");
-  }
-  if (status === "refunded") {
-    return dispatchOrderEmail(orderId, "payment_refunded");
-  }
-  if (["rejected", "canceled", "expired"].includes(status)) {
-    return dispatchOrderEmail(orderId, "payment_failed");
-  }
-  return Promise.resolve("skipped");
-}
-async function retryOrderEmail(orderId, deliveryId) {
-  const { data, error } = await supabase.from("brevo_email_deliveries").select("event").eq("id", deliveryId).eq("order_id", orderId).eq("status", "failed").maybeSingle();
-  if (error || !data?.event) return "failed";
-  return dispatchOrderEmail(orderId, data.event);
-}
+import { Router as Router10 } from "express";
 
 // server/services/orders.ts
 async function fetchCustomerCartRow(customerId) {
@@ -3749,6 +5500,25 @@ async function createOrderFromCheckout(customerId, input) {
       (sum, item) => sum + Number(item.unit_price) * item.quantity,
       0
     );
+    let discountAmount = 0;
+    let couponCode = null;
+    if (cartRow.coupon_code) {
+      try {
+        const application = await assertCouponApplicable({
+          code: cartRow.coupon_code,
+          subtotal,
+          customerId
+        });
+        discountAmount = application.discountAmount;
+        couponCode = application.code;
+      } catch (error2) {
+        await supabase.from("carts").update({ coupon_code: null }).eq("id", cartRow.id);
+        if (error2 instanceof CouponEvalError) {
+          throw new Error(error2.message);
+        }
+        throw error2;
+      }
+    }
     const selectedShipping = await validateShippingSelection({
       customerId,
       cartId: cartRow.id,
@@ -3759,6 +5529,7 @@ async function createOrderFromCheckout(customerId, input) {
       items: cartItems
     });
     const shippingAmount = selectedShipping.chargedPrice;
+    const totals = buildOrderTotals(subtotal, shippingAmount, discountAmount);
     const itemsPayload = cartItems.map(mapCartItemToOrderItemPayload);
     const environment = await getActiveMercadoPagoEnvironment();
     paymentEnvironment = environment;
@@ -3767,9 +5538,10 @@ async function createOrderFromCheckout(customerId, input) {
       {
         p_customer_id: customerId,
         p_cart_id: cartRow.id,
-        p_total_amount: subtotal + shippingAmount,
+        p_total_amount: totals.totalAmount,
         p_shipping_amount: shippingAmount,
-        p_coupon_code: cartRow.coupon_code,
+        p_discount_amount: totals.discountAmount,
+        p_coupon_code: couponCode,
         p_shipping_address: input.shippingAddress,
         p_payment_method: input.paymentMethod,
         p_items: itemsPayload,
@@ -3792,6 +5564,9 @@ async function createOrderFromCheckout(customerId, input) {
       throw new Error(error.message);
     }
     order = await fetchOrderWithItems(data.id);
+    if (couponCode) {
+      await incrementCouponUsage(couponCode);
+    }
   }
   const customer = await fetchCustomerInfo(customerId);
   if (!customer.email) throw new Error("Cliente sem e-mail para pagamento");
@@ -3836,7 +5611,7 @@ async function createOrderFromCheckout(customerId, input) {
         }
       );
       if (acceptError) throw new Error(acceptError.message);
-      await dispatchOrderEmail(order.id, "order_received");
+      await dispatchOrderCreatedEmails(order.id);
       if (identity.status === "approved") {
         const { error: reconcileError } = await supabase.rpc(
           "reconcile_mercado_pago_payment",
@@ -4069,6 +5844,7 @@ function buildOrdersCsv(orders) {
     "status_pagamento",
     "pago_em",
     "cupom",
+    "desconto",
     "frete",
     "total",
     "itens",
@@ -4093,6 +5869,7 @@ function buildOrdersCsv(orders) {
       PAYMENT_STATUS_LABELS[order.paymentStatus] ?? order.paymentStatus,
       order.paidAt ?? "",
       order.couponCode ?? "",
+      formatBrlNumber(order.discountAmount),
       formatBrlNumber(order.shippingAmount),
       formatBrlNumber(order.totalAmount),
       itemsSummary,
@@ -4114,6 +5891,7 @@ var SITE_TITLE = `${SITE_NAME} \u2014 ${SITE_TAGLINE}`;
 var SITE_KEYWORDS = "bolsas artesanais, artesanato brasileiro, nativa store, bolsas feitas \xE0 m\xE3o, bolsas autorais, feito \xE0 m\xE3o, brasil";
 var SITE_LOCALE = "pt_BR";
 var SITE_THEME_COLOR = "#C4522A";
+var SITE_OG_IMAGE_PATH = "/images/bannerNativa.jpg";
 var SITE_TWITTER_HANDLE = "@nativastore";
 var DEFAULT_TITLE_TEMPLATE = `%s \u2014 ${SITE_NAME}`;
 
@@ -4311,10 +6089,17 @@ function drawTotals(doc, order, startY) {
     0
   );
   const rows = [
-    ["Subtotal", formatBrl(subtotal), false],
-    ["Frete", formatBrl(order.shippingAmount), false]
+    ["Subtotal", formatBrl(subtotal), false]
   ];
-  if (order.couponCode) {
+  if (order.discountAmount > 0) {
+    rows.push([
+      order.couponCode ? `Desconto (${order.couponCode})` : "Desconto",
+      `-${formatBrl(order.discountAmount)}`,
+      false
+    ]);
+  }
+  rows.push(["Frete", formatBrl(order.shippingAmount), false]);
+  if (order.couponCode && order.discountAmount <= 0) {
     rows.push(["Cupom", order.couponCode, false]);
   }
   rows.push(["Total", formatBrl(order.totalAmount), true]);
@@ -4503,8 +6288,8 @@ async function buildOrdersPdfBuffer(orders) {
 }
 
 // server/routes/adminOrders.ts
-var router8 = Router8();
-router8.get("/", requireAdmin, async (_req, res) => {
+var router10 = Router10();
+router10.get("/", requireAdmin, async (_req, res) => {
   try {
     const orders = await listAllOrders();
     res.json(orders);
@@ -4514,7 +6299,7 @@ router8.get("/", requireAdmin, async (_req, res) => {
     });
   }
 });
-router8.post("/bulk/delete", requireAdmin, async (req, res) => {
+router10.post("/bulk/delete", requireAdmin, async (req, res) => {
   try {
     const parsed = orderBulkIdsSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -4529,7 +6314,7 @@ router8.post("/bulk/delete", requireAdmin, async (req, res) => {
     });
   }
 });
-router8.post("/bulk/export", requireAdmin, async (req, res) => {
+router10.post("/bulk/export", requireAdmin, async (req, res) => {
   try {
     const parsed = orderBulkExportSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -4561,7 +6346,7 @@ router8.post("/bulk/export", requireAdmin, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router8.get("/:id", requireAdmin, async (req, res) => {
+router10.get("/:id", requireAdmin, async (req, res) => {
   try {
     const order = await getOrderById(req.params.id);
     res.json(order);
@@ -4571,7 +6356,7 @@ router8.get("/:id", requireAdmin, async (req, res) => {
     res.status(status).json({ error: "Pedido n\xE3o encontrado" });
   }
 });
-router8.patch("/:id/status", requireAdmin, async (req, res) => {
+router10.patch("/:id/status", requireAdmin, async (req, res) => {
   try {
     const parsed = orderStatusUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -4586,7 +6371,7 @@ router8.patch("/:id/status", requireAdmin, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router8.patch("/:id/fulfillment", requireAdmin, async (req, res) => {
+router10.patch("/:id/fulfillment", requireAdmin, async (req, res) => {
   try {
     const parsed = fulfillmentUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -4599,7 +6384,7 @@ router8.patch("/:id/fulfillment", requireAdmin, async (req, res) => {
     res.status(message.includes("n\xE3o encontrado") ? 404 : 500).json({ error: message });
   }
 });
-router8.post("/:id/shipment/retry", requireAdmin, async (req, res) => {
+router10.post("/:id/shipment/retry", requireAdmin, async (req, res) => {
   try {
     await ensurePaidOrderInMelhorEnvioCart(req.params.id);
     res.json(await getOrderById(req.params.id));
@@ -4608,7 +6393,7 @@ router8.post("/:id/shipment/retry", requireAdmin, async (req, res) => {
     res.status(400).json({ error: message });
   }
 });
-router8.post("/:id/emails/:deliveryId/retry", requireAdmin, async (req, res) => {
+router10.post("/:id/emails/:deliveryId/retry", requireAdmin, async (req, res) => {
   try {
     const result = await retryOrderEmail(req.params.id, req.params.deliveryId);
     if (result === "failed") {
@@ -4622,123 +6407,869 @@ router8.post("/:id/emails/:deliveryId/retry", requireAdmin, async (req, res) => 
     });
   }
 });
-var adminOrders_default = router8;
+var adminOrders_default = router10;
+
+// server/routes/adminImport.ts
+import { Router as Router11 } from "express";
+
+// shared/lib/tiendanubeImages.ts
+function parseJsonArray(source, startIndex) {
+  if (source[startIndex] !== "[") return null;
+  let depth = 0;
+  for (let i = startIndex; i < source.length; i += 1) {
+    const char = source[i];
+    if (char === "[") depth += 1;
+    if (char === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          const parsed = JSON.parse(source.slice(startIndex, i + 1));
+          return Array.isArray(parsed) ? parsed : null;
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+function extractProductGalleryFromHtml(html) {
+  const marker = /"images"\s*:\s*\[/g;
+  let match;
+  while ((match = marker.exec(html)) !== null) {
+    const arrayStart = match.index + match[0].length - 1;
+    const parsed = parseJsonArray(html, arrayStart);
+    if (!parsed) continue;
+    const endIndex = html.indexOf("]", arrayStart) + 1;
+    const after = html.slice(endIndex, endIndex + 40);
+    if (!after.includes('"images_count"')) continue;
+    return parsed.filter(
+      (item) => typeof item === "object" && item !== null && "image" in item && typeof item.image === "string"
+    ).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }
+  return [];
+}
+function buildTiendanubeImageUrl(storePath, imageFile, size = 480) {
+  if (/\.gif$/i.test(imageFile)) {
+    return `https://dcdn-us.mitiendanube.com/stores/${storePath}/products/${imageFile}`;
+  }
+  const fileBase = imageFile.replace(/\.(png|jpe?g|webp)$/i, "");
+  return `https://dcdn-us.mitiendanube.com/stores/${storePath}/products/${fileBase}-${size}-0.webp`;
+}
+function extractStorePathFromHtml(html) {
+  const match = html.match(/https:\/\/dcdn-us\.mitiendanube\.com\/stores\/(\d+\/\d+\/\d+)\//);
+  return match?.[1] ?? null;
+}
+function buildGalleryUrls(html) {
+  const storePath = extractStorePathFromHtml(html);
+  if (!storePath) return [];
+  const gallery = extractProductGalleryFromHtml(html);
+  return gallery.map((item) => buildTiendanubeImageUrl(storePath, item.image));
+}
+
+// server/services/tiendanubeImageFetch.ts
+var DEFAULT_STORE_URLS = [
+  "https://www.nativa.art.br",
+  "https://quintiluz.lojavirtualnuvem.com.br"
+];
+function resolveStoreBases() {
+  const fromEnv = process.env.NUVEMSHOP_STORE_URL?.trim().replace(/\/+$/, "");
+  return Array.from(new Set([fromEnv, ...DEFAULT_STORE_URLS].filter(Boolean)));
+}
+async function fetchTiendanubeProductImages(slug) {
+  const bases = resolveStoreBases();
+  for (const base of bases) {
+    const productUrl = `${base}/produtos/${slug}/`;
+    try {
+      const response = await fetch(productUrl, {
+        headers: {
+          "User-Agent": "NativaStoreImport/1.0 (contato@nativa.com.br)"
+        }
+      });
+      if (!response.ok) continue;
+      const gallery = buildGalleryUrls(await response.text());
+      if (gallery.length > 0) return gallery;
+    } catch {
+      continue;
+    }
+  }
+  return [];
+}
+async function fetchTiendanubeImagesBySlugs(slugs) {
+  const unique = Array.from(new Set(slugs.map((s) => s.trim()).filter(Boolean)));
+  const entries = await Promise.all(
+    unique.map(async (slug) => [slug, await fetchTiendanubeProductImages(slug)])
+  );
+  return Object.fromEntries(entries);
+}
+
+// server/routes/adminImport.ts
+var router11 = Router11();
+router11.post("/tiendanube-images", requireAdmin, async (req, res) => {
+  try {
+    const slugs = Array.isArray(req.body?.slugs) ? req.body.slugs.filter((item) => typeof item === "string") : [];
+    if (slugs.length === 0) {
+      res.status(400).json({ error: "Envie um array 'slugs'" });
+      return;
+    }
+    if (slugs.length > 100) {
+      res.status(400).json({ error: "M\xE1ximo de 100 slugs por requisi\xE7\xE3o" });
+      return;
+    }
+    const images = await fetchTiendanubeImagesBySlugs(slugs);
+    res.json({ images });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao buscar imagens da Tiendanube"
+    });
+  }
+});
+var adminImport_default = router11;
+
+// shared/schemas/quiz.ts
+import { z as z10 } from "zod";
+var imageUrlSchema = z10.string().refine(
+  (value) => value === "" || value.startsWith("/") || /^https?:\/\//i.test(value),
+  "Use uma URL http(s), um path absoluto (ex: /images/foto.jpg) ou deixe vazio"
+);
+var quizTagWeightSchema = z10.object({
+  tag: z10.string().trim().min(1, "Informe a tag"),
+  weight: z10.number().positive("O peso deve ser maior que zero")
+});
+var quizOptionSchema = z10.object({
+  id: z10.string().trim().min(1, "Informe o id da op\xE7\xE3o"),
+  label: z10.string().trim().min(1, "Informe o r\xF3tulo da op\xE7\xE3o"),
+  imageUrl: imageUrlSchema,
+  tags: z10.array(quizTagWeightSchema).min(1, "Cada op\xE7\xE3o precisa de ao menos uma tag")
+});
+var quizQuestionSchema = z10.object({
+  id: z10.string().trim().min(1, "Informe o id da pergunta"),
+  order: z10.number().int().min(1, "A ordem deve ser um inteiro \u2265 1"),
+  text: z10.string().trim().min(1, "Informe o texto da pergunta"),
+  options: z10.array(quizOptionSchema).min(2, "Cada pergunta precisa de ao menos 2 op\xE7\xF5es")
+}).superRefine((question, ctx) => {
+  const seen = /* @__PURE__ */ new Set();
+  question.options.forEach((option, index) => {
+    if (seen.has(option.id)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Id de op\xE7\xE3o duplicado: ${option.id}`,
+        path: ["options", index, "id"]
+      });
+    }
+    seen.add(option.id);
+  });
+});
+var quizResultSchema = z10.object({
+  id: z10.string().trim().min(1, "Informe o id do resultado"),
+  name: z10.string().trim().min(1, "Informe o nome do perfil"),
+  description: z10.string().trim().min(1, "Informe a descri\xE7\xE3o do perfil"),
+  tags: z10.array(z10.string().trim().min(1)).min(1, "Informe ao menos uma tag do perfil"),
+  recommendedProductIds: z10.array(z10.number().int().positive()).default([])
+});
+var quizImportBodySchema = z10.object({
+  questions: z10.array(z10.unknown()).default([]),
+  results: z10.array(z10.unknown()).default([])
+});
+var quizResultRequestSchema = z10.object({
+  selectedOptionIds: z10.array(z10.string().trim().min(1)).min(1, "Envie ao menos uma op\xE7\xE3o selecionada")
+});
+var quizCompareRequestSchema = z10.object({
+  yoursResultId: z10.string().uuid("Informe o resultId v\xE1lido"),
+  friendResultId: z10.string().uuid("Informe o resultId da amiga")
+});
+
+// server/routes/adminQuiz.ts
+import { z as z11 } from "zod";
+import { Router as Router12 } from "express";
+
+// shared/const/quizTagColors.ts
+var QUIZ_TAG_ACCENT_COLORS = {
+  natureza: "#2D6A4F",
+  boho: "#C9922A",
+  mistico: "#7A5C9E",
+  floral: "#C4522A",
+  urbano: "#1B7A8C",
+  classico: "#3D2B1F",
+  terroso: "#8B6F5E",
+  vibrante: "#E8821A"
+};
+var QUIZ_BRAND_ACCENT = "#C4522A";
+function accentColorForTags(tags) {
+  if (tags.length === 0) return QUIZ_BRAND_ACCENT;
+  const primary = [...tags].sort((a, b) => b.weight - a.weight || a.tag.localeCompare(b.tag))[0];
+  return QUIZ_TAG_ACCENT_COLORS[primary.tag] ?? QUIZ_BRAND_ACCENT;
+}
+
+// shared/lib/quizMapper.ts
+function asTagWeights(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item !== "object" || item === null) return null;
+    const row = item;
+    if (typeof row.tag !== "string" || typeof row.weight !== "number") return null;
+    return { tag: row.tag, weight: row.weight };
+  }).filter((item) => item !== null);
+}
+function asOptions(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item !== "object" || item === null) return null;
+    const row = item;
+    if (typeof row.id !== "string" || typeof row.label !== "string" || typeof row.imageUrl !== "string") {
+      return null;
+    }
+    return {
+      id: row.id,
+      label: row.label,
+      imageUrl: row.imageUrl,
+      tags: asTagWeights(row.tags)
+    };
+  }).filter((item) => item !== null);
+}
+function asStringArray2(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+}
+function asNumberArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "number" && Number.isFinite(item)) return item;
+    if (typeof item === "string" && item.trim() !== "" && !Number.isNaN(Number(item))) {
+      return Number(item);
+    }
+    return null;
+  }).filter((item) => item !== null);
+}
+function mapQuizQuestionRow(row) {
+  return {
+    id: row.id,
+    order: row.order,
+    text: row.text,
+    options: asOptions(row.options)
+  };
+}
+function mapQuizResultRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    tags: asStringArray2(row.tags),
+    recommendedProductIds: asNumberArray(row.recommended_product_ids)
+  };
+}
+function mapQuestionToRow(input) {
+  return {
+    id: input.id,
+    order: input.order,
+    text: input.text,
+    options: input.options,
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function mapResultToRow(input) {
+  return {
+    id: input.id,
+    name: input.name,
+    description: input.description,
+    tags: input.tags,
+    recommended_product_ids: input.recommendedProductIds,
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function toPublicQuestion(question) {
+  return {
+    id: question.id,
+    order: question.order,
+    text: question.text,
+    options: question.options.map(
+      (option) => ({
+        id: option.id,
+        label: option.label,
+        imageUrl: option.imageUrl,
+        accentColor: accentColorForTags(option.tags)
+      })
+    )
+  };
+}
+
+// shared/const/quizCombinations.ts
+var QUIZ_COMBINATION_TEXTS = {
+  "r-criativa|r-criativa": "Duas almas criativas \u2014 estampas, cores e pe\xE7as com hist\xF3ria pra contar juntas.",
+  "r-criativa|r-elegancia": "A sofistica\xE7\xE3o encontra a arte: uma ancora no essencial, a outra traz estampa e personalidade. Juntas, viram conversa.",
+  "r-criativa|r-livre": "Criatividade com liberdade \u2014 uma traz personalidade, a outra traz movimento. O rol\xEA nunca \xE9 sem gra\xE7a.",
+  "r-criativa|r-natural": "Ess\xEAncia natural com alma criativa: textura, artesanal e um toque de cor. A combina\xE7\xE3o mais aut\xEAntica poss\xEDvel.",
+  "r-elegancia|r-elegancia": "Duas eleg\xE2ncias leves na mesma frequ\xEAncia \u2014 pe\xE7as atemporais, looks limpos e presen\xE7a sem esfor\xE7o.",
+  "r-elegancia|r-livre": "Linha limpa + esp\xEDrito de aventura: uma afina o look, a outra puxa pra estrada. Duo de contraste elegante.",
+  "r-elegancia|r-natural": "Sofistica\xE7\xE3o com os p\xE9s no ch\xE3o \u2014 uma cuida do acabamento, a outra da autenticidade. Combina\xE7\xE3o rara e equilibrada.",
+  "r-livre|r-livre": "Dois esp\xEDritos livres \u2014 experi\xEAncias, viagens e s\xF3 o essencial pra acompanhar cada nova hist\xF3ria.",
+  "r-livre|r-natural": "P\xE9 na terra e cora\xE7\xE3o livre: uma puxa pra natureza, a outra pra pr\xF3xima aventura. Energia que se completa.",
+  "r-natural|r-natural": "Duas ess\xEAncias naturais \u2014 o simples, o artesanal e bolsas que parecem feitas sob medida."
+};
+function combinationKey(profileIdA, profileIdB) {
+  return [profileIdA, profileIdB].sort((a, b) => a.localeCompare(b)).join("|");
+}
+function getCombinationText(profileIdA, profileIdB) {
+  const key = combinationKey(profileIdA, profileIdB);
+  return QUIZ_COMBINATION_TEXTS[key] ?? "Dois estilos diferentes, uma amizade em comum \u2014 e a Nativa no meio do caminho.";
+}
+
+// shared/types/quiz.ts
+var QUIZ_RARITY_MIN_COMPLETIONS = 20;
+
+// server/services/quiz.ts
+import { randomUUID } from "node:crypto";
+async function listQuestionRows() {
+  const { data, error } = await supabase.from("quiz_questions").select("*").order("order", { ascending: true });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data ?? [];
+}
+async function listResultRows() {
+  const { data, error } = await supabase.from("quiz_results").select("*").order("id", { ascending: true });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data ?? [];
+}
+async function listQuizQuestions() {
+  return (await listQuestionRows()).map(mapQuizQuestionRow);
+}
+async function createQuizQuestion(input) {
+  const { data: existing, error: existingError } = await supabase.from("quiz_questions").select("id").eq("id", input.id).maybeSingle();
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+  if (existing) {
+    throw new Error("J\xE1 existe uma pergunta com este id");
+  }
+  const row = mapQuestionToRow(input);
+  const { data, error } = await supabase.from("quiz_questions").insert({ ...row, created_at: (/* @__PURE__ */ new Date()).toISOString() }).select("*").single();
+  if (error) {
+    throw new Error(error.message);
+  }
+  return mapQuizQuestionRow(data);
+}
+async function updateQuizQuestion(questionId, input) {
+  const row = mapQuestionToRow({ ...input, id: questionId });
+  const { data, error } = await supabase.from("quiz_questions").update(row).eq("id", questionId).select("*").maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Pergunta n\xE3o encontrada");
+  }
+  return mapQuizQuestionRow(data);
+}
+async function deleteQuizQuestion(questionId) {
+  const { data, error } = await supabase.from("quiz_questions").delete().eq("id", questionId).select("id").maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Pergunta n\xE3o encontrada");
+  }
+}
+async function createQuizResult(input) {
+  const { data: existing, error: existingError } = await supabase.from("quiz_results").select("id").eq("id", input.id).maybeSingle();
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+  if (existing) {
+    throw new Error("J\xE1 existe um perfil com este id");
+  }
+  const row = mapResultToRow(input);
+  const { data, error } = await supabase.from("quiz_results").insert({ ...row, created_at: (/* @__PURE__ */ new Date()).toISOString() }).select("*").single();
+  if (error) {
+    throw new Error(error.message);
+  }
+  return mapQuizResultRow(data);
+}
+async function updateQuizResult(resultId, input) {
+  const row = mapResultToRow({ ...input, id: resultId });
+  const { data, error } = await supabase.from("quiz_results").update(row).eq("id", resultId).select("*").maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Perfil n\xE3o encontrado");
+  }
+  return mapQuizResultRow(data);
+}
+async function deleteQuizResult(resultId, options = {}) {
+  if (options.force) {
+    const { error: completionsError } = await supabase.from("quiz_completions").delete().eq("result_profile_id", resultId);
+    if (completionsError) {
+      throw new Error(completionsError.message);
+    }
+  }
+  const { data, error } = await supabase.from("quiz_results").delete().eq("id", resultId).select("id").maybeSingle();
+  if (error) {
+    if (error.message.toLowerCase().includes("foreign key") || error.code === "23503") {
+      throw new Error(
+        "N\xE3o \xE9 poss\xEDvel excluir este perfil: j\xE1 existem conclus\xF5es de quiz vinculadas a ele. Use exclus\xE3o for\xE7ada para remover essas conclus\xF5es tamb\xE9m."
+      );
+    }
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Perfil n\xE3o encontrado");
+  }
+}
+async function updateQuizOptionImage(questionId, optionId, imageUrl) {
+  const { data, error } = await supabase.from("quiz_questions").select("*").eq("id", questionId).maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Pergunta n\xE3o encontrada");
+  }
+  const question = mapQuizQuestionRow(data);
+  const optionIndex = question.options.findIndex((option) => option.id === optionId);
+  if (optionIndex < 0) {
+    throw new Error("Op\xE7\xE3o n\xE3o encontrada");
+  }
+  const nextOptions = question.options.map(
+    (option, index) => index === optionIndex ? { ...option, imageUrl } : option
+  );
+  const row = mapQuestionToRow({
+    id: question.id,
+    order: question.order,
+    text: question.text,
+    options: nextOptions
+  });
+  const { data: updated, error: updateError } = await supabase.from("quiz_questions").update(row).eq("id", questionId).select("*").single();
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+  return mapQuizQuestionRow(updated);
+}
+async function listQuizResults() {
+  return (await listResultRows()).map(mapQuizResultRow);
+}
+async function exportQuiz() {
+  const [questions, results] = await Promise.all([listQuizQuestions(), listQuizResults()]);
+  return { questions, results };
+}
+async function getPublicQuizQuestions() {
+  const questions = await listQuizQuestions();
+  return questions.map(toPublicQuestion);
+}
+async function upsertQuestions(inputs) {
+  if (inputs.length === 0) {
+    return { created: 0, updated: 0 };
+  }
+  const ids = inputs.map((item) => item.id);
+  const { data: existingRows, error: existingError } = await supabase.from("quiz_questions").select("id").in("id", ids);
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+  const existingIds = new Set((existingRows ?? []).map((row) => row.id));
+  const rows = inputs.map(mapQuestionToRow);
+  const { error } = await supabase.from("quiz_questions").upsert(rows, { onConflict: "id" });
+  if (error) {
+    throw new Error(error.message);
+  }
+  const updated = ids.filter((id) => existingIds.has(id)).length;
+  return { created: ids.length - updated, updated };
+}
+async function upsertResults(inputs) {
+  if (inputs.length === 0) {
+    return { created: 0, updated: 0 };
+  }
+  const ids = inputs.map((item) => item.id);
+  const { data: existingRows, error: existingError } = await supabase.from("quiz_results").select("id").in("id", ids);
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+  const existingIds = new Set((existingRows ?? []).map((row) => row.id));
+  const rows = inputs.map(mapResultToRow);
+  const { error } = await supabase.from("quiz_results").upsert(rows, { onConflict: "id" });
+  if (error) {
+    throw new Error(error.message);
+  }
+  const updated = ids.filter((id) => existingIds.has(id)).length;
+  return { created: ids.length - updated, updated };
+}
+async function importQuiz(questions, results, errors) {
+  const [questionCounts, resultCounts] = await Promise.all([
+    upsertQuestions(questions),
+    upsertResults(results)
+  ]);
+  return {
+    questions: questionCounts,
+    results: resultCounts,
+    errors
+  };
+}
+async function loadProductsByIds(ids) {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from("products").select("*").in("id", ids);
+  if (error) {
+    throw new Error(error.message);
+  }
+  const products = (data ?? []).map(mapProductRowToProduct);
+  const byId = new Map(products.map((product) => [product.id, product]));
+  return ids.map((id) => byId.get(id)).filter((product) => !!product);
+}
+async function buildPublicPayload(winner) {
+  const products = await loadProductsByIds(winner.recommendedProductIds);
+  return {
+    result: {
+      id: winner.id,
+      name: winner.name,
+      description: winner.description,
+      tags: winner.tags
+    },
+    products
+  };
+}
+var RARITY_CACHE_TTL_MS = 3 * 60 * 1e3;
+var rarityCache = null;
+async function fetchRaritySnapshot() {
+  const now = Date.now();
+  if (rarityCache && now - rarityCache.fetchedAt < RARITY_CACHE_TTL_MS) {
+    return rarityCache;
+  }
+  const { data, error } = await supabase.from("quiz_completions").select("result_profile_id");
+  if (error) {
+    throw new Error(error.message);
+  }
+  const counts = {};
+  for (const row of data ?? []) {
+    const id = row.result_profile_id;
+    counts[id] = (counts[id] ?? 0) + 1;
+  }
+  rarityCache = {
+    total: (data ?? []).length,
+    counts,
+    fetchedAt: now
+  };
+  return rarityCache;
+}
+function rarityPercentFor(profileId, snapshot) {
+  if (snapshot.total < QUIZ_RARITY_MIN_COMPLETIONS) return null;
+  const count = snapshot.counts[profileId] ?? 0;
+  return Math.round(count / snapshot.total * 1e3) / 10;
+}
+function bumpRarityCache(profileId) {
+  if (!rarityCache) return;
+  rarityCache.total += 1;
+  rarityCache.counts[profileId] = (rarityCache.counts[profileId] ?? 0) + 1;
+}
+async function recordCompletion(profileId) {
+  const resultId = randomUUID();
+  const { error } = await supabase.from("quiz_completions").insert({
+    id: resultId,
+    result_profile_id: profileId
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  bumpRarityCache(profileId);
+  let snapshot;
+  try {
+    snapshot = await fetchRaritySnapshot();
+  } catch {
+    snapshot = rarityCache ?? { total: 1, counts: { [profileId]: 1 }, fetchedAt: Date.now() };
+  }
+  return {
+    resultId,
+    rarityPercent: rarityPercentFor(profileId, snapshot)
+  };
+}
+function pickWinner(questions, results, selectedOptionIds) {
+  const optionById = new Map(
+    questions.flatMap((question) => question.options.map((option) => [option.id, option]))
+  );
+  const accumulated = /* @__PURE__ */ new Map();
+  for (const optionId of selectedOptionIds) {
+    const option = optionById.get(optionId);
+    if (!option) continue;
+    for (const { tag, weight } of option.tags) {
+      accumulated.set(tag, (accumulated.get(tag) ?? 0) + weight);
+    }
+  }
+  let best = null;
+  let bestScore = -1;
+  for (const result of results) {
+    const score = result.tags.reduce((sum, tag) => sum + (accumulated.get(tag) ?? 0), 0);
+    if (score > bestScore || score === bestScore && best !== null && result.id.localeCompare(best.id) < 0 || score === bestScore && best === null) {
+      best = result;
+      bestScore = score;
+    }
+  }
+  return best ?? [...results].sort((a, b) => a.id.localeCompare(b.id))[0];
+}
+async function computeQuizResult(selectedOptionIds) {
+  const [questions, results] = await Promise.all([listQuizQuestions(), listQuizResults()]);
+  if (results.length === 0) {
+    throw new Error("Nenhum perfil de resultado cadastrado");
+  }
+  const winner = pickWinner(questions, results, selectedOptionIds);
+  const base = await buildPublicPayload(winner);
+  const { resultId, rarityPercent } = await recordCompletion(winner.id);
+  return {
+    ...base,
+    resultId,
+    rarityPercent
+  };
+}
+async function getQuizResultBySessionId(resultId) {
+  const { data, error } = await supabase.from("quiz_completions").select("id, result_profile_id").eq("id", resultId).maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Resultado n\xE3o encontrado");
+  }
+  const profileId = data.result_profile_id;
+  const results = await listQuizResults();
+  const winner = results.find((r) => r.id === profileId);
+  if (!winner) {
+    throw new Error("Perfil de resultado n\xE3o encontrado");
+  }
+  const base = await buildPublicPayload(winner);
+  let rarityPercent = null;
+  try {
+    const snapshot = await fetchRaritySnapshot();
+    rarityPercent = rarityPercentFor(profileId, snapshot);
+  } catch {
+    rarityPercent = null;
+  }
+  return {
+    ...base,
+    resultId: data.id,
+    rarityPercent
+  };
+}
+async function compareQuizResults(yoursResultId, friendResultId) {
+  if (yoursResultId === friendResultId) {
+    throw new Error("Os dois resultados precisam ser de pessoas diferentes");
+  }
+  const [yours, friend] = await Promise.all([
+    getQuizResultBySessionId(yoursResultId),
+    getQuizResultBySessionId(friendResultId)
+  ]);
+  return {
+    yours,
+    friend,
+    combinationText: getCombinationText(yours.result.id, friend.result.id)
+  };
+}
+
+// server/routes/adminQuiz.ts
+var optionImageSchema = z11.object({
+  imageUrl: z11.string().refine(
+    (value) => value === "" || value.startsWith("/") || /^https?:\/\//i.test(value),
+    "URL de imagem inv\xE1lida"
+  )
+});
+function statusFromMessage(message) {
+  if (message.includes("n\xE3o encontrad")) return 404;
+  if (message.includes("J\xE1 existe") || message.includes("N\xE3o \xE9 poss\xEDvel excluir")) return 409;
+  return 500;
+}
+var router12 = Router12();
+router12.get("/", requireAdmin, async (_req, res) => {
+  try {
+    const [questions, results] = await Promise.all([listQuizQuestions(), listQuizResults()]);
+    res.json({ questions, results });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao carregar quiz"
+    });
+  }
+});
+router12.post("/questions", requireAdmin, async (req, res) => {
+  try {
+    const parsed = quizQuestionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inv\xE1lidos", issues: parsed.error.issues });
+      return;
+    }
+    const question = await createQuizQuestion(parsed.data);
+    res.status(201).json(question);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao criar pergunta";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+router12.put("/questions/:questionId", requireAdmin, async (req, res) => {
+  try {
+    const parsed = quizQuestionSchema.safeParse({ ...req.body, id: req.params.questionId });
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inv\xE1lidos", issues: parsed.error.issues });
+      return;
+    }
+    const question = await updateQuizQuestion(req.params.questionId, parsed.data);
+    res.json(question);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao atualizar pergunta";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+router12.delete("/questions/:questionId", requireAdmin, async (req, res) => {
+  try {
+    await deleteQuizQuestion(req.params.questionId);
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao excluir pergunta";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+router12.post("/results", requireAdmin, async (req, res) => {
+  try {
+    const parsed = quizResultSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inv\xE1lidos", issues: parsed.error.issues });
+      return;
+    }
+    const result = await createQuizResult(parsed.data);
+    res.status(201).json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao criar perfil";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+router12.put("/results/:resultId", requireAdmin, async (req, res) => {
+  try {
+    const parsed = quizResultSchema.safeParse({ ...req.body, id: req.params.resultId });
+    if (!parsed.success) {
+      res.status(400).json({ error: "Dados inv\xE1lidos", issues: parsed.error.issues });
+      return;
+    }
+    const result = await updateQuizResult(req.params.resultId, parsed.data);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao atualizar perfil";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+router12.delete("/results/:resultId", requireAdmin, async (req, res) => {
+  try {
+    const force = req.query.force === "1" || req.query.force === "true" || req.body?.force === true;
+    await deleteQuizResult(req.params.resultId, { force });
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao excluir perfil";
+    res.status(statusFromMessage(message)).json({ error: message });
+  }
+});
+router12.patch(
+  "/questions/:questionId/options/:optionId/image",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const parsed = optionImageSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Dados inv\xE1lidos", issues: parsed.error.issues });
+        return;
+      }
+      const question = await updateQuizOptionImage(
+        req.params.questionId,
+        req.params.optionId,
+        parsed.data.imageUrl
+      );
+      res.json(question);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao atualizar imagem da op\xE7\xE3o";
+      res.status(statusFromMessage(message)).json({ error: message });
+    }
+  }
+);
+router12.get("/export", requireAdmin, async (_req, res) => {
+  try {
+    const payload = await exportQuiz();
+    res.json(payload);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao exportar quiz"
+    });
+  }
+});
+router12.post("/import", requireAdmin, async (req, res) => {
+  try {
+    const bodyParsed = quizImportBodySchema.safeParse(req.body);
+    if (!bodyParsed.success) {
+      res.status(400).json({
+        error: "Envie um objeto com arrays 'questions' e 'results'",
+        issues: bodyParsed.error.issues
+      });
+      return;
+    }
+    const errors = [];
+    const validQuestions = [];
+    const validResults = [];
+    const seenQuestionIds = /* @__PURE__ */ new Set();
+    const seenResultIds = /* @__PURE__ */ new Set();
+    bodyParsed.data.questions.forEach((item, index) => {
+      const parsed = quizQuestionSchema.safeParse(item);
+      if (!parsed.success) {
+        errors.push({ section: "questions", index, issues: parsed.error.issues });
+        return;
+      }
+      if (seenQuestionIds.has(parsed.data.id)) {
+        errors.push({
+          section: "questions",
+          index,
+          issues: [{ message: `Id de pergunta duplicado no payload: ${parsed.data.id}` }]
+        });
+        return;
+      }
+      seenQuestionIds.add(parsed.data.id);
+      validQuestions.push(parsed.data);
+    });
+    bodyParsed.data.results.forEach((item, index) => {
+      const parsed = quizResultSchema.safeParse(item);
+      if (!parsed.success) {
+        errors.push({ section: "results", index, issues: parsed.error.issues });
+        return;
+      }
+      if (seenResultIds.has(parsed.data.id)) {
+        errors.push({
+          section: "results",
+          index,
+          issues: [{ message: `Id de resultado duplicado no payload: ${parsed.data.id}` }]
+        });
+        return;
+      }
+      seenResultIds.add(parsed.data.id);
+      validResults.push(parsed.data);
+    });
+    if (validQuestions.length === 0 && validResults.length === 0) {
+      res.status(400).json({
+        error: "Nenhum item v\xE1lido para importar",
+        questions: { created: 0, updated: 0 },
+        results: { created: 0, updated: 0 },
+        errors
+      });
+      return;
+    }
+    const report = await importQuiz(validQuestions, validResults, errors);
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao importar quiz"
+    });
+  }
+});
+var adminQuiz_default = router12;
 
 // shared/schemas/region.ts
-import { z as z8 } from "zod";
+import { z as z12 } from "zod";
 var SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-var regionSchema = z8.object({
-  id: z8.string().min(1, "Informe o identificador da regi\xE3o").regex(SLUG_PATTERN, "Use apenas letras min\xFAsculas, n\xFAmeros e h\xEDfens (ex: nordeste)"),
-  name: z8.string().min(2, "Informe o nome da regi\xE3o"),
-  title: z8.string().min(2, "Informe o t\xEDtulo da hist\xF3ria"),
-  story: z8.string().min(10, "Conte um pouco mais sobre a origem cultural"),
-  coverImage: z8.string().min(1, "Adicione a imagem da regi\xE3o"),
-  productIds: z8.array(z8.number().int().nonnegative()).default([])
+var regionSchema = z12.object({
+  id: z12.string().min(1, "Informe o identificador da regi\xE3o").regex(SLUG_PATTERN, "Use apenas letras min\xFAsculas, n\xFAmeros e h\xEDfens (ex: nordeste)"),
+  name: z12.string().min(2, "Informe o nome da regi\xE3o"),
+  title: z12.string().min(2, "Informe o t\xEDtulo da hist\xF3ria"),
+  story: z12.string().min(10, "Conte um pouco mais sobre a origem cultural"),
+  coverImage: z12.string().min(1, "Adicione a imagem da regi\xE3o"),
+  productIds: z12.array(z12.number().int().nonnegative()).default([])
 });
 
 // server/routes/adminRegions.ts
-import { Router as Router9 } from "express";
-
-// shared/lib/productMapper.ts
-function asStringArray(value) {
-  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
-}
-function asSizes(value) {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (item) => typeof item === "object" && item !== null && "label" in item && "available" in item && typeof item.label === "string" && typeof item.available === "boolean"
-  );
-}
-function asColors(value) {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (item) => typeof item === "object" && item !== null && "name" in item && "hex" in item && typeof item.name === "string" && typeof item.hex === "string"
-  );
-}
-function asFaq(value) {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (item) => typeof item === "object" && item !== null && "question" in item && "answer" in item && typeof item.question === "string" && typeof item.answer === "string"
-  );
-}
-function asArtisan(value) {
-  if (typeof value !== "object" || value === null) {
-    return { name: "", region: "", story: "" };
-  }
-  const artisan = value;
-  return {
-    name: typeof artisan.name === "string" ? artisan.name : "",
-    region: typeof artisan.region === "string" ? artisan.region : "",
-    story: typeof artisan.story === "string" ? artisan.story : ""
-  };
-}
-function mapProductRowToProduct(row) {
-  return {
-    id: row.id,
-    slug: row.slug,
-    name: row.name,
-    category: row.category,
-    price: Number(row.price),
-    originalPrice: row.original_price === null ? null : Number(row.original_price),
-    image: row.image,
-    images: asStringArray(row.images),
-    badge: row.badge,
-    badgeColor: row.badge_color,
-    rating: Number(row.rating),
-    reviews: row.reviews,
-    featured: row.featured,
-    shortDescription: row.short_description,
-    description: row.description,
-    materials: asStringArray(row.materials),
-    careInstructions: asStringArray(row.care_instructions),
-    artisan: asArtisan(row.artisan),
-    sizes: asSizes(row.sizes),
-    colors: asColors(row.colors),
-    sku: row.sku,
-    inStock: row.in_stock,
-    stockCount: row.stock_count,
-    widthCm: row.width_cm == null ? null : Number(row.width_cm),
-    heightCm: row.height_cm == null ? null : Number(row.height_cm),
-    lengthCm: row.length_cm == null ? null : Number(row.length_cm),
-    weightKg: row.weight_kg == null ? null : Number(row.weight_kg),
-    faq: asFaq(row.faq),
-    highlights: asStringArray(row.highlights),
-    regionId: row.region_id ?? null
-  };
-}
-function mapProductToRow(product) {
-  return {
-    slug: product.slug,
-    name: product.name,
-    category: product.category,
-    price: product.price,
-    original_price: product.originalPrice,
-    image: product.image,
-    images: product.images,
-    badge: product.badge,
-    badge_color: product.badgeColor,
-    rating: product.rating,
-    reviews: product.reviews,
-    featured: product.featured,
-    short_description: product.shortDescription,
-    description: product.description,
-    materials: product.materials,
-    care_instructions: product.careInstructions,
-    artisan: product.artisan,
-    sizes: product.sizes,
-    colors: product.colors,
-    sku: product.sku,
-    in_stock: product.inStock,
-    stock_count: product.stockCount,
-    width_cm: product.widthCm,
-    height_cm: product.heightCm,
-    length_cm: product.lengthCm,
-    weight_kg: product.weightKg,
-    faq: product.faq,
-    highlights: product.highlights,
-    region_id: product.regionId ?? null
-  };
-}
+import { Router as Router13 } from "express";
 
 // shared/lib/regionMapper.ts
 function asProductIds(value) {
@@ -4848,8 +7379,8 @@ async function deleteRegion(id) {
 }
 
 // server/routes/adminRegions.ts
-var router9 = Router9();
-router9.get("/", requireAdmin, async (_req, res) => {
+var router13 = Router13();
+router13.get("/", requireAdmin, async (_req, res) => {
   try {
     const regions = await listAllRegionsRaw();
     res.json(regions);
@@ -4859,7 +7390,7 @@ router9.get("/", requireAdmin, async (_req, res) => {
     });
   }
 });
-router9.get("/:id", requireAdmin, async (req, res) => {
+router13.get("/:id", requireAdmin, async (req, res) => {
   try {
     const region = await getRegionByIdRaw(req.params.id);
     res.json(region);
@@ -4869,7 +7400,7 @@ router9.get("/:id", requireAdmin, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router9.post("/", requireAdmin, async (req, res) => {
+router13.post("/", requireAdmin, async (req, res) => {
   try {
     const parsed = regionSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -4884,7 +7415,7 @@ router9.post("/", requireAdmin, async (req, res) => {
     });
   }
 });
-router9.put("/:id", requireAdmin, async (req, res) => {
+router13.put("/:id", requireAdmin, async (req, res) => {
   try {
     const parsed = regionSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -4903,7 +7434,7 @@ router9.put("/:id", requireAdmin, async (req, res) => {
     });
   }
 });
-router9.delete("/:id", requireAdmin, async (req, res) => {
+router13.delete("/:id", requireAdmin, async (req, res) => {
   try {
     const deleted = await deleteRegion(req.params.id);
     if (!deleted) {
@@ -4917,10 +7448,10 @@ router9.delete("/:id", requireAdmin, async (req, res) => {
     });
   }
 });
-var adminRegions_default = router9;
+var adminRegions_default = router13;
 
 // server/routes/admin.ts
-var router10 = Router10();
+var router14 = Router14();
 function handleSingleImageUpload(req, res, next) {
   upload.single("file")(req, res, (error) => {
     if (error) {
@@ -4931,7 +7462,16 @@ function handleSingleImageUpload(req, res, next) {
     next();
   });
 }
-router10.post("/login", (req, res) => {
+router14.post("/login", (req, res) => {
+  const rateKey = getClientIp(req);
+  const rate = checkAdminLoginRateLimit(rateKey);
+  if (!rate.allowed) {
+    res.setHeader("Retry-After", String(rate.retryAfterSec ?? 900));
+    res.status(429).json({
+      error: "Muitas tentativas. Aguarde alguns minutos e tente de novo."
+    });
+    return;
+  }
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!password) {
     res.status(400).json({ error: "Informe a senha" });
@@ -4947,9 +7487,11 @@ router10.post("/login", (req, res) => {
     return;
   }
   if (!isValid) {
+    recordAdminLoginFailure(rateKey);
     res.status(401).json({ error: "Senha inv\xE1lida" });
     return;
   }
+  clearAdminLoginFailures(rateKey);
   const token = signAdminToken();
   res.cookie(ADMIN_COOKIE_NAME, token, {
     httpOnly: true,
@@ -4958,25 +7500,30 @@ router10.post("/login", (req, res) => {
     maxAge: ADMIN_COOKIE_MAX_AGE_MS,
     path: "/"
   });
+  setAnalyticsExcludeCookie(res);
   res.json({ authenticated: true });
 });
-router10.post("/logout", (_req, res) => {
+router14.post("/logout", (_req, res) => {
   res.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
   res.json({ authenticated: false });
 });
-router10.get("/me", requireAdmin, (_req, res) => {
+router14.get("/me", requireAdmin, (_req, res) => {
   res.json({ authenticated: true });
 });
-router10.use("/orders", adminOrders_default);
-router10.use("/customers", adminCustomers_default);
-router10.use("/notifications", adminNotifications_default);
-router10.use("/dashboard", adminDashboard_default);
-router10.use("/banners", adminBanners_default);
-router10.use("/brevo", adminBrevo_default);
-router10.use("/regions", adminRegions_default);
-router10.use("/melhor-envio", adminMelhorEnvio_default);
-router10.use("/mercado-pago", adminMercadoPago_default);
-router10.post(
+router14.use("/orders", adminOrders_default);
+router14.use("/customers", adminCustomers_default);
+router14.use("/notifications", adminNotifications_default);
+router14.use("/dashboard", adminDashboard_default);
+router14.use("/banners", adminBanners_default);
+router14.use("/coupons", adminCoupons_default);
+router14.use("/brevo", adminBrevo_default);
+router14.use("/quiz", adminQuiz_default);
+router14.use("/regions", adminRegions_default);
+router14.use("/melhor-envio", adminMelhorEnvio_default);
+router14.use("/mercado-pago", adminMercadoPago_default);
+router14.use("/meta-catalog", adminMetaCatalog_default);
+router14.use("/import", adminImport_default);
+router14.post(
   "/uploads",
   requireAdmin,
   handleSingleImageUpload,
@@ -4987,7 +7534,7 @@ router10.post(
         return;
       }
       const folderRaw = typeof req.body?.folder === "string" ? req.body.folder : "products";
-      const folder = folderRaw === "banners" ? "banners" : "products";
+      const folder = folderRaw === "banners" ? "banners" : folderRaw === "quiz" ? "quiz" : "products";
       const url2 = await uploadProductImage(req.file, folder);
       res.json({ url: url2 });
     } catch (error) {
@@ -4997,10 +7544,10 @@ router10.post(
     }
   }
 );
-router10.post("/uploads/sign", requireAdmin, async (req, res) => {
+router14.post("/uploads/sign", requireAdmin, async (req, res) => {
   try {
     const folderRaw = typeof req.body?.folder === "string" ? req.body.folder : "products";
-    const folder = folderRaw === "banners" ? "banners" : "products";
+    const folder = folderRaw === "banners" ? "banners" : folderRaw === "quiz" ? "quiz" : "products";
     const contentType = typeof req.body?.contentType === "string" ? req.body.contentType : "";
     if (!contentType) {
       res.status(400).json({ error: "Informe o contentType do arquivo" });
@@ -5014,10 +7561,10 @@ router10.post("/uploads/sign", requireAdmin, async (req, res) => {
     });
   }
 });
-var admin_default = router10;
+var admin_default = router14;
 
 // server/routes/analytics.ts
-import { Router as Router11 } from "express";
+import { Router as Router15 } from "express";
 
 // server/lib/visitorSession.ts
 import crypto2 from "node:crypto";
@@ -5052,11 +7599,15 @@ async function recordPageView(sessionId, path2) {
 }
 
 // server/routes/analytics.ts
-var router11 = Router11();
-router11.post("/page-view", async (req, res) => {
+var router15 = Router15();
+router15.post("/page-view", async (req, res) => {
   try {
     const path2 = typeof req.body?.path === "string" ? req.body.path : "/";
     if (path2.startsWith("/admin")) {
+      res.status(204).send();
+      return;
+    }
+    if (shouldExcludeAnalytics(req)) {
       res.status(204).send();
       return;
     }
@@ -5073,14 +7624,25 @@ router11.post("/page-view", async (req, res) => {
     });
   }
 });
-var analytics_default = router11;
+router15.post("/exclude", (req, res) => {
+  const enabled = req.body?.enabled === true || req.body?.enabled === "1";
+  if (enabled) {
+    setAnalyticsExcludeCookie(res);
+    res.json({ excluded: true });
+    return;
+  }
+  clearAnalyticsExcludeCookie(res);
+  res.json({ excluded: false });
+});
+var analytics_default = router15;
 
 // server/routes/banners.ts
-import { Router as Router12 } from "express";
-var router12 = Router12();
-router12.get("/", async (_req, res) => {
+import { Router as Router16 } from "express";
+var router16 = Router16();
+router16.get("/", async (_req, res) => {
   try {
     const banners = await listActiveBanners();
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=600");
     res.json(banners);
   } catch (error) {
     res.status(500).json({
@@ -5088,10 +7650,10 @@ router12.get("/", async (_req, res) => {
     });
   }
 });
-var banners_default = router12;
+var banners_default = router16;
 
 // server/routes/brevoWebhook.ts
-import { Router as Router13 } from "express";
+import { Router as Router17 } from "express";
 
 // server/lib/brevoWebhookSecurity.ts
 import { createHash as createHash2, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
@@ -5122,7 +7684,7 @@ function brevoEventKey(event) {
 }
 
 // server/routes/brevoWebhook.ts
-var router13 = Router13();
+var router17 = Router17();
 function eventDate(event) {
   const milliseconds = Number(event.ts_epoch);
   if (Number.isFinite(milliseconds) && milliseconds > 0) {
@@ -5154,7 +7716,8 @@ function deliveryUpdate(eventType, at) {
     "blocked",
     "invalid",
     "error",
-    "complaint"
+    "complaint",
+    "spam"
   ].includes(normalized)) {
     update.failed_at = at;
   }
@@ -5213,7 +7776,7 @@ async function persistBrevoEvent(event) {
   }
   return result;
 }
-router13.post("/", async (req, res) => {
+router17.post("/", async (req, res) => {
   try {
     const expected = await getBrevoWebhookToken();
     const candidate = bearerToken(req.header("authorization"));
@@ -5237,34 +7800,34 @@ router13.post("/", async (req, res) => {
     res.status(500).json({ error: "Falha ao processar notifica\xE7\xE3o" });
   }
 });
-var brevoWebhook_default = router13;
+var brevoWebhook_default = router17;
 
 // shared/schemas/cart.ts
-import { z as z9 } from "zod";
-var cartAddItemSchema = z9.object({
-  productSlug: z9.string().min(1, "Produto inv\xE1lido"),
-  quantity: z9.number().int().min(1, "Quantidade m\xEDnima \xE9 1").max(99),
-  size: z9.string().min(1, "Selecione um tamanho"),
-  color: z9.string().optional().default("")
+import { z as z13 } from "zod";
+var cartAddItemSchema = z13.object({
+  productSlug: z13.string().min(1, "Produto inv\xE1lido"),
+  quantity: z13.number().int().min(1, "Quantidade m\xEDnima \xE9 1").max(99),
+  size: z13.string().min(1, "Selecione um tamanho"),
+  color: z13.string().optional().default("")
 });
-var cartUpdateItemSchema = z9.object({
-  quantity: z9.number().int().min(1, "Quantidade m\xEDnima \xE9 1").max(99)
+var cartUpdateItemSchema = z13.object({
+  quantity: z13.number().int().min(1, "Quantidade m\xEDnima \xE9 1").max(99)
 });
-var cartApplyCouponSchema = z9.object({
-  couponCode: z9.string().max(50).optional().default("")
+var cartApplyCouponSchema = z13.object({
+  couponCode: z13.string().max(50).optional().default("")
 });
 
 // server/routes/cart.ts
-import { Router as Router14 } from "express";
+import { Router as Router18 } from "express";
 
 // shared/lib/cartMapper.ts
-function toNumber3(value) {
+function toNumber4(value) {
   if (typeof value === "number") return value;
   if (typeof value === "string") return parseFloat(value);
   return 0;
 }
 function mapCartItemRowToCartItem(row, enrichment) {
-  const unitPrice = toNumber3(row.unit_price);
+  const unitPrice = toNumber4(row.unit_price);
   const quantity = row.quantity;
   return {
     id: row.id,
@@ -5285,121 +7848,38 @@ function mapCartItemRowToCartItem(row, enrichment) {
     updatedAt: row.updated_at
   };
 }
-function buildCartSummary(items) {
+function buildCartSummary(items, coupon) {
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
   const freeShippingRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
+  const discountAmount = coupon?.discountAmount ?? 0;
   return {
     itemCount,
     subtotal,
+    discountAmount,
+    couponType: coupon?.type ?? null,
+    couponDescription: coupon?.description ?? null,
+    grantsFreeShipping: coupon?.grantsFreeShipping ?? false,
     freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
     freeShippingRemaining,
     qualifiesForFreeShipping: subtotal >= FREE_SHIPPING_THRESHOLD
   };
 }
-function mapCartRowToCart(row, items) {
+function mapCartRowToCart(row, items, coupon) {
   return {
     id: row.id,
     customerId: row.customer_id,
     sessionId: row.session_id,
     status: row.status,
-    couponCode: row.coupon_code,
+    couponCode: coupon ? coupon.code : row.coupon_code,
     items,
-    summary: buildCartSummary(items),
+    summary: buildCartSummary(items, coupon),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
 }
 function emptyCartResponse(cartRow) {
-  return mapCartRowToCart(cartRow, []);
-}
-
-// shared/lib/slugify.ts
-import { nanoid as nanoid2 } from "nanoid";
-function slugify(text) {
-  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-// server/services/products.ts
-import { nanoid as nanoid3 } from "nanoid";
-async function listProducts(category) {
-  let query = supabase.from("products").select("*").order("id", { ascending: true });
-  if (category) {
-    query = query.eq("category", category);
-  }
-  const { data, error } = await query;
-  if (error) {
-    throw new Error(error.message);
-  }
-  return data.map(mapProductRowToProduct);
-}
-async function getProductBySlug(slug) {
-  const { data, error } = await supabase.from("products").select("*").eq("slug", slug).maybeSingle();
-  if (error) {
-    throw new Error(error.message);
-  }
-  if (!data) return null;
-  return mapProductRowToProduct(data);
-}
-async function slugExists(slug, excludeSlug) {
-  let query = supabase.from("products").select("slug", { count: "exact", head: true }).eq("slug", slug);
-  if (excludeSlug) {
-    query = query.neq("slug", excludeSlug);
-  }
-  const { count, error } = await query;
-  if (error) {
-    throw new Error(error.message);
-  }
-  return (count ?? 0) > 0;
-}
-async function generateUniqueSlug(name, excludeSlug) {
-  const base = slugify(name) || "produto";
-  let candidate = base;
-  while (await slugExists(candidate, excludeSlug)) {
-    candidate = `${base}-${nanoid3(5).toLowerCase()}`;
-  }
-  return candidate;
-}
-async function createProduct(input) {
-  const { data, error } = await supabase.from("products").insert(mapProductToRow(input)).select("*").single();
-  if (error) {
-    throw new Error(error.message);
-  }
-  return mapProductRowToProduct(data);
-}
-async function updateProduct(currentSlug, input) {
-  const { data, error } = await supabase.from("products").update(mapProductToRow(input)).eq("slug", currentSlug).select("*").maybeSingle();
-  if (error) {
-    throw new Error(error.message);
-  }
-  if (!data) return null;
-  return mapProductRowToProduct(data);
-}
-async function deleteProduct(slug) {
-  const { data, error } = await supabase.from("products").delete().eq("slug", slug).select("slug");
-  if (error) {
-    throw new Error(error.message);
-  }
-  return (data?.length ?? 0) > 0;
-}
-async function bulkUpsertProducts(inputs) {
-  if (inputs.length === 0) {
-    return { created: 0, updated: 0, total: 0 };
-  }
-  const slugs = inputs.map((input) => input.slug);
-  const { data: existingRows, error: existingError } = await supabase.from("products").select("slug").in("slug", slugs);
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-  const existingSlugs = new Set((existingRows ?? []).map((row) => row.slug));
-  const rows = inputs.map(mapProductToRow);
-  const { error } = await supabase.from("products").upsert(rows, { onConflict: "slug" });
-  if (error) {
-    throw new Error(error.message);
-  }
-  const updated = slugs.filter((slug) => existingSlugs.has(slug)).length;
-  const created = slugs.length - updated;
-  return { created, updated, total: slugs.length };
+  return mapCartRowToCart(cartRow, [], null);
 }
 
 // server/services/cart.ts
@@ -5496,10 +7976,33 @@ async function enrichCartItems(items) {
     (item) => mapCartItemRowToCartItem(item, stockMap.get(item.product_id) ?? { inStock: false, stockCount: 0 })
   );
 }
+async function clearCartCoupon(cartId) {
+  const { error } = await supabase.from("carts").update({ coupon_code: null }).eq("id", cartId);
+  if (error) throw new Error(error.message);
+}
+async function resolveCartCoupon(cartRow, subtotal) {
+  if (!cartRow.coupon_code) {
+    return { coupon: null, cleared: false };
+  }
+  try {
+    const coupon = await assertCouponApplicable({
+      code: cartRow.coupon_code,
+      subtotal,
+      customerId: cartRow.customer_id
+    });
+    return { coupon, cleared: false };
+  } catch {
+    await clearCartCoupon(cartRow.id);
+    return { coupon: null, cleared: true };
+  }
+}
 async function buildCartResponse(cartRow) {
   const itemRows = await fetchCartItems2(cartRow.id);
   const items = await enrichCartItems(itemRows);
-  return mapCartRowToCart(cartRow, items);
+  const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+  const { coupon } = await resolveCartCoupon(cartRow, subtotal);
+  const rowForMap = coupon || !cartRow.coupon_code ? { ...cartRow, coupon_code: coupon?.code ?? null } : cartRow;
+  return mapCartRowToCart(rowForMap, items, coupon);
 }
 async function getCart(identity) {
   const cartRow = await fetchCartRow(identity);
@@ -5614,12 +8117,34 @@ async function clearCart(identity) {
 }
 async function applyCartCoupon(identity, input) {
   const cartRow = await getOrCreateCartRow(identity);
-  const couponCode = input.couponCode.trim() || null;
-  const { error } = await supabase.from("carts").update({ coupon_code: couponCode }).eq("id", cartRow.id);
-  if (error) throw new Error(error.message);
-  const refreshed = await fetchCartRow(identity);
-  if (!refreshed) throw new Error("Carrinho n\xE3o encontrado");
-  return buildCartResponse(refreshed);
+  const rawCode = input.couponCode.trim();
+  if (!rawCode) {
+    await clearCartCoupon(cartRow.id);
+    const refreshed = await fetchCartRow(identity);
+    if (!refreshed) throw new Error("Carrinho n\xE3o encontrado");
+    return buildCartResponse(refreshed);
+  }
+  const itemRows = await fetchCartItems2(cartRow.id);
+  const items = await enrichCartItems(itemRows);
+  const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+  try {
+    const application = await assertCouponApplicable({
+      code: rawCode,
+      subtotal,
+      customerId: identity.customerId
+    });
+    const { error } = await supabase.from("carts").update({ coupon_code: normalizeCouponCode(application.code) }).eq("id", cartRow.id);
+    if (error) throw new Error(error.message);
+    const refreshed = await fetchCartRow(identity);
+    if (!refreshed) throw new Error("Carrinho n\xE3o encontrado");
+    return buildCartResponse(refreshed);
+  } catch (error) {
+    await clearCartCoupon(cartRow.id);
+    if (error instanceof CouponEvalError) {
+      throw error;
+    }
+    throw error;
+  }
 }
 async function mergeGuestCartIntoCustomer(customerId, guestSessionId) {
   const customerIdentity = { customerId, sessionId: null };
@@ -5760,9 +8285,9 @@ async function requireCustomerForMerge(req, res, next) {
 }
 
 // server/routes/cart.ts
-var router14 = Router14();
-router14.use(resolveCartIdentity);
-router14.get("/", async (req, res) => {
+var router18 = Router18();
+router18.use(resolveCartIdentity);
+router18.get("/", async (req, res) => {
   try {
     const cart = await getCart(req.cartIdentity);
     res.json(cart);
@@ -5772,7 +8297,7 @@ router14.get("/", async (req, res) => {
     });
   }
 });
-router14.post("/items", async (req, res) => {
+router18.post("/items", async (req, res) => {
   try {
     const parsed = cartAddItemSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -5787,7 +8312,7 @@ router14.post("/items", async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router14.patch("/items/:itemId", async (req, res) => {
+router18.patch("/items/:itemId", async (req, res) => {
   try {
     const parsed = cartUpdateItemSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -5802,7 +8327,7 @@ router14.patch("/items/:itemId", async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router14.delete("/items/:itemId", async (req, res) => {
+router18.delete("/items/:itemId", async (req, res) => {
   try {
     const cart = await removeCartItem(req.cartIdentity, req.params.itemId);
     res.json(cart);
@@ -5812,7 +8337,7 @@ router14.delete("/items/:itemId", async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router14.delete("/", async (req, res) => {
+router18.delete("/", async (req, res) => {
   try {
     const cart = await clearCart(req.cartIdentity);
     res.json(cart);
@@ -5822,7 +8347,7 @@ router14.delete("/", async (req, res) => {
     });
   }
 });
-router14.patch("/coupon", async (req, res) => {
+router18.patch("/coupon", async (req, res) => {
   try {
     const parsed = cartApplyCouponSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -5832,12 +8357,12 @@ router14.patch("/coupon", async (req, res) => {
     const cart = await applyCartCoupon(req.cartIdentity, parsed.data);
     res.json(cart);
   } catch (error) {
-    res.status(500).json({
-      error: error instanceof Error ? error.message : "Erro ao salvar cupom"
-    });
+    const message = error instanceof Error ? error.message : "Erro ao aplicar cupom";
+    const status = error instanceof Error && error.name === "CouponEvalError" ? 400 : 500;
+    res.status(status).json({ error: message });
   }
 });
-router14.post("/merge", requireCustomerForMerge, async (req, res) => {
+router18.post("/merge", requireCustomerForMerge, async (req, res) => {
   try {
     const customerId = req.cartIdentity.customerId;
     const guestSessionId = req.cartIdentity.sessionId;
@@ -5850,7 +8375,22 @@ router14.post("/merge", requireCustomerForMerge, async (req, res) => {
     });
   }
 });
-var cart_default = router14;
+var cart_default = router18;
+
+// server/routes/coupons.ts
+import { Router as Router19 } from "express";
+var router19 = Router19();
+router19.get("/map-reward", async (_req, res) => {
+  try {
+    const coupon = await getMapRewardCoupon();
+    res.json(coupon);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao carregar cupom do mapa"
+    });
+  }
+});
+var coupons_default = router19;
 
 // shared/lib/phoneBr.ts
 function digitsOnly(value) {
@@ -5865,16 +8405,16 @@ function normalizePhoneBr(value) {
 }
 
 // shared/schemas/customer.ts
-import { z as z10 } from "zod";
-var customerProfileUpdateSchema = z10.object({
-  fullName: z10.string().trim().min(2, "Informe seu nome completo").max(120, "Nome muito longo"),
-  phone: z10.string().trim().optional().or(z10.literal("")).transform((value) => value ? normalizePhoneBr(value) : "").refine((value) => value === "" || isValidPhoneBr(value), {
+import { z as z14 } from "zod";
+var customerProfileUpdateSchema = z14.object({
+  fullName: z14.string().trim().min(2, "Informe seu nome completo").max(120, "Nome muito longo"),
+  phone: z14.string().trim().optional().or(z14.literal("")).transform((value) => value ? normalizePhoneBr(value) : "").refine((value) => value === "" || isValidPhoneBr(value), {
     message: "Informe um telefone v\xE1lido com DDD"
   })
 });
 
 // server/routes/customers.ts
-import { Router as Router15 } from "express";
+import { Router as Router20 } from "express";
 
 // server/middleware/requireCustomer.ts
 function getBearerToken2(req) {
@@ -5901,7 +8441,7 @@ async function requireCustomer(req, res, next) {
 }
 
 // server/routes/customers.ts
-var router15 = Router15();
+var router20 = Router20();
 function getMetadataName(user) {
   const metadata = user.user_metadata ?? {};
   return String(metadata.full_name ?? metadata.fullName ?? "").trim();
@@ -5942,7 +8482,7 @@ async function ensureProfileFromMetadata(userId, user, row) {
   }
   return data;
 }
-router15.get("/me", requireCustomer, async (req, res) => {
+router20.get("/me", requireCustomer, async (req, res) => {
   try {
     const userId = req.customerUserId;
     const user = req.customerUser;
@@ -5973,7 +8513,7 @@ router15.get("/me", requireCustomer, async (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : "Erro ao carregar perfil" });
   }
 });
-router15.put("/me", requireCustomer, async (req, res) => {
+router20.put("/me", requireCustomer, async (req, res) => {
   try {
     const userId = req.customerUserId;
     const user = req.customerUser;
@@ -6007,7 +8547,7 @@ router15.put("/me", requireCustomer, async (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : "Erro ao atualizar perfil" });
   }
 });
-router15.get("/me/addresses", requireCustomer, async (req, res) => {
+router20.get("/me/addresses", requireCustomer, async (req, res) => {
   try {
     const addresses = await listCustomerAddresses(req.customerUserId);
     res.json(addresses);
@@ -6017,7 +8557,7 @@ router15.get("/me/addresses", requireCustomer, async (req, res) => {
     });
   }
 });
-router15.post("/me/addresses", requireCustomer, async (req, res) => {
+router20.post("/me/addresses", requireCustomer, async (req, res) => {
   try {
     const parsed = customerAddressSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -6032,7 +8572,7 @@ router15.post("/me/addresses", requireCustomer, async (req, res) => {
     });
   }
 });
-router15.put("/me/addresses/:id", requireCustomer, async (req, res) => {
+router20.put("/me/addresses/:id", requireCustomer, async (req, res) => {
   try {
     const parsed = customerAddressUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -6051,7 +8591,7 @@ router15.put("/me/addresses/:id", requireCustomer, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router15.patch("/me/addresses/:id/default", requireCustomer, async (req, res) => {
+router20.patch("/me/addresses/:id/default", requireCustomer, async (req, res) => {
   try {
     const address = await setDefaultCustomerAddress(req.customerUserId, req.params.id);
     res.json(address);
@@ -6061,7 +8601,7 @@ router15.patch("/me/addresses/:id/default", requireCustomer, async (req, res) =>
     res.status(status).json({ error: message });
   }
 });
-router15.delete("/me/addresses/:id", requireCustomer, async (req, res) => {
+router20.delete("/me/addresses/:id", requireCustomer, async (req, res) => {
   try {
     await deleteCustomerAddress(req.customerUserId, req.params.id);
     res.status(204).send();
@@ -6071,12 +8611,31 @@ router15.delete("/me/addresses/:id", requireCustomer, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-var customers_default = router15;
+var customers_default = router20;
+
+// server/routes/feed.ts
+import { Router as Router21 } from "express";
+var router21 = Router21();
+router21.get("/products.xml", async (req, res) => {
+  try {
+    const token = typeof req.query.token === "string" ? req.query.token : void 0;
+    const xml = await getPublicProductFeedXml(token);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=900");
+    res.status(200).send(xml);
+  } catch (error) {
+    const status = error instanceof Error && typeof error.status === "number" ? error.status : 500;
+    res.status(status).json({
+      error: error instanceof Error ? error.message : "Erro ao gerar feed"
+    });
+  }
+});
+var feed_default = router21;
 
 // server/routes/orders.ts
-import { Router as Router16 } from "express";
-var router16 = Router16();
-router16.get("/me", requireCustomer, async (req, res) => {
+import { Router as Router22 } from "express";
+var router22 = Router22();
+router22.get("/me", requireCustomer, async (req, res) => {
   try {
     const orders = await listCustomerOrders(req.customerUserId);
     res.json(orders);
@@ -6086,7 +8645,7 @@ router16.get("/me", requireCustomer, async (req, res) => {
     });
   }
 });
-router16.get("/:id", requireCustomer, async (req, res) => {
+router22.get("/:id", requireCustomer, async (req, res) => {
   try {
     const order = await getCustomerOrder(req.customerUserId, req.params.id);
     res.json(order);
@@ -6096,7 +8655,7 @@ router16.get("/:id", requireCustomer, async (req, res) => {
     res.status(status).json({ error: "Pedido n\xE3o encontrado" });
   }
 });
-router16.post(
+router22.post(
   "/checkout",
   requireCustomer,
   async (req, res) => {
@@ -6118,24 +8677,24 @@ router16.post(
     }
   }
 );
-var orders_default = router16;
+var orders_default = router22;
 
 // server/routes/mercadoPago.ts
-import { Router as Router17 } from "express";
-var router17 = Router17();
-router17.get("/config", async (_req, res) => {
+import { Router as Router23 } from "express";
+var router23 = Router23();
+router23.get("/config", async (_req, res) => {
   try {
     res.json(await getMercadoPagoPublicConfig());
   } catch {
     res.status(503).json({ error: "Pagamento Mercado Pago indispon\xEDvel" });
   }
 });
-var mercadoPago_default = router17;
+var mercadoPago_default = router23;
 
 // server/routes/mercadoPagoWebhook.ts
-import { Router as Router18 } from "express";
-var router18 = Router18();
-router18.post("/", async (req, res) => {
+import { Router as Router24 } from "express";
+var router24 = Router24();
+router24.post("/", async (req, res) => {
   const nestedDataId = req.query.data && typeof req.query.data === "object" && "id" in req.query.data && typeof req.query.data.id === "string" ? req.query.data.id : void 0;
   const signatureDataId = typeof req.query["data.id"] === "string" ? req.query["data.id"] : nestedDataId;
   const orderId = signatureDataId ?? String(req.body?.data?.id ?? "");
@@ -6194,12 +8753,12 @@ router18.post("/", async (req, res) => {
     res.status(500).json({ error: "Falha ao processar notifica\xE7\xE3o" });
   }
 });
-var mercadoPagoWebhook_default = router18;
+var mercadoPagoWebhook_default = router24;
 
 // server/routes/newsletter.ts
-import { Router as Router19 } from "express";
-var router19 = Router19();
-router19.post("/", async (req, res) => {
+import { Router as Router25 } from "express";
+var router25 = Router25();
+router25.post("/", async (req, res) => {
   const parsed = brevoNewsletterSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
@@ -6230,65 +8789,66 @@ router19.post("/", async (req, res) => {
     res.status(500).json({ error: "N\xE3o foi poss\xEDvel concluir a inscri\xE7\xE3o" });
   }
 });
-var newsletter_default = router19;
+var newsletter_default = router25;
 
 // shared/schemas/product.ts
-import { z as z11 } from "zod";
-var productCategorySchema = z11.enum(["Roupas", "Bolsas", "Acess\xF3rios"]);
-var productColorSchema = z11.object({
-  name: z11.string().min(1, "Informe o nome da cor"),
-  hex: z11.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Cor inv\xE1lida (use o formato #RRGGBB)")
+import { z as z15 } from "zod";
+var productCategorySchema = z15.enum(["Roupas", "Bolsas", "Acess\xF3rios"]);
+var productColorSchema = z15.object({
+  name: z15.string().min(1, "Informe o nome da cor"),
+  hex: z15.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Cor inv\xE1lida (use o formato #RRGGBB)")
 });
-var productSizeSchema = z11.object({
-  label: z11.string().min(1, "Informe o tamanho"),
-  available: z11.boolean()
+var productSizeSchema = z15.object({
+  label: z15.string().min(1, "Informe o tamanho"),
+  available: z15.boolean()
 });
-var productFaqSchema = z11.object({
-  question: z11.string().min(1, "Informe a pergunta"),
-  answer: z11.string().min(1, "Informe a resposta")
+var productFaqSchema = z15.object({
+  question: z15.string().min(1, "Informe a pergunta"),
+  answer: z15.string().min(1, "Informe a resposta")
 });
-var productArtisanSchema = z11.object({
-  name: z11.string(),
-  region: z11.string(),
-  story: z11.string()
+var productArtisanSchema = z15.object({
+  name: z15.string(),
+  region: z15.string(),
+  story: z15.string()
 });
 var SLUG_PATTERN2 = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-var productSchema = z11.object({
-  slug: z11.string().min(1, "Slug \xE9 obrigat\xF3rio").regex(SLUG_PATTERN2, "Use apenas letras min\xFAsculas, n\xFAmeros e h\xEDfens (ex: bolsa-de-praia)"),
-  name: z11.string().min(2, "Informe o nome do produto"),
+var productSchema = z15.object({
+  slug: z15.string().min(1, "Slug \xE9 obrigat\xF3rio").regex(SLUG_PATTERN2, "Use apenas letras min\xFAsculas, n\xFAmeros e h\xEDfens (ex: bolsa-de-praia)"),
+  name: z15.string().min(2, "Informe o nome do produto"),
   category: productCategorySchema,
-  price: z11.number({ error: "Informe um pre\xE7o v\xE1lido" }).nonnegative("O pre\xE7o n\xE3o pode ser negativo"),
-  originalPrice: z11.number().nonnegative("O pre\xE7o original n\xE3o pode ser negativo").nullable(),
-  image: z11.string().min(1, "Adicione ao menos uma imagem"),
-  images: z11.array(z11.string().min(1)).min(1, "Adicione ao menos uma imagem"),
-  badge: z11.string(),
-  badgeColor: z11.string().min(1),
-  rating: z11.number().min(0).max(5),
-  reviews: z11.number().int().min(0),
-  featured: z11.boolean(),
-  shortDescription: z11.string(),
-  description: z11.string(),
-  materials: z11.array(z11.string()),
-  careInstructions: z11.array(z11.string()),
+  price: z15.number({ error: "Informe um pre\xE7o v\xE1lido" }).nonnegative("O pre\xE7o n\xE3o pode ser negativo"),
+  originalPrice: z15.number().nonnegative("O pre\xE7o original n\xE3o pode ser negativo").nullable(),
+  image: z15.string().min(1, "Adicione ao menos uma imagem"),
+  images: z15.array(z15.string().min(1)).min(1, "Adicione ao menos uma imagem"),
+  badge: z15.string(),
+  badgeColor: z15.string().min(1),
+  rating: z15.number().min(0).max(5),
+  reviews: z15.number().int().min(0),
+  featured: z15.boolean(),
+  shortDescription: z15.string(),
+  description: z15.string(),
+  materials: z15.array(z15.string()),
+  careInstructions: z15.array(z15.string()),
   artisan: productArtisanSchema,
-  sizes: z11.array(productSizeSchema),
-  colors: z11.array(productColorSchema),
-  sku: z11.string(),
-  inStock: z11.boolean(),
-  stockCount: z11.number().int().min(0),
-  widthCm: z11.number().positive().max(200).nullable(),
-  heightCm: z11.number().positive().max(200).nullable(),
-  lengthCm: z11.number().positive().max(200).nullable(),
-  weightKg: z11.number().positive().max(100).nullable(),
-  faq: z11.array(productFaqSchema),
-  highlights: z11.array(z11.string()),
-  regionId: z11.string().trim().min(1).nullable().transform((value) => value == null || value === "" ? null : value)
+  sizes: z15.array(productSizeSchema),
+  colors: z15.array(productColorSchema),
+  sku: z15.string(),
+  inStock: z15.boolean(),
+  stockCount: z15.number().int().min(0),
+  widthCm: z15.number().positive().max(200).nullable(),
+  heightCm: z15.number().positive().max(200).nullable(),
+  lengthCm: z15.number().positive().max(200).nullable(),
+  weightKg: z15.number().positive().max(100).nullable(),
+  faq: z15.array(productFaqSchema),
+  highlights: z15.array(z15.string()),
+  styleTags: z15.array(z15.string()),
+  regionId: z15.string().trim().min(1).nullable().transform((value) => value == null || value === "" ? null : value)
 });
 
 // server/routes/products.ts
-import { Router as Router20 } from "express";
-var router20 = Router20();
-router20.get("/", async (req, res) => {
+import { Router as Router26 } from "express";
+var router26 = Router26();
+router26.get("/", async (req, res) => {
   try {
     const category = typeof req.query.category === "string" ? req.query.category : void 0;
     const products = await listProducts(category);
@@ -6299,7 +8859,7 @@ router20.get("/", async (req, res) => {
     });
   }
 });
-router20.get("/:slug", async (req, res) => {
+router26.get("/:slug", async (req, res) => {
   try {
     const product = await getProductBySlug(req.params.slug);
     if (!product) {
@@ -6313,7 +8873,7 @@ router20.get("/:slug", async (req, res) => {
     });
   }
 });
-router20.post("/", requireAdmin, async (req, res) => {
+router26.post("/", requireAdmin, async (req, res) => {
   try {
     const parsed = productSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -6333,7 +8893,7 @@ router20.post("/", requireAdmin, async (req, res) => {
     });
   }
 });
-router20.post("/bulk", requireAdmin, async (req, res) => {
+router26.post("/bulk", requireAdmin, async (req, res) => {
   try {
     const items = Array.isArray(req.body?.products) ? req.body.products : null;
     if (!items) {
@@ -6362,7 +8922,7 @@ router20.post("/bulk", requireAdmin, async (req, res) => {
     });
   }
 });
-router20.put("/:slug", requireAdmin, async (req, res) => {
+router26.put("/:slug", requireAdmin, async (req, res) => {
   try {
     const parsed = productSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -6387,7 +8947,7 @@ router20.put("/:slug", requireAdmin, async (req, res) => {
     });
   }
 });
-router20.delete("/:slug", requireAdmin, async (req, res) => {
+router26.delete("/:slug", requireAdmin, async (req, res) => {
   try {
     const deleted = await deleteProduct(req.params.slug);
     if (!deleted) {
@@ -6401,12 +8961,81 @@ router20.delete("/:slug", requireAdmin, async (req, res) => {
     });
   }
 });
-var products_default = router20;
+var products_default = router26;
+
+// server/routes/quiz.ts
+import { Router as Router27 } from "express";
+var router27 = Router27();
+router27.get("/", async (_req, res) => {
+  try {
+    const questions = await getPublicQuizQuestions();
+    res.json({ questions });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao carregar quiz"
+    });
+  }
+});
+router27.post("/result", async (req, res) => {
+  try {
+    const parsed = quizResultRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Dados inv\xE1lidos",
+        issues: parsed.error.issues
+      });
+      return;
+    }
+    const payload = await computeQuizResult(parsed.data.selectedOptionIds);
+    res.json(payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao calcular resultado";
+    const status = message.includes("Nenhum perfil") ? 404 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+router27.get("/result/:resultId", async (req, res) => {
+  try {
+    const resultId = String(req.params.resultId ?? "").trim();
+    if (!resultId) {
+      res.status(400).json({ error: "Informe o resultId" });
+      return;
+    }
+    const payload = await getQuizResultBySessionId(resultId);
+    res.json(payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao buscar resultado";
+    const status = message.includes("n\xE3o encontrado") ? 404 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+router27.post("/compare", async (req, res) => {
+  try {
+    const parsed = quizCompareRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Dados inv\xE1lidos",
+        issues: parsed.error.issues
+      });
+      return;
+    }
+    const payload = await compareQuizResults(
+      parsed.data.yoursResultId,
+      parsed.data.friendResultId
+    );
+    res.json(payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao comparar resultados";
+    const status = message.includes("n\xE3o encontrado") ? 404 : message.includes("diferentes") ? 400 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+var quiz_default = router27;
 
 // server/routes/regions.ts
-import { Router as Router21 } from "express";
-var router21 = Router21();
-router21.get("/", async (_req, res) => {
+import { Router as Router28 } from "express";
+var router28 = Router28();
+router28.get("/", async (_req, res) => {
   try {
     const regions = await listRegions();
     res.json(regions);
@@ -6416,7 +9045,7 @@ router21.get("/", async (_req, res) => {
     });
   }
 });
-router21.get("/:id", async (req, res) => {
+router28.get("/:id", async (req, res) => {
   try {
     const region = await getRegionById(req.params.id);
     if (!region) {
@@ -6430,19 +9059,19 @@ router21.get("/:id", async (req, res) => {
     });
   }
 });
-var regions_default = router21;
+var regions_default = router28;
 
 // server/routes/shipping.ts
-import { Router as Router22 } from "express";
-var router22 = Router22();
-router22.get("/config", async (_req, res) => {
+import { Router as Router29 } from "express";
+var router29 = Router29();
+router29.get("/config", async (_req, res) => {
   try {
     res.json(await getPublicShippingConfig());
   } catch {
     res.json({ freeShippingEnabled: true, freeShippingThreshold: 299 });
   }
 });
-router22.post("/quote", async (req, res) => {
+router29.post("/quote", async (req, res) => {
   try {
     const parsed = shippingQuoteSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -6457,7 +9086,7 @@ router22.post("/quote", async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
-router22.post(
+router29.post(
   "/checkout-quote",
   requireCustomer,
   async (req, res) => {
@@ -6479,32 +9108,10 @@ router22.post(
     }
   }
 );
-var shipping_default = router22;
+var shipping_default = router29;
 
 // server/routes/seo.ts
-import { Router as Router23 } from "express";
-
-// shared/lib/seo.ts
-function stripHtml(value) {
-  return value.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/\s+/g, " ").trim();
-}
-function truncateMeta(text, max = 160) {
-  const clean = stripHtml(text);
-  if (clean.length <= max) return clean;
-  const sliced = clean.slice(0, max - 1);
-  const lastSpace = sliced.lastIndexOf(" ");
-  return `${(lastSpace > 80 ? sliced.slice(0, lastSpace) : sliced).trim()}\u2026`;
-}
-function escapeHtmlAttr(value) {
-  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-function absoluteUrl(baseUrl, pathOrUrl) {
-  if (!pathOrUrl) return baseUrl;
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
-  const base = baseUrl.replace(/\/$/, "");
-  const path2 = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
-  return `${base}${path2}`;
-}
+import { Router as Router30 } from "express";
 
 // server/lib/seoHtml.ts
 import fs from "fs";
@@ -6644,10 +9251,9 @@ function injectSeoIntoHtml(html, options) {
 ${cleaned}`;
 }
 function resolvePublicBaseUrl(reqHost, proto) {
-  let fromEnv = (process.env.APP_URL || process.env.VITE_APP_URL || "").trim();
+  const fromEnv = (process.env.APP_URL || process.env.VITE_APP_URL || "").trim();
   if (fromEnv) {
-    if (!/^https?:\/\//i.test(fromEnv)) fromEnv = `https://${fromEnv}`;
-    return fromEnv.replace(/\/$/, "");
+    return normalizeBaseUrl(fromEnv);
   }
   if (reqHost) {
     const scheme = proto === "http" ? "http" : "https";
@@ -6657,7 +9263,12 @@ function resolvePublicBaseUrl(reqHost, proto) {
 }
 
 // server/routes/seo.ts
-var router23 = Router23();
+var router30 = Router30();
+var BAGS_TITLE = "Bolsas Artesanais \u2014 Nativa Store";
+var BAGS_DESCRIPTION = "Bolsas artesanais autorais e exclusivas, feitas \xE0 m\xE3o com identidade brasileira. Conhe\xE7a a cole\xE7\xE3o da Nativa Store.";
+function escapeXml2(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
 function requestBaseUrl(req) {
   const proto = req.headers["x-forwarded-proto"]?.split(",")[0]?.trim();
   const host = req.headers["x-forwarded-host"]?.split(",")[0]?.trim() || req.headers.host;
@@ -6681,9 +9292,49 @@ async function sendSeoHtml(req, res, options, status = 200) {
     );
     return;
   }
-  res.status(status).setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300").setHeader("Vary", "User-Agent").type("html").send(injectSeoIntoHtml(spaHtml, options));
+  res.status(status).setHeader("Cache-Control", "public, s-maxage=30, must-revalidate").setHeader("Vary", "User-Agent").type("html").send(injectSeoIntoHtml(spaHtml, options));
 }
-router23.get("/produto/:slug", async (req, res) => {
+router30.get("/categoria/:slug", async (req, res) => {
+  const slug = String(req.params.slug ?? "").trim().toLowerCase();
+  const baseUrl = requestBaseUrl(req);
+  const url2 = absoluteUrl(baseUrl, `/categoria/${encodeURIComponent(slug)}`);
+  if (slug !== "bolsas") {
+    await sendSeoHtml(
+      req,
+      res,
+      {
+        title: `Categoria n\xE3o encontrada \u2014 ${SITE_NAME}`,
+        description: "Esta categoria n\xE3o est\xE1 dispon\xEDvel na Nativa Store.",
+        url: url2,
+        image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
+        type: "website",
+        noIndex: true
+      },
+      404
+    );
+    return;
+  }
+  await sendSeoHtml(req, res, {
+    title: BAGS_TITLE,
+    description: BAGS_DESCRIPTION,
+    url: url2,
+    image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
+    type: "website",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: BAGS_TITLE,
+      description: BAGS_DESCRIPTION,
+      url: url2,
+      isPartOf: {
+        "@type": "WebSite",
+        name: SITE_NAME,
+        url: absoluteUrl(baseUrl, "/")
+      }
+    }
+  });
+});
+router30.get("/produto/:slug", async (req, res) => {
   const slug = String(req.params.slug ?? "").trim();
   const baseUrl = requestBaseUrl(req);
   try {
@@ -6713,25 +9364,56 @@ router23.get("/produto/:slug", async (req, res) => {
     );
     const url2 = absoluteUrl(baseUrl, `/produto/${product.slug}`);
     const title = `${product.name} \u2014 ${SITE_NAME}`;
+    const categoryUrl = absoluteUrl(
+      baseUrl,
+      product.category === "Bolsas" ? "/categoria/bolsas" : "/#colecoes"
+    );
     const jsonLd = {
       "@context": "https://schema.org",
-      "@type": "Product",
-      name: product.name,
-      description,
-      image: (product.images?.length ? product.images : [product.image]).map(
-        (img) => absoluteUrl(baseUrl, img)
-      ),
-      sku: product.sku,
-      category: product.category,
-      brand: { "@type": "Brand", name: SITE_NAME },
-      offers: {
-        "@type": "Offer",
-        url: url2,
-        priceCurrency: "BRL",
-        price: product.price,
-        availability: product.inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-        itemCondition: "https://schema.org/NewCondition"
-      }
+      "@graph": [
+        {
+          "@type": "Product",
+          "@id": `${url2}#product`,
+          name: product.name,
+          description,
+          image: (product.images?.length ? product.images : [product.image]).filter(Boolean).map((img) => absoluteUrl(baseUrl, img)),
+          sku: product.sku,
+          category: product.category,
+          brand: { "@type": "Brand", name: SITE_NAME },
+          offers: {
+            "@type": "Offer",
+            url: url2,
+            priceCurrency: "BRL",
+            price: product.price,
+            availability: product.inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+            itemCondition: "https://schema.org/NewCondition",
+            seller: { "@type": "Organization", name: SITE_NAME }
+          }
+        },
+        {
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            {
+              "@type": "ListItem",
+              position: 1,
+              name: "In\xEDcio",
+              item: absoluteUrl(baseUrl, "/")
+            },
+            {
+              "@type": "ListItem",
+              position: 2,
+              name: product.category || "Cole\xE7\xF5es",
+              item: categoryUrl
+            },
+            {
+              "@type": "ListItem",
+              position: 3,
+              name: product.name,
+              item: url2
+            }
+          ]
+        }
+      ]
     };
     await sendSeoHtml(req, res, {
       title,
@@ -6765,13 +9447,13 @@ router23.get("/produto/:slug", async (req, res) => {
     );
   }
 });
-router23.get("/sitemap.xml", async (req, res) => {
+router30.get("/sitemap.xml", async (req, res) => {
   const baseUrl = requestBaseUrl(req).replace(/\/$/, "");
   try {
     const products = await listProducts();
-    const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const urls = [
       { loc: `${baseUrl}/`, priority: "1.0", changefreq: "daily" },
+      ...products.some((product) => product.category === "Bolsas") ? [{ loc: `${baseUrl}/categoria/bolsas`, priority: "0.9", changefreq: "weekly" }] : [],
       ...products.map((product) => ({
         loc: `${baseUrl}/produto/${product.slug}`,
         priority: "0.8",
@@ -6782,23 +9464,28 @@ router23.get("/sitemap.xml", async (req, res) => {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map(
       (entry) => `  <url>
-    <loc>${entry.loc}</loc>
-    <lastmod>${today}</lastmod>
+    <loc>${escapeXml2(entry.loc)}</loc>
     <changefreq>${entry.changefreq}</changefreq>
     <priority>${entry.priority}</priority>
   </url>`
     ).join("\n")}
 </urlset>`;
-    res.status(200).type("application/xml").setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400").send(body);
+    res.status(200).type("application/xml").setHeader("Cache-Control", "public, s-maxage=300, must-revalidate").send(body);
   } catch (error) {
     console.error("[seo] sitemap:", error);
     res.status(500).type("text/plain").send("Erro ao gerar sitemap");
   }
 });
-var seo_default = router23;
+var seo_default = router30;
 
 // server/app.ts
 function vercelSeoRewrite(req, _res, next) {
+  const queryCategory = req.query.nativaSeoCategory;
+  if (typeof queryCategory === "string" && queryCategory.trim()) {
+    req.url = `/api/seo/categoria/${encodeURIComponent(queryCategory.trim())}`;
+    next();
+    return;
+  }
   const querySlug = req.query.nativaSeoProduct;
   if (typeof querySlug === "string" && querySlug.trim()) {
     req.url = `/api/seo/produto/${encodeURIComponent(querySlug.trim())}`;
@@ -6806,6 +9493,12 @@ function vercelSeoRewrite(req, _res, next) {
     return;
   }
   const pathOnly = (req.path || "").split("?")[0];
+  const categoryMatch = pathOnly.match(/^\/categoria\/([^/]+)\/?$/);
+  if (categoryMatch?.[1]) {
+    req.url = `/api/seo/categoria/${encodeURIComponent(decodeURIComponent(categoryMatch[1]))}`;
+    next();
+    return;
+  }
   const productMatch = pathOnly.match(/^\/produto\/([^/]+)\/?$/);
   if (productMatch?.[1]) {
     req.url = `/api/seo/produto/${encodeURIComponent(decodeURIComponent(productMatch[1]))}`;
@@ -6828,13 +9521,16 @@ function createApiApp() {
   app2.use("/api/analytics", analytics_default);
   app2.use("/api/banners", banners_default);
   app2.use("/api/cart", cart_default);
+  app2.use("/api/coupons", coupons_default);
   app2.use("/api/customers", customers_default);
+  app2.use("/api/feed", feed_default);
   app2.use("/api/orders", orders_default);
   app2.use("/api/mercado-pago", mercadoPago_default);
   app2.use("/api/webhooks/mercado-pago", mercadoPagoWebhook_default);
   app2.use("/api/webhooks/brevo", brevoWebhook_default);
   app2.use("/api/newsletter", newsletter_default);
   app2.use("/api/products", products_default);
+  app2.use("/api/quiz", quiz_default);
   app2.use("/api/regions", regions_default);
   app2.use("/api/shipping", shipping_default);
   app2.use("/api/seo", seo_default);

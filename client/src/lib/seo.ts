@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { getAppUrl, appPath } from "@/lib/appUrl";
-import { absoluteUrl, truncateMeta } from "@shared/lib/seo";
+import { absoluteUrl, stripHtml, truncateMeta } from "@shared/lib/seo";
 import {
   SITE_DESCRIPTION,
   SITE_LOCALE,
@@ -181,32 +181,64 @@ export function buildProductJsonLd(product: {
   brand?: string;
 }) {
   const images = Array.isArray(product.image) ? product.image : [product.image];
+  const productUrl = appPath(`/produto/${product.slug}`);
+  const categoryUrl =
+    product.category === "Bolsas" ? appPath("/categoria/bolsas") : appPath("/#colecoes");
+
   return {
     "@context": "https://schema.org",
-    "@type": "Product",
-    name: product.name,
-    description: truncateMeta(product.description, 5000),
-    image: images.map((img) => absoluteUrl(getAppUrl(), img)),
-    sku: product.sku,
-    category: product.category,
-    brand: {
-      "@type": "Brand",
-      name: product.brand ?? SITE_NAME,
-    },
-    offers: {
-      "@type": "Offer",
-      url: appPath(`/produto/${product.slug}`),
-      priceCurrency: "BRL",
-      price: product.price,
-      availability: product.inStock
-        ? "https://schema.org/InStock"
-        : "https://schema.org/OutOfStock",
-      itemCondition: "https://schema.org/NewCondition",
-      seller: {
-        "@type": "Organization",
-        name: SITE_NAME,
+    "@graph": [
+      {
+        "@type": "Product",
+        "@id": `${productUrl}#product`,
+        name: product.name,
+        description: truncateMeta(stripHtml(product.description), 5000),
+        image: images.filter(Boolean).map((img) => absoluteUrl(getAppUrl(), img)),
+        sku: product.sku,
+        category: product.category,
+        brand: {
+          "@type": "Brand",
+          name: product.brand ?? SITE_NAME,
+        },
+        offers: {
+          "@type": "Offer",
+          url: productUrl,
+          priceCurrency: "BRL",
+          price: product.price,
+          availability: product.inStock
+            ? "https://schema.org/InStock"
+            : "https://schema.org/OutOfStock",
+          itemCondition: "https://schema.org/NewCondition",
+          seller: {
+            "@type": "Organization",
+            name: SITE_NAME,
+          },
+        },
       },
-    },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Início",
+            item: appPath("/"),
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: product.category || "Coleções",
+            item: categoryUrl,
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: product.name,
+            item: productUrl,
+          },
+        ],
+      },
+    ],
   };
 }
 

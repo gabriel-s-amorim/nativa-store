@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { absoluteUrl, stripHtml, truncateMeta } from "@shared/lib/seo";
-import { SITE_KEYWORDS, SITE_NAME } from "@shared/const/site";
+import { SITE_KEYWORDS, SITE_NAME, SITE_OG_IMAGE_PATH } from "@shared/const/site";
 import { getProductBySlug, listProducts } from "../services/products";
 import {
   buildStandaloneOgHtml,
@@ -12,6 +12,18 @@ import {
 } from "../lib/seoHtml";
 
 const router = Router();
+const BAGS_TITLE = "Bolsas Artesanais — Nativa Store";
+const BAGS_DESCRIPTION =
+  "Bolsas artesanais autorais e exclusivas, feitas à mão com identidade brasileira. Conheça a coleção da Nativa Store.";
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
 function requestBaseUrl(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim();
@@ -52,11 +64,54 @@ async function sendSeoHtml(req: Request, res: Response, options: InjectMetaOptio
 
   res
     .status(status)
-    .setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300")
+    .setHeader("Cache-Control", "public, s-maxage=30, must-revalidate")
     .setHeader("Vary", "User-Agent")
     .type("html")
     .send(injectSeoIntoHtml(spaHtml, options));
 }
+
+router.get("/categoria/:slug", async (req, res) => {
+  const slug = String(req.params.slug ?? "").trim().toLowerCase();
+  const baseUrl = requestBaseUrl(req);
+  const url = absoluteUrl(baseUrl, `/categoria/${encodeURIComponent(slug)}`);
+
+  if (slug !== "bolsas") {
+    await sendSeoHtml(
+      req,
+      res,
+      {
+        title: `Categoria não encontrada — ${SITE_NAME}`,
+        description: "Esta categoria não está disponível na Nativa Store.",
+        url,
+        image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
+        type: "website",
+        noIndex: true,
+      },
+      404,
+    );
+    return;
+  }
+
+  await sendSeoHtml(req, res, {
+    title: BAGS_TITLE,
+    description: BAGS_DESCRIPTION,
+    url,
+    image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
+    type: "website",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: BAGS_TITLE,
+      description: BAGS_DESCRIPTION,
+      url,
+      isPartOf: {
+        "@type": "WebSite",
+        name: SITE_NAME,
+        url: absoluteUrl(baseUrl, "/"),
+      },
+    },
+  });
+});
 
 router.get("/produto/:slug", async (req, res) => {
   const slug = String(req.params.slug ?? "").trim();
@@ -92,27 +147,60 @@ router.get("/produto/:slug", async (req, res) => {
     const url = absoluteUrl(baseUrl, `/produto/${product.slug}`);
     const title = `${product.name} — ${SITE_NAME}`;
 
+    const categoryUrl = absoluteUrl(
+      baseUrl,
+      product.category === "Bolsas" ? "/categoria/bolsas" : "/#colecoes",
+    );
     const jsonLd = {
       "@context": "https://schema.org",
-      "@type": "Product",
-      name: product.name,
-      description,
-      image: (product.images?.length ? product.images : [product.image]).map((img) =>
-        absoluteUrl(baseUrl, img),
-      ),
-      sku: product.sku,
-      category: product.category,
-      brand: { "@type": "Brand", name: SITE_NAME },
-      offers: {
-        "@type": "Offer",
-        url,
-        priceCurrency: "BRL",
-        price: product.price,
-        availability: product.inStock
-          ? "https://schema.org/InStock"
-          : "https://schema.org/OutOfStock",
-        itemCondition: "https://schema.org/NewCondition",
-      },
+      "@graph": [
+        {
+          "@type": "Product",
+          "@id": `${url}#product`,
+          name: product.name,
+          description,
+          image: (product.images?.length ? product.images : [product.image])
+            .filter(Boolean)
+            .map((img) => absoluteUrl(baseUrl, img)),
+          sku: product.sku,
+          category: product.category,
+          brand: { "@type": "Brand", name: SITE_NAME },
+          offers: {
+            "@type": "Offer",
+            url,
+            priceCurrency: "BRL",
+            price: product.price,
+            availability: product.inStock
+              ? "https://schema.org/InStock"
+              : "https://schema.org/OutOfStock",
+            itemCondition: "https://schema.org/NewCondition",
+            seller: { "@type": "Organization", name: SITE_NAME },
+          },
+        },
+        {
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            {
+              "@type": "ListItem",
+              position: 1,
+              name: "Início",
+              item: absoluteUrl(baseUrl, "/"),
+            },
+            {
+              "@type": "ListItem",
+              position: 2,
+              name: product.category || "Coleções",
+              item: categoryUrl,
+            },
+            {
+              "@type": "ListItem",
+              position: 3,
+              name: product.name,
+              item: url,
+            },
+          ],
+        },
+      ],
     };
 
     await sendSeoHtml(req, res, {
@@ -158,9 +246,11 @@ router.get("/sitemap.xml", async (req, res) => {
 
   try {
     const products = await listProducts();
-    const today = new Date().toISOString().slice(0, 10);
     const urls = [
       { loc: `${baseUrl}/`, priority: "1.0", changefreq: "daily" },
+      ...(products.some((product) => product.category === "Bolsas")
+        ? [{ loc: `${baseUrl}/categoria/bolsas`, priority: "0.9", changefreq: "weekly" }]
+        : []),
       ...products.map((product) => ({
         loc: `${baseUrl}/produto/${product.slug}`,
         priority: "0.8",
@@ -173,8 +263,7 @@ router.get("/sitemap.xml", async (req, res) => {
 ${urls
   .map(
     (entry) => `  <url>
-    <loc>${entry.loc}</loc>
-    <lastmod>${today}</lastmod>
+    <loc>${escapeXml(entry.loc)}</loc>
     <changefreq>${entry.changefreq}</changefreq>
     <priority>${entry.priority}</priority>
   </url>`,
@@ -185,7 +274,7 @@ ${urls
     res
       .status(200)
       .type("application/xml")
-      .setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400")
+      .setHeader("Cache-Control", "public, s-maxage=300, must-revalidate")
       .send(body);
   } catch (error) {
     console.error("[seo] sitemap:", error);

@@ -23,6 +23,13 @@ import seoRouter from "./routes/seo";
  * caem aqui — redirecionamos internamente para /api/seo/*.
  */
 function vercelSeoRewrite(req: Request, _res: Response, next: NextFunction) {
+  const queryCategory = req.query.nativaSeoCategory;
+  if (typeof queryCategory === "string" && queryCategory.trim()) {
+    req.url = `/api/seo/categoria/${encodeURIComponent(queryCategory.trim())}`;
+    next();
+    return;
+  }
+
   const querySlug = req.query.nativaSeoProduct;
   if (typeof querySlug === "string" && querySlug.trim()) {
     req.url = `/api/seo/produto/${encodeURIComponent(querySlug.trim())}`;
@@ -32,6 +39,13 @@ function vercelSeoRewrite(req: Request, _res: Response, next: NextFunction) {
 
   // Alguns runtimes preservam o path original do rewrite
   const pathOnly = (req.path || "").split("?")[0];
+  const categoryMatch = pathOnly.match(/^\/categoria\/([^/]+)\/?$/);
+  if (categoryMatch?.[1]) {
+    req.url = `/api/seo/categoria/${encodeURIComponent(decodeURIComponent(categoryMatch[1]))}`;
+    next();
+    return;
+  }
+
   const productMatch = pathOnly.match(/^\/produto\/([^/]+)\/?$/);
   if (productMatch?.[1]) {
     req.url = `/api/seo/produto/${encodeURIComponent(decodeURIComponent(productMatch[1]))}`;

@@ -21,6 +21,9 @@ export default function NativaLogo({
         src={LOGO_SRC}
         alt="Nativa — Liberdade em cada detalhe"
         className={`object-contain shrink-0 ${className}`}
+        width={931}
+        height={334}
+        decoding="async"
       />
       {showTagline && (
         <span

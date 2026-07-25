@@ -23,6 +23,14 @@
       "destination": "/api?nativaSeoSitemap=1"
     },
     {
+      "source": "/categoria/bolsas",
+      "destination": "/categoria/bolsas/index.html"
+    },
+    {
+      "source": "/categoria/:slug",
+      "destination": "/api?nativaSeoCategory=:slug"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
@@ -33,7 +41,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, s-maxage=60, stale-while-revalidate=300"
+          "value": "public, s-maxage=30, must-revalidate"
         },
         {
           "key": "Vary",

@@ -95,6 +95,10 @@ function SearchResults({
               src={product.image}
               alt=""
               className="h-16 w-14 shrink-0 rounded-xl object-cover"
+              width={112}
+              height={128}
+              loading="lazy"
+              decoding="async"
             />
             <div className="min-w-0 flex-1">
               <p

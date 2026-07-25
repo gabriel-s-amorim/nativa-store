@@ -132,6 +132,10 @@ ideas.md
 # Guia interno Brevo (produção — não publicar)
 docs/brevo-producao.md
 
+# Capturas Playwright locais (baseline SEO / regressão visual)
+docs/screenshots/pre-seo/
+docs/screenshots/post-seo/
+
 # Conteúdo editorial do quiz (importação local)
 quiz-curadoria.json
 

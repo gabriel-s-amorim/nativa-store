@@ -33,7 +33,10 @@
     <meta name="apple-mobile-web-app-title" content="Nativa Store" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
-    <!-- canonical / hreflang são definidos em runtime (usePageMeta) com URL absoluta -->
+    <link
+      rel="canonical"
+      href="https://nativa-store.vercel.app/"
+      data-nativa-seo="true" />
     <link rel="icon" type="image/png" href="/images/logo-nativa.png" />
     <link rel="apple-touch-icon" href="/images/logo-nativa.png" />
     <link rel="shortcut icon" type="image/png" href="/images/logo-nativa.png" />
@@ -48,7 +51,9 @@
     <meta
       property="og:description"
       content="Bolsas artesanais autorais e exclusivas, criadas à mão para contar histórias brasileiras. Artesanato com alma." />
-    <meta property="og:image" content="/images/bannerNativa.jpg" />
+    <meta property="og:url" content="https://nativa-store.vercel.app/" />
+    <meta property="og:image" content="https://nativa-store.vercel.app/images/bannerNativa.jpg" />
+    <meta property="og:image:secure_url" content="https://nativa-store.vercel.app/images/bannerNativa.jpg" />
     <meta property="og:image:alt" content="Nativa Store — Artesanato com Alma" />
     <meta property="og:image:type" content="image/jpeg" />
 
@@ -60,16 +65,33 @@
     <meta
       name="twitter:description"
       content="Bolsas artesanais autorais e exclusivas, criadas à mão para contar histórias brasileiras. Artesanato com alma." />
-    <meta name="twitter:image" content="/images/bannerNativa.jpg" />
+    <meta name="twitter:image" content="https://nativa-store.vercel.app/images/bannerNativa.jpg" />
     <meta name="twitter:image:alt" content="Nativa Store — Artesanato com Alma" />
 
-    <script type="application/ld+json">
+    <script type="application/ld+json" data-nativa-seo="true">
       {
         "@context": "https://schema.org",
-        "@type": "Organization",
-        "name": "Nativa Store",
-        "description": "Bolsas artesanais autorais e exclusivas, criadas à mão para contar histórias brasileiras. Artesanato com alma.",
-        "logo": "/images/logo-nativa.png"
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://nativa-store.vercel.app/#organization",
+            "name": "Nativa Store",
+            "url": "https://nativa-store.vercel.app/",
+            "description": "Bolsas artesanais autorais e exclusivas, criadas à mão para contar histórias brasileiras. Artesanato com alma.",
+            "logo": "https://nativa-store.vercel.app/images/logo-nativa.png"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://nativa-store.vercel.app/#website",
+            "name": "Nativa Store",
+            "url": "https://nativa-store.vercel.app/",
+            "description": "Bolsas artesanais autorais e exclusivas, criadas à mão para contar histórias brasileiras. Artesanato com alma.",
+            "inLanguage": "pt-BR",
+            "publisher": {
+              "@id": "https://nativa-store.vercel.app/#organization"
+            }
+          }
+        ]
       }
     </script>
 

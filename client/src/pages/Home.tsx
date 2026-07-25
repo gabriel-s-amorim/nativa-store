@@ -1,6 +1,7 @@
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import Footer from "@/components/Footer";
+import { appPath } from "@/lib/appUrl";
 import { Spinner } from "@/components/ui/spinner";
 import {
   buildOrganizationJsonLd,
@@ -9,6 +10,10 @@ import {
 } from "@/lib/seo";
 import { SITE_DESCRIPTION, SITE_KEYWORDS, SITE_TITLE } from "@shared/const/site";
 import { lazy, Suspense, type ReactNode } from "react";
+
+const BAGS_TITLE = "Bolsas Artesanais — Nativa Store";
+const BAGS_DESCRIPTION =
+  "Bolsas artesanais autorais e exclusivas, feitas à mão com identidade brasileira. Conheça a coleção da Nativa Store.";
 
 /** Seções abaixo da dobra: não atrasam o LCP do banner. */
 const CategoriesSection = lazy(() => import("@/components/CategoriesSection"));
@@ -33,17 +38,28 @@ function BelowFold({ children }: { children: ReactNode }) {
   );
 }
 
-export default function Home() {
+export default function Home({ initialCategory }: { initialCategory?: "Bolsas" }) {
+  const isBagsCategory = initialCategory === "Bolsas";
+
   usePageMeta({
-    title: SITE_TITLE,
-    description: SITE_DESCRIPTION,
-    path: "/",
+    title: isBagsCategory ? BAGS_TITLE : SITE_TITLE,
+    description: isBagsCategory ? BAGS_DESCRIPTION : SITE_DESCRIPTION,
+    path: isBagsCategory ? "/categoria/bolsas" : "/",
     keywords: SITE_KEYWORDS,
     type: "website",
-    jsonLd: {
-      "@context": "https://schema.org",
-      "@graph": [buildOrganizationJsonLd(), buildWebSiteJsonLd()],
-    },
+    jsonLd: isBagsCategory
+      ? {
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          name: BAGS_TITLE,
+          description: BAGS_DESCRIPTION,
+          url: appPath("/categoria/bolsas"),
+          isPartOf: buildWebSiteJsonLd(),
+        }
+      : {
+          "@context": "https://schema.org",
+          "@graph": [buildOrganizationJsonLd(), buildWebSiteJsonLd()],
+        },
   });
 
   return (
@@ -54,7 +70,7 @@ export default function Home() {
         <CategoriesSection />
         <QuizCtaSection />
         <MapaOrigens />
-        <ProductsSection />
+        <ProductsSection initialFilter={initialCategory} />
         <AboutSection />
         <TestimonialsSection />
         <PromoSection />

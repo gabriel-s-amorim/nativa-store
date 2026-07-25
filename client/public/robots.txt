@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Disallow: /admin
+Disallow: /account
 Disallow: /conta
 Disallow: /checkout
 Disallow: /carrinho
@@ -9,6 +10,6 @@ Disallow: /cadastro
 Disallow: /recuperar-senha
 Disallow: /redefinir-senha
 Disallow: /verificar-email
-Disallow: /api/
+Disallow: /api
 
 Sitemap: /sitemap.xml

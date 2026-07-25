@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 import NotFound from "@/pages/NotFound";
+import CategoryPage from "@/pages/CategoryPage";
 import ProductPage from "@/pages/ProductPage";
 import { lazy, Suspense } from "react";
 import { Route, Switch, useLocation } from "wouter";
@@ -38,6 +39,7 @@ import WhatsAppFloatingButton from "./components/WhatsAppFloatingButton";
 // Lazy: o painel admin (e a lib de planilhas usada na importação em massa) só é
 // carregado quando alguém acessa /admin — não pesa o bundle da loja pública.
 const AdminRouter = lazy(() => import("./pages/admin/AdminRouter"));
+const StoreHome = () => <Home />;
 
 function AdminFallback() {
   return (
@@ -62,7 +64,8 @@ function Router() {
 
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
+      <Route path={"/"} component={StoreHome} />
+      <Route path={"/categoria/:slug"} component={CategoryPage} />
       <Route path={"/entrar"} component={CustomerLogin} />
       <Route path={"/cadastro"} component={CustomerRegister} />
       <Route path={"/recuperar-senha"} component={CustomerForgotPassword} />

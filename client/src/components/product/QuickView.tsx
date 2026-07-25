@@ -95,6 +95,11 @@ function QuickViewGallery({
                   compact ? "aspect-square max-h-[34vh]" : "aspect-square"
                 }`}
                 draggable={false}
+                width={800}
+                height={800}
+                loading={i === 0 ? "eager" : "lazy"}
+                decoding={i === 0 ? "sync" : "async"}
+                sizes={compact ? "280px" : "(min-width: 768px) 50vw, 100vw"}
               />
             </CarouselItem>
           ))}

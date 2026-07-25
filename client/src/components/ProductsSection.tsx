@@ -30,12 +30,12 @@ function StitchDivider() {
   );
 }
 
-export default function ProductsSection() {
-  const [activeFilter, setActiveFilter] = useState("Todos");
+export default function ProductsSection({ initialFilter = "Todos" }: { initialFilter?: "Todos" | "Bolsas" }) {
+  const [activeFilter, setActiveFilter] = useState(initialFilter);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const filters = ["Todos", "Bolsas"];
+  const filters: Array<"Todos" | "Bolsas"> = ["Todos", "Bolsas"];
 
   useEffect(() => {
     fetchProducts()

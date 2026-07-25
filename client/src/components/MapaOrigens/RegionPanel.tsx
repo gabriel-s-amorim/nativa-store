@@ -39,6 +39,10 @@ function RegionProductCard({ product }: { product: RegionWithProducts["products"
           src={product.image}
           alt={product.name}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          width={128}
+          height={128}
+          loading="lazy"
+          decoding="async"
         />
       </div>
       <div className="min-w-0 flex-1">

@@ -30,6 +30,41 @@ async function startServer() {
 
   app.use(express.static(staticPath));
 
+  app.get("/categoria/:slug", (req, res, next) => {
+    const slug = String(req.params.slug ?? "").trim().toLowerCase();
+    if (slug === "bolsas") {
+      next();
+      return;
+    }
+
+    const indexPath = path.join(staticPath, "index.html");
+    if (!fs.existsSync(indexPath)) {
+      next();
+      return;
+    }
+
+    const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim();
+    const host =
+      (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() ||
+      req.headers.host;
+    const baseUrl = resolvePublicBaseUrl(host, proto);
+    const spaHtml = fs.readFileSync(indexPath, "utf8");
+
+    res
+      .status(404)
+      .type("html")
+      .send(
+        injectSeoIntoHtml(spaHtml, {
+          title: `Categoria não encontrada — ${SITE_NAME}`,
+          description: "Esta categoria não está disponível na Nativa Store.",
+          url: absoluteUrl(baseUrl, `/categoria/${encodeURIComponent(slug)}`),
+          image: absoluteUrl(baseUrl, "/images/bannerNativa.jpg"),
+          type: "website",
+          noIndex: true,
+        }),
+      );
+  });
+
   app.get("/produto/:slug", async (req, res, next) => {
     try {
       const indexPath = path.join(staticPath, "index.html");
@@ -73,9 +108,14 @@ async function startServer() {
         product.image || product.images[0] || "/images/bannerNativa.jpg",
       );
       const url = absoluteUrl(baseUrl, `/produto/${product.slug}`);
+      const categoryUrl = absoluteUrl(
+        baseUrl,
+        product.category === "Bolsas" ? "/categoria/bolsas" : "/#colecoes",
+      );
 
       res
         .status(200)
+        .setHeader("Cache-Control", "public, s-maxage=30, must-revalidate")
         .type("html")
         .send(
           injectSeoIntoHtml(spaHtml, {
@@ -83,7 +123,7 @@ async function startServer() {
             description,
             url,
             image,
-            type: "product",
+            type: "website",
             keywords: `${product.name}, ${product.category}, ${SITE_KEYWORDS}`,
             product: {
               price: product.price,
@@ -92,22 +132,54 @@ async function startServer() {
             },
             jsonLd: {
               "@context": "https://schema.org",
-              "@type": "Product",
-              name: product.name,
-              description,
-              image: (product.images?.length ? product.images : [product.image]).map((img) =>
-                absoluteUrl(baseUrl, img),
-              ),
-              sku: product.sku,
-              offers: {
-                "@type": "Offer",
-                url,
-                priceCurrency: "BRL",
-                price: product.price,
-                availability: product.inStock
-                  ? "https://schema.org/InStock"
-                  : "https://schema.org/OutOfStock",
-              },
+              "@graph": [
+                {
+                  "@type": "Product",
+                  "@id": `${url}#product`,
+                  name: product.name,
+                  description,
+                  image: (product.images?.length ? product.images : [product.image])
+                    .filter(Boolean)
+                    .map((img) => absoluteUrl(baseUrl, img)),
+                  sku: product.sku,
+                  category: product.category,
+                  brand: { "@type": "Brand", name: SITE_NAME },
+                  offers: {
+                    "@type": "Offer",
+                    url,
+                    priceCurrency: "BRL",
+                    price: product.price,
+                    availability: product.inStock
+                      ? "https://schema.org/InStock"
+                      : "https://schema.org/OutOfStock",
+                    itemCondition: "https://schema.org/NewCondition",
+                    seller: { "@type": "Organization", name: SITE_NAME },
+                  },
+                },
+                {
+                  "@type": "BreadcrumbList",
+                  itemListElement: [
+                    {
+                      "@type": "ListItem",
+                      position: 1,
+                      name: "Início",
+                      item: absoluteUrl(baseUrl, "/"),
+                    },
+                    {
+                      "@type": "ListItem",
+                      position: 2,
+                      name: product.category || "Coleções",
+                      item: categoryUrl,
+                    },
+                    {
+                      "@type": "ListItem",
+                      position: 3,
+                      name: product.name,
+                      item: url,
+                    },
+                  ],
+                },
+              ],
             },
           }),
         );
