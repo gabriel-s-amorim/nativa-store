@@ -14,7 +14,18 @@ const INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow";
 
 function resolveIndexNowOrigin(): string {
   const fromEnv = process.env.APP_URL || process.env.VITE_APP_URL;
-  return normalizeBaseUrl(fromEnv || SITE_ORIGIN);
+  const origin = normalizeBaseUrl(fromEnv || SITE_ORIGIN);
+  try {
+    const url = new URL(origin);
+    // Produção redireciona apex → www; IndexNow exige host alinhado ao canónico final
+    if (url.hostname === "nativa.art.br") {
+      url.hostname = "www.nativa.art.br";
+      return url.origin;
+    }
+  } catch {
+    // mantém origin
+  }
+  return origin;
 }
 
 function productPageUrl(slug: string, origin = resolveIndexNowOrigin()): string {
