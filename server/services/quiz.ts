@@ -173,7 +173,21 @@ export async function updateQuizResult(
   return mapQuizResultRow(data as QuizResultRow);
 }
 
-export async function deleteQuizResult(resultId: string): Promise<void> {
+export async function deleteQuizResult(
+  resultId: string,
+  options: { force?: boolean } = {},
+): Promise<void> {
+  if (options.force) {
+    const { error: completionsError } = await supabase
+      .from("quiz_completions")
+      .delete()
+      .eq("result_profile_id", resultId);
+
+    if (completionsError) {
+      throw new Error(completionsError.message);
+    }
+  }
+
   const { data, error } = await supabase
     .from("quiz_results")
     .delete()
@@ -184,7 +198,7 @@ export async function deleteQuizResult(resultId: string): Promise<void> {
   if (error) {
     if (error.message.toLowerCase().includes("foreign key") || error.code === "23503") {
       throw new Error(
-        "Não é possível excluir este perfil: já existem conclusões de quiz vinculadas a ele",
+        "Não é possível excluir este perfil: já existem conclusões de quiz vinculadas a ele. Use exclusão forçada para remover essas conclusões também.",
       );
     }
     throw new Error(error.message);

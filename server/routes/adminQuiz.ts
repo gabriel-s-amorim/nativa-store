@@ -127,7 +127,11 @@ router.put("/results/:resultId", requireAdmin, async (req, res) => {
 
 router.delete("/results/:resultId", requireAdmin, async (req, res) => {
   try {
-    await deleteQuizResult(req.params.resultId);
+    const force =
+      req.query.force === "1" ||
+      req.query.force === "true" ||
+      req.body?.force === true;
+    await deleteQuizResult(req.params.resultId, { force });
     res.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro ao excluir perfil";

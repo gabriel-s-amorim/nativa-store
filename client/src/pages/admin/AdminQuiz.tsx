@@ -549,16 +549,21 @@ export default function AdminQuiz() {
     }
   }
 
-  async function handleConfirmDeleteResult() {
+  async function handleConfirmDeleteResult(force = false) {
     if (!resultToDelete) return;
     setIsDeletingResult(true);
     try {
-      await deleteAdminQuizResult(resultToDelete.id);
+      await deleteAdminQuizResult(resultToDelete.id, { force });
       setResults((prev) => prev.filter((result) => result.id !== resultToDelete.id));
-      toast.success("Perfil excluído");
+      toast.success(force ? "Perfil e conclusões excluídos" : "Perfil excluído");
       setResultToDelete(null);
     } catch (error) {
-      toast.error(error instanceof AdminApiError ? error.message : "Não foi possível excluir");
+      const message = error instanceof AdminApiError ? error.message : "Não foi possível excluir";
+      if (!force && message.toLowerCase().includes("conclusões")) {
+        toast.error("Há conclusões neste perfil. Use “Excluir mesmo assim”.");
+      } else {
+        toast.error(message);
+      }
     } finally {
       setIsDeletingResult(false);
     }
@@ -1278,13 +1283,23 @@ export default function AdminQuiz() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir perfil?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se já houver conclusões do quiz neste perfil, a exclusão pode ser bloqueada.
+              Remove o perfil do quiz. Se houver conclusões vinculadas, use “Excluir mesmo assim”
+              (apaga também o histórico de raridade desse perfil).
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
             <AlertDialogCancel disabled={isDeletingResult}>Cancelar</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDeletingResult}
+              onClick={() => void handleConfirmDeleteResult(true)}
+              className="border-red-300 text-red-700 hover:bg-red-50"
+            >
+              {isDeletingResult ? "Excluindo…" : "Excluir mesmo assim"}
+            </Button>
             <AlertDialogAction
-              onClick={() => void handleConfirmDeleteResult()}
+              onClick={() => void handleConfirmDeleteResult(false)}
               disabled={isDeletingResult}
               className="bg-red-600 hover:bg-red-700"
             >

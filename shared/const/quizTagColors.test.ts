@@ -20,12 +20,12 @@ describe("quizTagColors", () => {
 
 describe("quizCombinations", () => {
   it("normaliza a chave independente da ordem", () => {
-    expect(combinationKey("r-vibrante", "r-natureza")).toBe("r-natureza|r-vibrante");
-    expect(combinationKey("r-natureza", "r-vibrante")).toBe("r-natureza|r-vibrante");
+    expect(combinationKey("r-livre", "r-natural")).toBe("r-livre|r-natural");
+    expect(combinationKey("r-natural", "r-livre")).toBe("r-livre|r-natural");
   });
 
   it("retorna texto pré-definido para pares conhecidos", () => {
-    const text = getCombinationText("r-natureza", "r-classico");
+    const text = getCombinationText("r-natural", "r-elegancia");
     expect(text).toMatch(/Sofisticação|acabamento|autenticidade/i);
   });
 

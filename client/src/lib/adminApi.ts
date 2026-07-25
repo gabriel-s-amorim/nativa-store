@@ -952,10 +952,14 @@ export function updateAdminQuizResult(resultId: string, input: QuizResultInput) 
   });
 }
 
-export function deleteAdminQuizResult(resultId: string) {
-  return request<{ success: true }>(`/api/admin/quiz/results/${encodeURIComponent(resultId)}`, {
-    method: "DELETE",
-  });
+export function deleteAdminQuizResult(resultId: string, options: { force?: boolean } = {}) {
+  const forceQuery = options.force ? "?force=1" : "";
+  return request<{ success: true }>(
+    `/api/admin/quiz/results/${encodeURIComponent(resultId)}${forceQuery}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function exportQuiz() {
