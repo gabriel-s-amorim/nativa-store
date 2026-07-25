@@ -557,58 +557,115 @@
   }
 
   /*
-   * VLibras: imediatamente acima do FAB da cadeira de rodas (.nativa-a11y-fab).
-   * Mobile: a11y = 3rem @ bottom 1.25rem → VLibras @ 1.25 + 3 + 0.5 = 4.75rem
-   * sm+:    a11y = 3.5rem @ bottom 2rem  → VLibras @ 2 + 3.5 + 0.5 = 6rem
+   * VLibras ancora no CONTAINER div[vw] (position:fixed).
+   * O plugin usa top:50% na posição L — por isso o ícone ia para o meio da tela.
+   * Empilhamos logo acima do FAB .nativa-a11y-fab (left-4 / bottom 1.25rem / size-12).
    */
-  div[vw] {
+  html body div[vw].enabled,
+  html body div[vw].enabled.left,
+  html body div[vw].nativa-vlibras-pinned {
+    display: block !important;
+    position: fixed !important;
     z-index: 43 !important;
-  }
-
-  div[vw] [vw-access-button],
-  div[vw].enabled [vw-access-button] {
-    z-index: 43 !important;
+    top: auto !important;
     right: auto !important;
     left: 1rem !important;
     bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px)) !important;
+    transform: none !important;
+    margin: 0 !important;
+    max-width: none !important;
+    min-width: 3rem !important;
+    min-height: 3rem !important;
+    width: 3rem !important;
+    height: 3rem !important;
+  }
+
+  html body div[vw] [vw-access-button],
+  html body div[vw].enabled [vw-access-button] {
+    display: flex !important;
+    position: relative !important;
+    z-index: 43 !important;
+    top: auto !important;
+    right: auto !important;
+    left: auto !important;
+    bottom: auto !important;
     width: 3rem !important;
     height: 3rem !important;
     min-width: 3rem !important;
-    min-height: 3rem !important;
+    max-width: 3rem !important;
     padding: 0 !important;
+    margin: 0 !important;
     border-radius: 9999px !important;
     overflow: hidden !important;
+    flex-direction: row !important;
   }
 
-  div[vw] [vw-access-button] img,
-  div[vw].enabled [vw-access-button] img {
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
-    display: block !important;
+  html body div[vw] [vw-access-button] img,
+  html body div[vw] [vw-access-button] .vp-access-button {
+    width: 3rem !important;
+    height: 3rem !important;
+    max-height: 3rem !important;
+    border-radius: 9999px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
   }
 
-  div[vw] .vw-plugin-wrapper,
-  div[vw].enabled .vw-plugin-wrapper {
+  /* Popup/balão que o plugin abre sozinho (~2s) — esconde */
+  html body div[vw] [vw-access-button] .vp-pop-up,
+  html body div[vw] .access-button-tooltip,
+  html body div[vw] [class*="tooltip"],
+  html body div[vw] [class*="balao"] {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  html body div[vw] .vw-plugin-wrapper,
+  html body div[vw].enabled .vw-plugin-wrapper {
     z-index: 47 !important;
   }
 
-  /* Tooltip/balão azul do botão — polui o layout; o FAB já se explica sozinho */
-  div[vw] .access-button-tooltip,
-  div[vw] [class*="tooltip"],
-  div[vw] [class*="balao"] {
-    display: none !important;
+  /* Painel do avatar aberto: libera o tamanho do container */
+  html body div[vw].enabled.active,
+  html body div[vw].nativa-vlibras-pinned.active {
+    width: auto !important;
+    height: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 95vw !important;
   }
 
   @media (min-width: 640px) {
-    div[vw] [vw-access-button],
-    div[vw].enabled [vw-access-button] {
+    html body div[vw].enabled,
+    html body div[vw].enabled.left,
+    html body div[vw].nativa-vlibras-pinned {
       left: 1.5rem !important;
       bottom: 6rem !important;
       width: 3.5rem !important;
       height: 3.5rem !important;
       min-width: 3.5rem !important;
       min-height: 3.5rem !important;
+    }
+
+    html body div[vw].enabled.active,
+    html body div[vw].nativa-vlibras-pinned.active {
+      width: auto !important;
+      height: auto !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+    }
+
+    html body div[vw] [vw-access-button],
+    html body div[vw].enabled [vw-access-button],
+    html body div[vw] [vw-access-button] img,
+    html body div[vw] [vw-access-button] .vp-access-button {
+      width: 3.5rem !important;
+      height: 3.5rem !important;
+      min-width: 3.5rem !important;
+      max-width: 3.5rem !important;
+      max-height: 3.5rem !important;
     }
   }
 }
