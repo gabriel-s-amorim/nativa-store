@@ -28,9 +28,12 @@ const SOCIAL_LINKS = [
 const CTA_BORDER = "36px 14px 42px 18px";
 const CTA_SLIDE_ID = "__social-cta__";
 
-/** Altura do card: cabe no viewport sem ser cortada pelo overflow do Embla */
-const CARD_HEIGHT = "min(620px, calc(100dvh - 13.5rem))";
-const CARD_MAX_WIDTH = "min(360px, 42vw)";
+/**
+ * Card deliberadamente menor que o viewport do Embla (+ py-8).
+ * Sem essa folga, o overflow corta o border-radius e vira linha reta.
+ */
+const CARD_HEIGHT = "min(500px, calc(100dvh - 20rem))";
+const CARD_MAX_WIDTH = "min(300px, 36vw)";
 
 export type StoriesCarouselHandle = {
   scrollPrev: () => void;
@@ -291,12 +294,12 @@ export const StoriesCarousel = forwardRef<
       />
 
       {/*
-        Viewport dimensionado para caber o card inteiro.
-        Vídeo com cover preenche borda a borda (sem faixa/caixa interna).
+        Viewport mais alto que o card + padding vertical:
+        o ativo fica “flutuando” com cantos arredondados visíveis.
       */}
-      <div className="relative h-[min(680px,calc(100dvh-11rem))] min-h-[480px]">
+      <div className="relative h-[min(640px,calc(100dvh-12rem))] min-h-[520px]">
         <div className="absolute inset-0 overflow-hidden" ref={emblaRef}>
-          <div className="flex h-full items-center">
+          <div className="flex h-full items-center py-8">
             {stories.map((story, index) => {
               const isActive = index === selected;
               const dist = Math.abs(index - selected);

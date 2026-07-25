@@ -169,7 +169,7 @@ export function StoriesDesktopPanel({
         </div>
 
         {/* Carrossel de vídeos — maior, à direita */}
-        <div className="min-w-0 overflow-hidden">
+        <div className="min-w-0 overflow-x-hidden">
           <StoriesCarousel
             ref={carouselRef}
             stories={STORIES}

@@ -393,7 +393,7 @@ export default function AboutSection() {
       <WaveDividerUp color="#FAF7F2" />
       <section
         id="sobre"
-        className="relative overflow-hidden py-20"
+        className="relative overflow-x-hidden py-20"
         style={{ background: "#F5F0E8" }}
       >
         <div className="pointer-events-none absolute top-16 left-4 feather-float-delay opacity-30" aria-hidden>
