@@ -7,6 +7,7 @@ import {
   useEffect,
   useImperativeHandle,
   useState,
+  type ReactNode,
 } from "react";
 import type { StoryWithUrls } from "@/content/stories";
 import { StoryVideo } from "./StoryVideo";
@@ -26,6 +27,10 @@ const SOCIAL_LINKS = [
 
 const CTA_BORDER = "36px 14px 42px 18px";
 const CTA_SLIDE_ID = "__social-cta__";
+
+/** Altura do card: cabe no viewport sem ser cortada pelo overflow do Embla */
+const CARD_HEIGHT = "min(620px, calc(100dvh - 13.5rem))";
+const CARD_MAX_WIDTH = "min(360px, 42vw)";
 
 export type StoriesCarouselHandle = {
   scrollPrev: () => void;
@@ -147,6 +152,39 @@ function SocialCtaCard({
   );
 }
 
+type StorySlideCardProps = {
+  borderRadius: string;
+  isActive: boolean;
+  reduceMotion: boolean | null;
+  children: ReactNode;
+};
+
+function StorySlideCard({
+  borderRadius,
+  isActive,
+  reduceMotion,
+  children,
+}: StorySlideCardProps) {
+  return (
+    <div
+      className="relative overflow-hidden"
+      style={{
+        height: CARD_HEIGHT,
+        aspectRatio: "9 / 16",
+        width: "auto",
+        maxWidth: CARD_MAX_WIDTH,
+        borderRadius,
+        boxShadow: isActive
+          ? "0 28px 64px rgba(196,82,42,0.38), 0 0 0 2px rgba(255,255,255,0.9)"
+          : "0 8px 24px rgba(61,43,31,0.12)",
+        transition: reduceMotion ? undefined : "box-shadow 0.35s ease",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /**
  * Carrossel desktop: vídeos grandes estilo TikTok, setas opcionais,
  * slide final = CTA de redes; depois disso volta à história.
@@ -252,10 +290,13 @@ export const StoriesCarousel = forwardRef<
         aria-hidden
       />
 
-      {/* Ativo bem maior; laterais recuam em escala (perspectiva TikTok) */}
-      <div className="relative h-[min(720px,82vh)] min-h-[560px]">
+      {/*
+        Viewport dimensionado para caber o card inteiro.
+        Vídeo com cover preenche borda a borda (sem faixa/caixa interna).
+      */}
+      <div className="relative h-[min(680px,calc(100dvh-11rem))] min-h-[480px]">
         <div className="absolute inset-0 overflow-hidden" ref={emblaRef}>
-          <div className="flex h-full items-end pb-2">
+          <div className="flex h-full items-center">
             {stories.map((story, index) => {
               const isActive = index === selected;
               const dist = Math.abs(index - selected);
@@ -268,10 +309,10 @@ export const StoriesCarousel = forwardRef<
               return (
                 <div
                   key={story.id}
-                  className="flex min-w-0 shrink-0 grow-0 basis-[72%] items-end justify-start px-2 sm:basis-[58%] md:basis-[48%] lg:basis-[380px] xl:basis-[400px]"
+                  className="flex min-w-0 shrink-0 grow-0 basis-auto items-center justify-start px-2"
                 >
                   <motion.div
-                    className="relative w-full max-w-[340px] lg:max-w-[360px] xl:max-w-[380px]"
+                    className="relative flex w-auto flex-col items-center"
                     onClick={() => {
                       if (!isActive) emblaApi?.scrollTo(index);
                     }}
@@ -279,7 +320,7 @@ export const StoriesCarousel = forwardRef<
                     transition={tween}
                     style={{
                       zIndex: isActive ? 20 : Math.max(1, 8 - dist),
-                      transformOrigin: "50% 100%",
+                      transformOrigin: "50% 50%",
                       cursor: isActive ? "default" : "pointer",
                       willChange: "transform, opacity",
                     }}
@@ -301,17 +342,10 @@ export const StoriesCarousel = forwardRef<
                         : `Ir para ${story.title ?? story.label ?? `story ${index + 1}`}`
                     }
                   >
-                    <div
-                      className="relative aspect-[9/16] w-full overflow-hidden"
-                      style={{
-                        borderRadius: story.borderRadius,
-                        boxShadow: isActive
-                          ? "0 28px 64px rgba(196,82,42,0.38), 0 0 0 2px rgba(255,255,255,0.9)"
-                          : "0 8px 24px rgba(61,43,31,0.12)",
-                        transition: reduceMotion
-                          ? undefined
-                          : "box-shadow 0.35s ease",
-                      }}
+                    <StorySlideCard
+                      borderRadius={story.borderRadius}
+                      isActive={isActive}
+                      reduceMotion={reduceMotion}
                     >
                       <StoryVideo
                         story={story}
@@ -322,7 +356,7 @@ export const StoriesCarousel = forwardRef<
                         loop
                         muted={muted}
                         onMutedChange={setMuted}
-                        fit={isActive ? "contain" : "cover"}
+                        fit="cover"
                       />
                       {!isActive ? (
                         <div
@@ -335,7 +369,7 @@ export const StoriesCarousel = forwardRef<
                           aria-hidden
                         />
                       ) : null}
-                    </div>
+                    </StorySlideCard>
 
                     <p
                       className="mt-3 h-4 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C4522A]"
@@ -352,13 +386,12 @@ export const StoriesCarousel = forwardRef<
               );
             })}
 
-            {/* Slide CTA redes */}
             <div
               key={CTA_SLIDE_ID}
-              className="flex min-w-0 shrink-0 grow-0 basis-[72%] items-end justify-start px-2 sm:basis-[58%] md:basis-[48%] lg:basis-[380px] xl:basis-[400px]"
+              className="flex min-w-0 shrink-0 grow-0 basis-auto items-center justify-start px-2"
             >
               <motion.div
-                className="relative w-full max-w-[340px] lg:max-w-[360px] xl:max-w-[380px]"
+                className="relative flex w-auto flex-col items-center"
                 animate={{
                   scale: isCta
                     ? 1
@@ -378,28 +411,24 @@ export const StoriesCarousel = forwardRef<
                 transition={tween}
                 style={{
                   zIndex: isCta ? 20 : 4,
-                  transformOrigin: "50% 100%",
+                  transformOrigin: "50% 50%",
                   willChange: "transform, opacity",
                 }}
                 onClick={() => {
                   if (!isCta) emblaApi?.scrollTo(ctaIndex);
                 }}
               >
-                <div
-                  className="relative aspect-[9/16] w-full overflow-hidden"
-                  style={{
-                    borderRadius: CTA_BORDER,
-                    boxShadow: isCta
-                      ? "0 28px 64px rgba(196,82,42,0.38), 0 0 0 2px rgba(255,255,255,0.9)"
-                      : "0 8px 24px rgba(61,43,31,0.12)",
-                  }}
+                <StorySlideCard
+                  borderRadius={CTA_BORDER}
+                  isActive={isCta}
+                  reduceMotion={reduceMotion}
                 >
                   <SocialCtaCard
                     active={isCta}
                     reduceMotion={reduceMotion}
                     onReturnToStory={onCycleComplete}
                   />
-                </div>
+                </StorySlideCard>
                 <p
                   className="mt-3 h-4 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C4522A]"
                   style={{
