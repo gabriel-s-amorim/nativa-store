@@ -1,7 +1,13 @@
 import { ChevronLeft, ChevronRight, Facebook, Instagram } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
 import { motion, useReducedMotion } from "framer-motion";
-import { useCallback, useEffect, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useState,
+} from "react";
 import type { StoryWithUrls } from "@/content/stories";
 import { StoryVideo } from "./StoryVideo";
 
@@ -21,11 +27,23 @@ const SOCIAL_LINKS = [
 const CTA_BORDER = "36px 14px 42px 18px";
 const CTA_SLIDE_ID = "__social-cta__";
 
+export type StoriesCarouselHandle = {
+  scrollPrev: () => void;
+  scrollNext: () => void;
+  scrollTo: (index: number) => void;
+};
+
 type StoriesCarouselProps = {
   stories: StoryWithUrls[];
   nearViewport: boolean;
   /** Depois do CTA social, avança de volta à história */
   onCycleComplete?: () => void;
+  /** Índice ativo (vídeos 0..n-1, CTA = stories.length) */
+  onSelectedChange?: (index: number) => void;
+  /** Esconde setas laterais (quando a navegação fica no painel esquerdo) */
+  hideArrows?: boolean;
+  /** Esconde dots / hint inferior */
+  hideFooter?: boolean;
 };
 
 function TikTokGlyph({ className }: { className?: string }) {
@@ -54,7 +72,6 @@ function SocialCtaCard({
           "linear-gradient(160deg, #3D2B1F 0%, #5C4033 42%, #C4522A 100%)",
       }}
     >
-      {/* Brilho animado */}
       {!reduceMotion ? (
         <motion.div
           className="pointer-events-none absolute -left-1/4 top-0 h-full w-1/2 skew-x-12 bg-gradient-to-r from-transparent via-white/10 to-transparent"
@@ -131,20 +148,29 @@ function SocialCtaCard({
 }
 
 /**
- * Carrossel desktop: altura fixa (sem pular a seção), setas simétricas,
+ * Carrossel desktop: vídeos grandes estilo TikTok, setas opcionais,
  * slide final = CTA de redes; depois disso volta à história.
  */
-export function StoriesCarousel({
-  stories,
-  nearViewport,
-  onCycleComplete,
-}: StoriesCarouselProps) {
+export const StoriesCarousel = forwardRef<
+  StoriesCarouselHandle,
+  StoriesCarouselProps
+>(function StoriesCarousel(
+  {
+    stories,
+    nearViewport,
+    onCycleComplete,
+    onSelectedChange,
+    hideArrows = false,
+    hideFooter = false,
+  },
+  ref,
+) {
   const reduceMotion = useReducedMotion();
   const slideCount = stories.length + 1; // + CTA
   const ctaIndex = stories.length;
 
   const [emblaRef, emblaApi] = useEmblaCarousel({
-    align: "center",
+    align: "start",
     containScroll: false,
     dragFree: false,
     skipSnaps: false,
@@ -159,8 +185,10 @@ export function StoriesCarousel({
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
-    setSelected(emblaApi.selectedScrollSnap());
-  }, [emblaApi]);
+    const next = emblaApi.selectedScrollSnap();
+    setSelected(next);
+    onSelectedChange?.(next);
+  }, [emblaApi, onSelectedChange]);
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -179,18 +207,35 @@ export function StoriesCarousel({
     return () => window.cancelAnimationFrame(id);
   }, [emblaApi, nearViewport, slideCount]);
 
-  const scrollPrev = () => {
-    if (!emblaApi || isFirst) return;
+  const scrollPrev = useCallback(() => {
+    if (!emblaApi || selected <= 0) return;
     emblaApi.scrollPrev();
-  };
+  }, [emblaApi, selected]);
 
-  const scrollNext = () => {
-    if (isCta) {
+  const scrollNext = useCallback(() => {
+    if (selected === ctaIndex) {
       onCycleComplete?.();
       return;
     }
     emblaApi?.scrollNext();
-  };
+  }, [emblaApi, selected, ctaIndex, onCycleComplete]);
+
+  const scrollTo = useCallback(
+    (index: number) => {
+      emblaApi?.scrollTo(index);
+    },
+    [emblaApi],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollPrev,
+      scrollNext,
+      scrollTo,
+    }),
+    [scrollPrev, scrollNext, scrollTo],
+  );
 
   const tween = reduceMotion
     ? { duration: 0 }
@@ -199,7 +244,7 @@ export function StoriesCarousel({
   return (
     <div className="relative w-full">
       <div
-        className="pointer-events-none absolute left-1/2 top-[46%] h-[52%] w-[min(420px,55%)] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
+        className="pointer-events-none absolute left-[18%] top-[46%] h-[58%] w-[min(480px,70%)] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
         style={{
           background:
             "radial-gradient(circle, rgba(196,82,42,0.2) 0%, rgba(232,130,26,0.06) 50%, transparent 72%)",
@@ -207,8 +252,8 @@ export function StoriesCarousel({
         aria-hidden
       />
 
-      {/* Ativo maior; laterais menores. Escala ancorada na BASE → sem puxar a seção pra baixo */}
-      <div className="relative h-[min(640px,78vh)] min-h-[500px]">
+      {/* Ativo bem maior; laterais recuam em escala (perspectiva TikTok) */}
+      <div className="relative h-[min(720px,82vh)] min-h-[560px]">
         <div className="absolute inset-0 overflow-hidden" ref={emblaRef}>
           <div className="flex h-full items-end pb-2">
             {stories.map((story, index) => {
@@ -217,16 +262,16 @@ export function StoriesCarousel({
               const isNeighbor = dist === 1;
               const shouldLoad = nearViewport && dist <= 1 && !isCta;
 
-              const scale = isActive ? 1 : dist === 1 ? 0.78 : 0.64;
-              const opacity = isActive ? 1 : dist === 1 ? 0.55 : 0.3;
+              const scale = isActive ? 1 : dist === 1 ? 0.82 : dist === 2 ? 0.7 : 0.6;
+              const opacity = isActive ? 1 : dist === 1 ? 0.62 : dist === 2 ? 0.38 : 0.22;
 
               return (
                 <div
                   key={story.id}
-                  className="flex min-w-0 shrink-0 grow-0 basis-[58%] items-end justify-center px-2 sm:basis-[46%] md:basis-[38%] lg:basis-[300px] xl:basis-[320px]"
+                  className="flex min-w-0 shrink-0 grow-0 basis-[72%] items-end justify-start px-2 sm:basis-[58%] md:basis-[48%] lg:basis-[380px] xl:basis-[400px]"
                 >
                   <motion.div
-                    className="relative w-full max-w-[280px] lg:max-w-[300px]"
+                    className="relative w-full max-w-[340px] lg:max-w-[360px] xl:max-w-[380px]"
                     onClick={() => {
                       if (!isActive) emblaApi?.scrollTo(index);
                     }}
@@ -253,7 +298,7 @@ export function StoriesCarousel({
                     aria-label={
                       isActive
                         ? undefined
-                        : `Ir para ${story.label ?? `story ${index + 1}`}`
+                        : `Ir para ${story.title ?? story.label ?? `story ${index + 1}`}`
                     }
                   >
                     <div
@@ -261,7 +306,7 @@ export function StoriesCarousel({
                       style={{
                         borderRadius: story.borderRadius,
                         boxShadow: isActive
-                          ? "0 24px 56px rgba(196,82,42,0.35), 0 0 0 2px rgba(255,255,255,0.9)"
+                          ? "0 28px 64px rgba(196,82,42,0.38), 0 0 0 2px rgba(255,255,255,0.9)"
                           : "0 8px 24px rgba(61,43,31,0.12)",
                         transition: reduceMotion
                           ? undefined
@@ -310,13 +355,25 @@ export function StoriesCarousel({
             {/* Slide CTA redes */}
             <div
               key={CTA_SLIDE_ID}
-              className="flex min-w-0 shrink-0 grow-0 basis-[62%] items-end justify-center px-2 sm:basis-[50%] md:basis-[40%] lg:basis-[320px] xl:basis-[340px]"
+              className="flex min-w-0 shrink-0 grow-0 basis-[72%] items-end justify-start px-2 sm:basis-[58%] md:basis-[48%] lg:basis-[380px] xl:basis-[400px]"
             >
               <motion.div
-                className="relative w-full max-w-[300px] lg:max-w-[320px]"
+                className="relative w-full max-w-[340px] lg:max-w-[360px] xl:max-w-[380px]"
                 animate={{
-                  scale: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.78 : 0.64,
-                  opacity: isCta ? 1 : Math.abs(selected - ctaIndex) === 1 ? 0.55 : 0.3,
+                  scale: isCta
+                    ? 1
+                    : Math.abs(selected - ctaIndex) === 1
+                      ? 0.82
+                      : Math.abs(selected - ctaIndex) === 2
+                        ? 0.7
+                        : 0.6,
+                  opacity: isCta
+                    ? 1
+                    : Math.abs(selected - ctaIndex) === 1
+                      ? 0.62
+                      : Math.abs(selected - ctaIndex) === 2
+                        ? 0.38
+                        : 0.22,
                 }}
                 transition={tween}
                 style={{
@@ -333,7 +390,7 @@ export function StoriesCarousel({
                   style={{
                     borderRadius: CTA_BORDER,
                     boxShadow: isCta
-                      ? "0 24px 56px rgba(196,82,42,0.35), 0 0 0 2px rgba(255,255,255,0.9)"
+                      ? "0 28px 64px rgba(196,82,42,0.38), 0 0 0 2px rgba(255,255,255,0.9)"
                       : "0 8px 24px rgba(61,43,31,0.12)",
                   }}
                 >
@@ -357,71 +414,82 @@ export function StoriesCarousel({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={scrollPrev}
-          disabled={isFirst}
-          className="absolute left-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white disabled:pointer-events-none disabled:opacity-20 sm:left-1 md:left-2"
-          aria-label="Anterior"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={scrollNext}
-          className="absolute right-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white sm:right-1 md:right-2"
-          aria-label={isCta ? "Voltar para Nossa História" : "Próximo"}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
+        {!hideArrows ? (
+          <>
+            <button
+              type="button"
+              onClick={scrollPrev}
+              disabled={isFirst}
+              className="absolute left-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white disabled:pointer-events-none disabled:opacity-20 sm:left-1 md:left-2"
+              aria-label="Anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={scrollNext}
+              className="absolute right-0 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8D5C4]/90 bg-white/95 text-[#3D2B1F] shadow-md backdrop-blur-sm transition hover:bg-white sm:right-1 md:right-2"
+              aria-label={isCta ? "Voltar para Nossa História" : "Próximo"}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </>
+        ) : null}
       </div>
 
-      <div className="mt-1 flex items-center justify-center gap-2" role="tablist" aria-label="Stories">
-        {stories.map((story, index) => (
-          <button
-            key={story.id}
-            type="button"
-            role="tab"
-            aria-selected={index === selected}
-            aria-label={`Story ${index + 1}`}
-            onClick={() => emblaApi?.scrollTo(index)}
-            className="h-1.5 rounded-full transition-all duration-300"
-            style={{
-              width: index === selected ? 28 : 7,
-              background:
-                index === selected
-                  ? "linear-gradient(90deg, #C4522A, #E8821A)"
+      {!hideFooter ? (
+        <>
+          <div
+            className="mt-1 flex items-center justify-center gap-2"
+            role="tablist"
+            aria-label="Stories"
+          >
+            {stories.map((story, index) => (
+              <button
+                key={story.id}
+                type="button"
+                role="tab"
+                aria-selected={index === selected}
+                aria-label={`Story ${index + 1}`}
+                onClick={() => emblaApi?.scrollTo(index)}
+                className="h-1.5 rounded-full transition-all duration-300"
+                style={{
+                  width: index === selected ? 28 : 7,
+                  background:
+                    index === selected
+                      ? "linear-gradient(90deg, #C4522A, #E8821A)"
+                      : "#E8D5C4",
+                }}
+              />
+            ))}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isCta}
+              aria-label="Redes sociais"
+              onClick={() => emblaApi?.scrollTo(ctaIndex)}
+              className="h-1.5 rounded-full transition-all duration-300"
+              style={{
+                width: isCta ? 28 : 7,
+                background: isCta
+                  ? "linear-gradient(90deg, #2D6A4F, #1B7A8C)"
                   : "#E8D5C4",
-            }}
-          />
-        ))}
-        <button
-          type="button"
-          role="tab"
-          aria-selected={isCta}
-          aria-label="Redes sociais"
-          onClick={() => emblaApi?.scrollTo(ctaIndex)}
-          className="h-1.5 rounded-full transition-all duration-300"
-          style={{
-            width: isCta ? 28 : 7,
-            background: isCta
-              ? "linear-gradient(90deg, #2D6A4F, #1B7A8C)"
-              : "#E8D5C4",
-          }}
-        />
-      </div>
+              }}
+            />
+          </div>
 
-      {/* hint — altura sempre reservada (sem pular layout) */}
-      <p
-        className="mt-3 h-[17px] text-center text-[11px] text-[#8B6F5E]"
-        style={{ fontFamily: "'Lora', serif" }}
-      >
-        {isCta
-          ? "Próximo volta à nossa história"
-          : isLastVideo
-            ? "Próximo: convite às redes"
-            : "\u00A0"}
-      </p>
+          <p
+            className="mt-3 h-[17px] text-center text-[11px] text-[#8B6F5E]"
+            style={{ fontFamily: "'Lora', serif" }}
+          >
+            {isCta
+              ? "Próximo volta à nossa história"
+              : isLastVideo
+                ? "Próximo: convite às redes"
+                : "\u00A0"}
+          </p>
+        </>
+      ) : null}
     </div>
   );
-}
+});
