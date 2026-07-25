@@ -126,6 +126,9 @@ client/public/__manus__/version.json
 # Internal AI/agent onboarding doc (not for public repo)
 AGENTS.md
 
+# Brief de design interno (mantém local; não publicar)
+ideas.md
+
 # Guia interno Brevo (produção — não publicar)
 docs/brevo-producao.md
 
