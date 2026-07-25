@@ -13,5 +13,7 @@ export const SITE_BG_COLOR = "#F5F0E8";
 export const SITE_LOGO_PATH = "/images/logo-nativa.png";
 export const SITE_OG_IMAGE_PATH = "/images/bannerNativa.jpg";
 export const SITE_TWITTER_HANDLE = "@nativastore";
+/** Domínio canônico público (sem barra final). Usado no HTML estático da Home. */
+export const SITE_ORIGIN = "https://nativa.art.br";
 
 export const DEFAULT_TITLE_TEMPLATE = `%s — ${SITE_NAME}`;

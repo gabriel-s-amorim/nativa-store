@@ -14,7 +14,7 @@ async function main() {
     process.env.APP_URL ||
       process.env.VITE_APP_URL ||
       process.env.VERCEL_PROJECT_PRODUCTION_URL ||
-      "https://nativa-store.vercel.app",
+      "https://nativa.art.br",
   );
   const sourcePath = path.join(root, "dist", "public", "index.html");
   const outputDir = path.join(root, "dist", "public", "categoria", "bolsas");
