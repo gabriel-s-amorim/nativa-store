@@ -12,12 +12,13 @@ declare global {
 }
 
 const SCRIPT_ID = "vlibras-plugin-script";
+const ROOT_PATH = "https://vlibras.gov.br/app";
 let vlibrasBooted = false;
 
 /**
  * Widget oficial VLibras (Governo Federal / UFPB).
- * Traduz o conteúdo da página para Libras — script público pronto.
- * Posicionado à esquerda para não sobrepor o WhatsApp (direita).
+ * Deve aparecer no mobile e no desktop (FAB azul, canto inferior esquerdo).
+ * Overlays da loja (menu, etc.) escondem o widget via CSS no body.
  */
 export default function VLibrasWidget() {
   const [location] = useLocation();
@@ -34,19 +35,20 @@ export default function VLibrasWidget() {
     if (isAdmin) return;
 
     let cancelled = false;
+    let loadHandler: (() => void) | null = null;
 
     const boot = () => {
       if (cancelled || vlibrasBooted || !window.VLibras?.Widget) return;
       try {
         new window.VLibras.Widget({
-          rootPath: "https://vlibras.gov.br/app",
+          rootPath: ROOT_PATH,
           position: "L",
           opacity: 1,
         });
         vlibrasBooted = true;
       } catch {
         try {
-          new window.VLibras.Widget("https://vlibras.gov.br/app");
+          new window.VLibras.Widget(ROOT_PATH);
           vlibrasBooted = true;
         } catch {
           // Widget indisponível ou já inicializado
@@ -56,18 +58,27 @@ export default function VLibrasWidget() {
 
     const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
     if (existing) {
-      if (window.VLibras?.Widget) boot();
-      else existing.addEventListener("load", boot, { once: true });
+      if (window.VLibras?.Widget) {
+        boot();
+      } else {
+        loadHandler = () => boot();
+        existing.addEventListener("load", loadHandler);
+      }
       return () => {
         cancelled = true;
+        if (loadHandler) existing.removeEventListener("load", loadHandler);
       };
     }
 
     const script = document.createElement("script");
     script.id = SCRIPT_ID;
-    script.src = "https://vlibras.gov.br/app/vlibras-plugin.js";
+    script.src = `${ROOT_PATH}/vlibras-plugin.js`;
     script.async = true;
     script.onload = boot;
+    script.onerror = () => {
+      // CDN oficial indisponível — não quebra a loja
+      script.remove();
+    };
     document.body.appendChild(script);
 
     return () => {
@@ -80,7 +91,7 @@ export default function VLibrasWidget() {
   // createElement evita erros de TS nos atributos customizados do VLibras (vw, vw-access-button).
   return createElement(
     "div",
-    { vw: "", className: "enabled" },
+    { vw: "", className: "enabled", "aria-label": "VLibras — tradução em Libras" },
     createElement("div", { "vw-access-button": "", className: "active" }),
     createElement(
       "div",

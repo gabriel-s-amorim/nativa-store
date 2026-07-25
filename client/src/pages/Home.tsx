@@ -47,7 +47,7 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-screen" style={{ background: "#F5F0E8" }}>
+    <div className="min-h-screen overflow-x-clip" style={{ background: "#F5F0E8" }}>
       <Navbar />
       <HeroSection />
       <BelowFold>

@@ -59,6 +59,30 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Fecha menu ao mudar de rota; sincroniza body (scroll + VLibras)
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location]);
+
+  useEffect(() => {
+    document.body.classList.toggle("is-mobile-nav-open", mobileOpen);
+    const prevOverflow = document.body.style.overflow;
+    if (mobileOpen) document.body.style.overflow = "hidden";
+    return () => {
+      document.body.classList.remove("is-mobile-nav-open");
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [mobileOpen]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileOpen]);
+
   const handleNavClick = (href: string) => {
     setMobileOpen(false);
     if (!isHome) {
@@ -67,6 +91,10 @@ export default function Navbar() {
     }
     const el = document.querySelector(href);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const toggleMobileMenu = () => {
+    setMobileOpen((open) => !open);
   };
 
   return (
@@ -84,12 +112,13 @@ export default function Navbar() {
             <div className="relative z-10 flex items-center gap-1">
               <button
                 type="button"
-                className="md:hidden flex items-center justify-center w-9 h-9 rounded-full hover:bg-[#C4522A]/10 text-[#3D2B1F] transition-all duration-200"
-                onClick={() => setMobileOpen(!mobileOpen)}
-                aria-label="Menu"
+                className="md:hidden relative z-20 flex size-11 touch-manipulation items-center justify-center rounded-full text-[#3D2B1F] transition-colors duration-200 hover:bg-[#C4522A]/10"
+                onClick={toggleMobileMenu}
+                aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
                 aria-expanded={mobileOpen}
+                aria-controls="mobile-nav-drawer"
               >
-                {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+                {mobileOpen ? <X size={22} aria-hidden /> : <Menu size={22} aria-hidden />}
               </button>
               <Link href="/" className="hidden md:block group shrink-0">
                 <NativaLogo className="h-9 sm:h-10 md:h-11 w-auto" showTagline />
@@ -189,15 +218,24 @@ export default function Navbar() {
         </div>
       </header>
 
-      {/* Mobile Menu — abre pela esquerda */}
+      {/* Mobile Menu — acima do VLibras (z-43), abaixo do header (z-50) */}
       <div
-        className={`fixed inset-0 z-40 transition-all duration-300 ${
+        id="mobile-nav-drawer"
+        className={`fixed inset-0 z-[48] transition-opacity duration-300 md:hidden ${
           mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
+        aria-hidden={!mobileOpen}
       >
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
         <div
-          className={`absolute top-0 left-0 h-full w-72 bg-[#F5F0E8] shadow-2xl transition-transform duration-300 ${
+          className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu de navegação"
+          className={`absolute top-0 left-0 h-full w-[min(18rem,85vw)] bg-[#F5F0E8] shadow-2xl transition-transform duration-300 ${
             mobileOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >

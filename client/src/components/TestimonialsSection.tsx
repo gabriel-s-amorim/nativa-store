@@ -47,10 +47,10 @@ export default function TestimonialsSection() {
       style={{ background: "#F5F0E8" }}
     >
       {/* Floating feathers */}
-      <div className="absolute top-10 right-[5%] feather-float opacity-30">
+      <div className="pointer-events-none absolute top-10 right-[5%] feather-float opacity-30" aria-hidden>
         <FeatherOrange className="w-6 h-14 rotate-[15deg]" />
       </div>
-      <div className="absolute bottom-12 left-[3%] feather-float-delay opacity-25">
+      <div className="pointer-events-none absolute bottom-12 left-[3%] feather-float-delay opacity-25" aria-hidden>
         <FeatherGreen className="w-5 h-12 rotate-[-20deg]" />
       </div>
 

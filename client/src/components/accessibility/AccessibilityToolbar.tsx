@@ -159,7 +159,7 @@ export default function AccessibilityToolbar() {
           </div>
 
           <p className="mt-3 text-[0.65rem] leading-relaxed text-[#8B6F5E]/90">
-            Use o botão VLibras (lado esquerdo) para tradução em Libras.
+            Tradução em Libras: botão azul VLibras, acima deste atalho (mobile e desktop).
           </p>
         </div>
       )}

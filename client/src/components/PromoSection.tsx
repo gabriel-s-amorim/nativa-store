@@ -74,13 +74,13 @@ export default function PromoSection() {
       style={{ background: "#FAF7F2" }}
     >
       {/* Decorative feathers */}
-      <div className="absolute top-8 left-[5%] feather-float opacity-30">
+      <div className="pointer-events-none absolute top-8 left-[5%] feather-float opacity-30" aria-hidden>
         <FeatherOrange className="w-7 h-16 rotate-[-30deg]" />
       </div>
-      <div className="absolute top-20 right-[8%] feather-float-delay opacity-25">
+      <div className="pointer-events-none absolute top-20 right-[8%] feather-float-delay opacity-25" aria-hidden>
         <FeatherBlue className="w-6 h-14 rotate-[25deg]" />
       </div>
-      <div className="absolute bottom-10 left-[12%] feather-float-delay2 opacity-30">
+      <div className="pointer-events-none absolute bottom-10 left-[12%] feather-float-delay2 opacity-30" aria-hidden>
         <FeatherGreen className="w-5 h-12 rotate-[10deg]" />
       </div>
 
