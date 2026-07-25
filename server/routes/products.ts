@@ -1,5 +1,6 @@
 import { productSchema, type ProductInput } from "@shared/schemas/product";
 import { Router } from "express";
+import { notifyProductUrls } from "../lib/indexnow";
 import { requireAdmin } from "../middleware/requireAdmin";
 import {
   bulkUpsertProducts,
@@ -60,6 +61,7 @@ router.post("/", requireAdmin, async (req, res) => {
     }
 
     const product = await createProduct(input);
+    notifyProductUrls(product.slug);
     res.status(201).json(product);
   } catch (error) {
     res.status(500).json({
@@ -95,6 +97,7 @@ router.post("/bulk", requireAdmin, async (req, res) => {
     }
 
     const result = await bulkUpsertProducts(validItems);
+    notifyProductUrls(...validItems.map((item) => item.slug));
     res.json({ ...result, errors });
   } catch (error) {
     res.status(500).json({
@@ -127,6 +130,8 @@ router.put("/:slug", requireAdmin, async (req, res) => {
       return;
     }
 
+    // Slug antigo + novo: sinaliza alteração e eventual redirecionamento de URL
+    notifyProductUrls(currentSlug, product.slug);
     res.json(product);
   } catch (error) {
     res.status(500).json({
@@ -137,13 +142,16 @@ router.put("/:slug", requireAdmin, async (req, res) => {
 
 router.delete("/:slug", requireAdmin, async (req, res) => {
   try {
-    const deleted = await deleteProduct(req.params.slug);
+    const slug = req.params.slug;
+    const deleted = await deleteProduct(slug);
 
     if (!deleted) {
       res.status(404).json({ error: "Produto não encontrado" });
       return;
     }
 
+    // IndexNow aceita a URL removida para que os motores atualizem o índice
+    notifyProductUrls(slug);
     res.status(204).end();
   } catch (error) {
     res.status(500).json({
