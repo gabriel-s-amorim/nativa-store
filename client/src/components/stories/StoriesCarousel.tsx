@@ -28,12 +28,13 @@ const SOCIAL_LINKS = [
 const CTA_BORDER = "36px 14px 42px 18px";
 const CTA_SLIDE_ID = "__social-cta__";
 
-/**
- * Card deliberadamente menor que o viewport do Embla (+ py-8).
- * Sem essa folga, o overflow corta o border-radius e vira linha reta.
- */
-const CARD_HEIGHT = "min(500px, calc(100dvh - 20rem))";
-const CARD_MAX_WIDTH = "min(300px, 36vw)";
+/** Tamanho grande do card (9:16). */
+const CARD_HEIGHT = "min(620px, calc(100dvh - 13.5rem))";
+const CARD_MAX_WIDTH = "min(360px, 42vw)";
+
+/** Sombra leve — blur forte é cortado pelo overflow do Embla e fica com borda reta. */
+const SHADOW_ACTIVE = "0 6px 18px rgba(61,43,31,0.16), 0 0 0 1.5px rgba(255,255,255,0.88)";
+const SHADOW_IDLE = "0 4px 12px rgba(61,43,31,0.1)";
 
 export type StoriesCarouselHandle = {
   scrollPrev: () => void;
@@ -177,9 +178,7 @@ function StorySlideCard({
         width: "auto",
         maxWidth: CARD_MAX_WIDTH,
         borderRadius,
-        boxShadow: isActive
-          ? "0 28px 64px rgba(196,82,42,0.38), 0 0 0 2px rgba(255,255,255,0.9)"
-          : "0 8px 24px rgba(61,43,31,0.12)",
+        boxShadow: isActive ? SHADOW_ACTIVE : SHADOW_IDLE,
         transition: reduceMotion ? undefined : "box-shadow 0.35s ease",
       }}
     >
@@ -293,13 +292,9 @@ export const StoriesCarousel = forwardRef<
         aria-hidden
       />
 
-      {/*
-        Viewport mais alto que o card + padding vertical:
-        o ativo fica “flutuando” com cantos arredondados visíveis.
-      */}
-      <div className="relative h-[min(640px,calc(100dvh-12rem))] min-h-[520px]">
+      <div className="relative h-[min(680px,calc(100dvh-11rem))] min-h-[560px]">
         <div className="absolute inset-0 overflow-hidden" ref={emblaRef}>
-          <div className="flex h-full items-center py-8">
+          <div className="flex h-full items-center">
             {stories.map((story, index) => {
               const isActive = index === selected;
               const dist = Math.abs(index - selected);
