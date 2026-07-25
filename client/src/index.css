@@ -557,9 +557,9 @@
   }
 
   /*
-   * VLibras (mobile + desktop): FAB azul inferior esquerdo.
-   * Mantém no mobile (acessibilidade), mas com z-index abaixo do header/menus
-   * para não “invadir” o menu hambúrguer nem overlays.
+   * VLibras: imediatamente acima do FAB da cadeira de rodas (.nativa-a11y-fab).
+   * Mobile: a11y = 3rem @ bottom 1.25rem → VLibras @ 1.25 + 3 + 0.5 = 4.75rem
+   * sm+:    a11y = 3.5rem @ bottom 2rem  → VLibras @ 2 + 3.5 + 0.5 = 6rem
    */
   div[vw] {
     z-index: 43 !important;
@@ -568,8 +568,24 @@
   div[vw] [vw-access-button],
   div[vw].enabled [vw-access-button] {
     z-index: 43 !important;
-    bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
+    right: auto !important;
     left: 1rem !important;
+    bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px)) !important;
+    width: 3rem !important;
+    height: 3rem !important;
+    min-width: 3rem !important;
+    min-height: 3rem !important;
+    padding: 0 !important;
+    border-radius: 9999px !important;
+    overflow: hidden !important;
+  }
+
+  div[vw] [vw-access-button] img,
+  div[vw].enabled [vw-access-button] img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block !important;
   }
 
   div[vw] .vw-plugin-wrapper,
@@ -587,8 +603,12 @@
   @media (min-width: 640px) {
     div[vw] [vw-access-button],
     div[vw].enabled [vw-access-button] {
-      bottom: 6.5rem !important;
       left: 1.5rem !important;
+      bottom: 6rem !important;
+      width: 3.5rem !important;
+      height: 3.5rem !important;
+      min-width: 3.5rem !important;
+      min-height: 3.5rem !important;
     }
   }
 }
