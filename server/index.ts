@@ -4,7 +4,7 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createApiApp } from "./app";
-import { getProductBySlug, listProducts } from "./services/products";
+import { getProductBySlug, listRelatedProducts } from "./services/products";
 import { absoluteUrl, stripHtml, truncateMeta } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME } from "@shared/const/site";
 import {
@@ -120,10 +120,7 @@ async function startServer() {
       let bodyContent: string | undefined;
       if (crawler) {
         try {
-          const all = await listProducts();
-          const related = all
-            .filter((p) => p.category === product.category && p.id !== product.id)
-            .slice(0, 3);
+          const related = await listRelatedProducts(product.category, product.id, 3);
           bodyContent = renderProductSeoBody({ product, relatedProducts: related });
         } catch (renderError) {
           console.warn(

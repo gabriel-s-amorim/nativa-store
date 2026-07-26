@@ -1,8 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { absoluteUrl, stripHtml, truncateMeta } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME, SITE_OG_IMAGE_PATH } from "@shared/const/site";
-import type { Product } from "@shared/types/product";
-import { getProductBySlug, listProducts } from "../services/products";
+import { getProductBySlug, listProducts, listRelatedProducts } from "../services/products";
 import {
   buildStandaloneOgHtml,
   injectSeoIntoHtml,
@@ -33,10 +32,6 @@ function requestBaseUrl(req: Request): string {
     (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() ||
     req.headers.host;
   return resolvePublicBaseUrl(host, proto);
-}
-
-function relatedProductsFor(product: Product, all: Product[], limit = 3): Product[] {
-  return all.filter((p) => p.category === product.category && p.id !== product.id).slice(0, limit);
 }
 
 async function sendSeoHtml(req: Request, res: Response, options: InjectMetaOptions, status = 200) {
@@ -219,10 +214,10 @@ router.get("/produto/:slug", async (req, res) => {
     let bodyContent: string | undefined;
     if (crawler) {
       try {
-        const all = await listProducts();
+        const related = await listRelatedProducts(product.category, product.id, 3);
         bodyContent = renderProductSeoBody({
           product,
-          relatedProducts: relatedProductsFor(product, all),
+          relatedProducts: related,
         });
       } catch (renderError) {
         console.warn(

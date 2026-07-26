@@ -50,7 +50,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { formatPrice, fetchProductBySlug, fetchProducts, getRelatedProducts } from "@/lib/products";
+import { formatPrice, fetchProductBySlug, fetchRelatedProducts } from "@/lib/products";
 import { buildProductJsonLd, usePageMeta } from "@/lib/seo";
 import { stripHtml } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME } from "@shared/const/site";
@@ -118,8 +118,8 @@ export default function ProductPage() {
     setNotFound(false);
     setProduct(null);
 
-    Promise.all([fetchProductBySlug(slug), fetchProducts()])
-      .then(([loadedProduct, allProducts]) => {
+    Promise.all([fetchProductBySlug(slug), fetchRelatedProducts(slug)])
+      .then(([loadedProduct, related]) => {
         if (cancelled) return;
 
         if (!loadedProduct) {
@@ -128,7 +128,7 @@ export default function ProductPage() {
         }
 
         setProduct(loadedProduct);
-        setRelatedProducts(getRelatedProducts(allProducts, loadedProduct));
+        setRelatedProducts(related);
       })
       .catch(() => {
         if (!cancelled) setNotFound(true);

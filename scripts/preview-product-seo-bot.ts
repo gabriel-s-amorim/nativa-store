@@ -11,7 +11,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { absoluteUrl, stripHtml, truncateMeta } from "../shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME } from "../shared/const/site";
-import { getProductBySlug, listProducts } from "../server/services/products";
+import { getProductBySlug, listProducts, listRelatedProducts } from "../server/services/products";
 import {
   injectSeoIntoHtml,
   loadSpaHtmlAsync,
@@ -50,10 +50,7 @@ async function main() {
     );
   }
 
-  const all = await listProducts();
-  const related = all
-    .filter((p) => p.category === product.category && p.id !== product.id)
-    .slice(0, 3);
+  const related = await listRelatedProducts(product.category, product.id, 3);
   const bodyContent = renderProductSeoBody({ product, relatedProducts: related });
 
   const description = truncateMeta(

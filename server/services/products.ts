@@ -30,6 +30,27 @@ export async function listProducts(category?: string): Promise<Product[]> {
   return (data as ProductRow[]).map(mapProductRowToProduct);
 }
 
+/** Relacionados: mesma categoria, sem o produto atual — filtro e limit no backend. */
+export async function listRelatedProducts(
+  category: string,
+  excludeId: number,
+  limit = 3,
+): Promise<Product[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("category", category)
+    .neq("id", excludeId)
+    .order("id", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as ProductRow[]).map(mapProductRowToProduct);
+}
+
 export async function getProductBySlug(slug: string): Promise<Product | null> {
   const { data, error } = await supabase
     .from("products")

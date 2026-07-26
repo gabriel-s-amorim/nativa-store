@@ -9,6 +9,7 @@ import {
   generateUniqueSlug,
   getProductBySlug,
   listProducts,
+  listRelatedProducts,
   slugExists,
   updateProduct,
 } from "../services/products";
@@ -23,6 +24,27 @@ router.get("/", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Erro ao carregar produtos",
+    });
+  }
+});
+
+/** Relacionados da PDP — categoria + exclude id no SQL (não traz o produto atual). */
+router.get("/:slug/related", async (req, res) => {
+  try {
+    const product = await getProductBySlug(req.params.slug);
+
+    if (!product) {
+      res.status(404).json({ error: "Produto não encontrado" });
+      return;
+    }
+
+    const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : 3;
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 12) : 3;
+    const related = await listRelatedProducts(product.category, product.id, limit);
+    res.json(related);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Erro ao carregar relacionados",
     });
   }
 });
