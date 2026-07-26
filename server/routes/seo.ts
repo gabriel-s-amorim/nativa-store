@@ -244,6 +244,8 @@ router.get("/produto/:slug", async (req, res) => {
       bodyContent,
       // Humano + bot: descoberta precoce da hero (sem srcset na galeria hoje)
       preloadLcpImage: image,
+      // Humano + bot: evita fetch client-side do mesmo produto no cold load
+      bootstrapProduct: product,
     });
   } catch (error) {
     console.error("[seo] falha ao montar meta do produto:", error);

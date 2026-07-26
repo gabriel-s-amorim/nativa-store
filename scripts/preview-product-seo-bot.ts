@@ -106,6 +106,7 @@ async function main() {
     },
     bodyContent,
     preloadLcpImage: image,
+    bootstrapProduct: product,
   });
 
   const outDir = path.join(process.cwd(), "tmp");

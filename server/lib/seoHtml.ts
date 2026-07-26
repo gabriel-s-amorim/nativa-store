@@ -12,6 +12,9 @@ import {
   SITE_TWITTER_HANDLE,
 } from "@shared/const/site";
 import { absoluteUrl, escapeHtmlAttr, normalizeBaseUrl, truncateMeta } from "@shared/lib/seo";
+import type { Product } from "@shared/types/product";
+
+export const PRODUCT_BOOTSTRAP_SCRIPT_ID = "__PRODUCT_DATA__";
 
 export type InjectMetaOptions = {
   title: string;
@@ -44,6 +47,11 @@ export type InjectMetaOptions = {
   preloadLcpImageSizes?: string;
   /** Espelha o `srcset` do <img> hero quando existir. */
   preloadLcpImageSrcSet?: string;
+  /**
+   * Dados do produto inline no HTML (humano + bot).
+   * O client lê isso no mount e evita fetch redundante no caminho crítico do LCP.
+   */
+  bootstrapProduct?: Product;
 };
 
 export function isSocialCrawler(userAgent: string | undefined): boolean {
@@ -229,6 +237,11 @@ export function buildStandaloneOgHtml(options: InjectMetaOptions): string {
 </html>`;
 }
 
+export function buildProductBootstrapScript(product: Product): string {
+  const json = JSON.stringify(product).replace(/</g, "\\u003c");
+  return `<script id="${PRODUCT_BOOTSTRAP_SCRIPT_ID}" type="application/json">${json}</script>`;
+}
+
 /**
  * Substitui/insere bloco de SEO no HTML do SPA.
  * Com `bodyContent`, preenche `#root` (dynamic rendering para bots).
@@ -246,7 +259,14 @@ export function injectSeoIntoHtml(html: string, options: InjectMetaOptions): str
     .replace(/<link\s+rel=["']canonical["'][^>]*>/gi, "")
     // Evita preload LCP duplicado em re-injeção
     .replace(/<link\s+rel=["']preload["'][^>]*as=["']image["'][^>]*>/gi, "")
-    .replace(/<script\s+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, "");
+    .replace(/<script\s+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(
+      new RegExp(
+        `<script\\s+id=["']${PRODUCT_BOOTSTRAP_SCRIPT_ID}["'][^>]*>[\\s\\S]*?<\\/script>`,
+        "gi",
+      ),
+      "",
+    );
 
   const block = buildHeadBlock(options);
   let withHead = /<\/head>/i.test(cleaned)
@@ -261,6 +281,16 @@ export function injectSeoIntoHtml(html: string, options: InjectMetaOptions): str
       withHead = withHead.replace(/<div\s+id=["']root["'][^>]*>[\s\S]*?<\/div>/i, rootWithBody);
     } else if (/<body[^>]*>/i.test(withHead)) {
       withHead = withHead.replace(/<body([^>]*)>/i, `<body$1>\n    ${rootWithBody}\n`);
+    }
+  }
+
+  if (options.bootstrapProduct) {
+    const bootstrap = buildProductBootstrapScript(options.bootstrapProduct);
+    // Antes do #root: disponível assim que o body começa a parsear
+    if (/<div\s+id=["']root["']/i.test(withHead)) {
+      withHead = withHead.replace(/<div\s+id=["']root["']/i, `${bootstrap}\n    <div id="root"`);
+    } else if (/<\/body>/i.test(withHead)) {
+      withHead = withHead.replace(/<\/body>/i, `    ${bootstrap}\n  </body>`);
     }
   }
 

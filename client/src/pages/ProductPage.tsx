@@ -51,6 +51,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { formatPrice, fetchProductBySlug, fetchRelatedProducts } from "@/lib/products";
+import { readProductBootstrap } from "@/lib/productBootstrap";
 import { buildProductJsonLd, usePageMeta } from "@/lib/seo";
 import { stripHtml } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME } from "@shared/const/site";
@@ -61,10 +62,17 @@ import NotFound from "@/pages/NotFound";
 
 export default function ProductPage() {
   const params = useParams<{ slug: string }>();
-  const [product, setProduct] = useState<Product | null>(null);
+  const slug = params.slug ?? "";
+  // Cold load: dados já no HTML → primeiro paint com imagem (LCP) sem esperar API
+  const [productState, setProduct] = useState<Product | null>(() => readProductBootstrap(slug));
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingState, setLoading] = useState(() => !readProductBootstrap(slug));
   const [notFound, setNotFound] = useState(false);
+
+  // Evita flash do produto anterior em navegação client-side (bootstrap só vale se slug bater)
+  const bootstrap = readProductBootstrap(slug);
+  const product = productState?.slug === slug ? productState : bootstrap;
+  const loading = productState?.slug === slug ? loadingState : !bootstrap;
 
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
@@ -106,17 +114,36 @@ export default function ProductPage() {
       : {
           title: loading ? `Carregando… — ${SITE_NAME}` : `Produto — ${SITE_NAME}`,
           noIndex: true,
-          path: params.slug ? `/produto/${params.slug}` : undefined,
+          path: slug ? `/produto/${slug}` : undefined,
         },
   );
 
   useEffect(() => {
-    const slug = params.slug ?? "";
     let cancelled = false;
+    const bootstrapped = readProductBootstrap(slug);
 
-    setLoading(true);
     setNotFound(false);
+
+    if (bootstrapped) {
+      // Produto já disponível — não refetch no caminho crítico; relacionados abaixo da dobra
+      setProduct(bootstrapped);
+      setLoading(false);
+      void fetchRelatedProducts(slug)
+        .then((related) => {
+          if (!cancelled) setRelatedProducts(related);
+        })
+        .catch(() => {
+          if (!cancelled) setRelatedProducts([]);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Navegação client-side (ou HTML sem bootstrap): fetch normal
+    setLoading(true);
     setProduct(null);
+    setRelatedProducts([]);
 
     Promise.all([fetchProductBySlug(slug), fetchRelatedProducts(slug)])
       .then(([loadedProduct, related]) => {
@@ -140,7 +167,7 @@ export default function ProductPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.slug]);
+  }, [slug]);
 
   useEffect(() => {
     if (product) {

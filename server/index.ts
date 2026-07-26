@@ -201,6 +201,7 @@ async function startServer() {
             },
             bodyContent,
             preloadLcpImage: image,
+            bootstrapProduct: product,
           }),
         );
     } catch (error) {
