@@ -1,5 +1,5 @@
-import { useFancyboxBind } from "@/hooks/useFancybox";
-import { ChevronLeft, ChevronRight, ZoomIn } from "lucide-react";
+import { openFancyboxGallery } from "@/hooks/useFancybox";
+import { ChevronLeft, ChevronRight, Loader2, ZoomIn } from "lucide-react";
 import { useCallback, useId, useRef, useState } from "react";
 
 const imageLabels = ["Visão geral", "Detalhe", "Acabamento", "Galeria"];
@@ -21,11 +21,12 @@ export default function ProductGallery({
   discount,
 }: ProductGalleryProps) {
   const galleryId = useId().replace(/:/g, "");
-  const fancyboxGroup = `product-${galleryId}`;
-  const galleryRef = useFancyboxBind();
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [openingLightbox, setOpeningLightbox] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchDeltaX = useRef(0);
+  // Evita cliques concorrentes enquanto o chunk do Fancybox baixa
+  const openingRef = useRef(false);
 
   const total = images.length;
   const hasMultiple = total > 1;
@@ -40,6 +41,30 @@ export default function ProductGallery({
 
   const goPrev = useCallback(() => goTo(selectedIndex - 1), [goTo, selectedIndex]);
   const goNext = useCallback(() => goTo(selectedIndex + 1), [goTo, selectedIndex]);
+
+  const openLightbox = useCallback(
+    async (index: number) => {
+      if (openingRef.current || images.length === 0) return;
+      openingRef.current = true;
+      setOpeningLightbox(true);
+      try {
+        await openFancyboxGallery(
+          images.map((src, i) => ({
+            src,
+            caption: `${productName} — ${imageLabels[i] ?? `Imagem ${i + 1}`}`,
+            thumb: src,
+          })),
+          index,
+        );
+      } catch (error) {
+        console.warn("[gallery] falha ao abrir lightbox:", error);
+      } finally {
+        openingRef.current = false;
+        setOpeningLightbox(false);
+      }
+    },
+    [images, productName],
+  );
 
   function handleTouchStart(event: React.TouchEvent) {
     if (!hasMultiple) return;
@@ -64,7 +89,7 @@ export default function ProductGallery({
   if (total === 0) return null;
 
   return (
-    <div ref={galleryRef} className="w-full">
+    <div className="w-full" data-gallery-id={galleryId}>
       <div className="flex w-full flex-col gap-3 md:flex-row md:gap-4">
         {hasMultiple && (
           <div className="order-2 hidden shrink-0 flex-col gap-2.5 md:order-1 md:flex">
@@ -104,19 +129,22 @@ export default function ProductGallery({
             onTouchCancel={handleTouchEnd}
           >
             {images.map((img, i) => (
-              <a
+              <button
                 key={img + i}
-                data-fancybox={fancyboxGroup}
-                href={img}
-                data-caption={`${productName} — ${imageLabels[i] ?? `Imagem ${i + 1}`}`}
+                type="button"
+                onClick={() => void openLightbox(i)}
+                disabled={openingLightbox}
                 className={`absolute inset-0 block transition-opacity duration-500 ease-out ${
                   i === selectedIndex
                     ? "z-10 cursor-zoom-in opacity-100"
                     : "pointer-events-none z-0 opacity-0"
-                }`}
+                } ${openingLightbox ? "cursor-wait" : ""}`}
                 aria-hidden={i !== selectedIndex}
                 tabIndex={i === selectedIndex ? 0 : -1}
-                aria-label="Ampliar imagem do produto"
+                aria-label={
+                  openingLightbox ? "Carregando visualização ampliada" : "Ampliar imagem do produto"
+                }
+                aria-busy={openingLightbox}
               >
                 <img
                   src={img}
@@ -130,7 +158,7 @@ export default function ProductGallery({
                   decoding={i === 0 ? "sync" : "async"}
                   sizes="(min-width: 1024px) 50vw, 100vw"
                 />
-              </a>
+              </button>
             ))}
 
             <div
@@ -155,8 +183,12 @@ export default function ProductGallery({
               className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-[#3D2B1F] shadow-sm backdrop-blur-sm opacity-100 md:bottom-4 md:right-4 md:opacity-0 md:transition-opacity md:group-hover:opacity-100"
               style={{ fontFamily: "'Nunito', sans-serif" }}
             >
-              <ZoomIn size={14} className="text-[#C4522A]" />
-              Ampliar
+              {openingLightbox ? (
+                <Loader2 size={14} className="animate-spin text-[#C4522A]" aria-hidden />
+              ) : (
+                <ZoomIn size={14} className="text-[#C4522A]" aria-hidden />
+              )}
+              {openingLightbox ? "Carregando…" : "Ampliar"}
             </div>
 
             {hasMultiple && (

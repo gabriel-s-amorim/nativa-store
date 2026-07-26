@@ -11,7 +11,6 @@ import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 import NotFound from "@/pages/NotFound";
 import CategoryPage from "@/pages/CategoryPage";
-import ProductPage from "@/pages/ProductPage";
 import { lazy, Suspense } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -39,6 +38,8 @@ import WhatsAppFloatingButton from "./components/WhatsAppFloatingButton";
 // Lazy: o painel admin (e a lib de planilhas usada na importação em massa) só é
 // carregado quando alguém acessa /admin — não pesa o bundle da loja pública.
 const AdminRouter = lazy(() => import("./pages/admin/AdminRouter"));
+// Lazy: PDP + Fancybox/galeria ficam fora do bundle da home e demais rotas.
+const ProductPage = lazy(() => import("./pages/ProductPage"));
 const StoreHome = () => <Home />;
 
 function AdminFallback() {
@@ -46,6 +47,27 @@ function AdminFallback() {
     <div className="flex min-h-screen items-center justify-center admin-login-bg">
       <Spinner className="size-8 text-[#475569]" />
     </div>
+  );
+}
+
+function StorePageFallback() {
+  return (
+    <div
+      className="flex min-h-[50vh] items-center justify-center"
+      style={{ background: "#F5F0E8" }}
+      role="status"
+      aria-label="Carregando página"
+    >
+      <Spinner className="size-8 text-[#C4522A]/50" />
+    </div>
+  );
+}
+
+function ProductPageRoute() {
+  return (
+    <Suspense fallback={<StorePageFallback />}>
+      <ProductPage />
+    </Suspense>
   );
 }
 
@@ -76,7 +98,7 @@ function Router() {
       <Route path={"/checkout"} component={CheckoutPage} />
       <Route path={"/favoritos"} component={WishlistPage} />
       <Route path={"/quiz"} component={QuizPage} />
-      <Route path={"/produto/:slug"} component={ProductPage} />
+      <Route path={"/produto/:slug"} component={ProductPageRoute} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
