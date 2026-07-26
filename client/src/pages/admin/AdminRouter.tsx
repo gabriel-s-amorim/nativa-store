@@ -1,14 +1,15 @@
 import RequireAdminAuth from "@/components/admin/RequireAdminAuth";
+import { Spinner } from "@/components/ui/spinner";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { AdminNotificationsProvider } from "@/contexts/AdminNotificationsContext";
 import { usePageMeta } from "@/lib/seo";
 import NotFound from "@/pages/NotFound";
+import { lazy, Suspense } from "react";
 import { Redirect, Route, Switch } from "wouter";
 import AdminBanners from "./AdminBanners";
 import AdminCoupons from "./AdminCoupons";
 import AdminCustomerDetail from "./AdminCustomerDetail";
 import AdminCustomersList from "./AdminCustomersList";
-import AdminDashboard from "./AdminDashboard";
 import AdminEmailCampaignEditor from "./AdminEmailCampaignEditor";
 import AdminEmailCampaigns from "./AdminEmailCampaigns";
 import AdminEmailContacts from "./AdminEmailContacts";
@@ -22,6 +23,24 @@ import AdminProductImport from "./AdminProductImport";
 import AdminProductsList from "./AdminProductsList";
 import AdminQuiz from "./AdminQuiz";
 import AdminRegions from "./AdminRegions";
+
+// Lazy até o dashboard: Recharts só entra em /admin/dashboard, não no login
+// nem nas outras rotas do AdminRouter.
+const AdminDashboard = lazy(() => import("./AdminDashboard"));
+
+function AdminDashboardRoute() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <Spinner className="size-8 text-[#475569]" />
+        </div>
+      }
+    >
+      <AdminDashboard />
+    </Suspense>
+  );
+}
 
 function ProtectedAdmin({ children }: { children: React.ReactNode }) {
   return (
@@ -52,7 +71,7 @@ export default function AdminRouter() {
         </Route>
         <Route path="/admin/dashboard">
           <ProtectedAdmin>
-            <AdminDashboard />
+            <AdminDashboardRoute />
           </ProtectedAdmin>
         </Route>
         <Route path="/admin/produtos">

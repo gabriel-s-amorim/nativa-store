@@ -23,7 +23,6 @@ import CustomerForgotPassword from "./pages/auth/CustomerForgotPassword";
 import CustomerResetPassword from "./pages/auth/CustomerResetPassword";
 import CustomerVerifyEmail from "./pages/auth/CustomerVerifyEmail";
 import CartPage from "./pages/CartPage";
-import CheckoutPage from "./pages/CheckoutPage";
 import WishlistPage from "./pages/WishlistPage";
 import QuizPage from "./pages/QuizPage";
 import { CartProvider } from "./contexts/CartContext";
@@ -40,6 +39,8 @@ import WhatsAppFloatingButton from "./components/WhatsAppFloatingButton";
 const AdminRouter = lazy(() => import("./pages/admin/AdminRouter"));
 // Lazy: PDP + Fancybox/galeria ficam fora do bundle da home e demais rotas.
 const ProductPage = lazy(() => import("./pages/ProductPage"));
+// Lazy: SDK do Mercado Pago (@mercadopago/sdk-react) só no checkout.
+const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
 const StoreHome = () => <Home />;
 
 function AdminFallback() {
@@ -71,6 +72,14 @@ function ProductPageRoute() {
   );
 }
 
+function CheckoutPageRoute() {
+  return (
+    <Suspense fallback={<StorePageFallback />}>
+      <CheckoutPage />
+    </Suspense>
+  );
+}
+
 function Router() {
   const [location] = useLocation();
 
@@ -95,7 +104,7 @@ function Router() {
       <Route path={"/verificar-email"} component={CustomerVerifyEmail} />
       <Route path={"/conta"} component={CustomerAccount} />
       <Route path={"/carrinho"} component={CartPage} />
-      <Route path={"/checkout"} component={CheckoutPage} />
+      <Route path={"/checkout"} component={CheckoutPageRoute} />
       <Route path={"/favoritos"} component={WishlistPage} />
       <Route path={"/quiz"} component={QuizPage} />
       <Route path={"/produto/:slug"} component={ProductPageRoute} />

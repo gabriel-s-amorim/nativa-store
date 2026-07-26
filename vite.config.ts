@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
+import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
@@ -203,10 +204,22 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
-
-export default defineConfig({
-  plugins,
+export default defineConfig(({ mode }) => ({
+  plugins: [
+    react(),
+    tailwindcss(),
+    jsxLocPlugin(),
+    vitePluginManusRuntime(),
+    vitePluginManusDebugCollector(),
+    vitePluginStorageProxy(),
+    mode === "analyze" &&
+      visualizer({
+        filename: path.resolve(import.meta.dirname, "dist/stats.html"),
+        gzipSize: true,
+        brotliSize: true,
+        template: "treemap",
+      }),
+  ].filter(Boolean) as Plugin[],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
@@ -223,14 +236,29 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
-          if (id.includes("framer-motion")) return "motion";
-          if (id.includes("@supabase")) return "supabase";
-          if (id.includes("@radix-ui")) return "radix";
-          if (id.includes("recharts")) return "charts";
-          if (id.includes("xlsx")) return "xlsx";
-          if (id.includes("@fancyapps")) return "fancyapps";
-          if (id.includes("@mercadopago")) return "mercadopago";
-          if (id.includes("lucide-react")) return "icons";
+          const normalized = id.replace(/\\/g, "/");
+
+          // React core MUST be isolated before feature chunks (recharts, etc.).
+          // Otherwise Rollup colocates react/react-dom inside "charts" and the
+          // whole storefront modulepreloads Recharts just to boot React.
+          if (
+            normalized.includes("node_modules/react-dom") ||
+            normalized.includes("node_modules/react/") ||
+            normalized.includes("node_modules/scheduler/")
+          ) {
+            return "react-vendor";
+          }
+
+          if (normalized.includes("framer-motion")) return "motion";
+          if (normalized.includes("@supabase")) return "supabase";
+          if (normalized.includes("@radix-ui")) return "radix";
+          // recharts / @mercadopago: NÃO forçar manualChunk — o lazy de
+          // AdminDashboard / CheckoutPage já os isola. Nomear esses chunks
+          // fazia o Rollup colocar deps partilhadas neles e o entry
+          // modulepreloadar libs irrelevantes na loja pública.
+          if (normalized.includes("xlsx")) return "xlsx";
+          if (normalized.includes("@fancyapps")) return "fancyapps";
+          if (normalized.includes("lucide-react")) return "icons";
         },
       },
     },
@@ -259,4 +287,4 @@ export default defineConfig({
       deny: ["**/.*"],
     },
   },
-});
+}));
