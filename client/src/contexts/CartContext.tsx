@@ -81,6 +81,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const mergedForUserRef = useRef<string | null>(null);
   const prevUserIdRef = useRef<string | null>(null);
+  const guestPrefetchRef = useRef(false);
 
   const loadCart = useCallback(async () => {
     try {
@@ -101,6 +102,32 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, [loadCart]);
+
+  // Enquanto o Supabase está adiado (idle), já hidrata o carrinho guest —
+  // evita badge 0→N atrasado na PDP sem depender de sessão.
+  useEffect(() => {
+    if (!authLoading || guestPrefetchRef.current || cart) return;
+
+    let cancelled = false;
+    guestPrefetchRef.current = true;
+
+    void fetchCart(null)
+      .then((data) => {
+        if (!cancelled) applyCartState(setCart, data);
+      })
+      .catch(() => {
+        if (!cancelled) guestPrefetchRef.current = false;
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      // Strict Mode / auth resolve: permite novo prefetch se o cart ainda não veio.
+      guestPrefetchRef.current = false;
+    };
+  }, [authLoading, cart]);
 
   useEffect(() => {
     if (authLoading) return;

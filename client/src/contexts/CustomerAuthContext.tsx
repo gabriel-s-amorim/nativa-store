@@ -2,7 +2,16 @@ import { mapAuthError } from "@/lib/authErrors";
 import { appPath } from "@/lib/appUrl";
 import { updateCustomerProfile } from "@/lib/customerApi";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Session, User } from "@supabase/supabase-js";
 
 export interface SignUpResult {
@@ -28,6 +37,77 @@ interface CustomerAuthContextType {
 
 const CustomerAuthContext = createContext<CustomerAuthContextType | undefined>(undefined);
 
+/** Rotas / hash onde sessão tem de existir logo — sem esperar idle. */
+function shouldHydrateAuthEagerly(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const path = window.location.pathname;
+  if (
+    path.startsWith("/entrar") ||
+    path.startsWith("/cadastro") ||
+    path.startsWith("/conta") ||
+    path.startsWith("/recuperar-senha") ||
+    path.startsWith("/redefinir-senha") ||
+    path.startsWith("/verificar-email") ||
+    path.startsWith("/checkout")
+  ) {
+    return true;
+  }
+
+  const hash = window.location.hash;
+  return (
+    hash.includes("access_token") ||
+    hash.includes("refresh_token") ||
+    hash.includes("type=recovery") ||
+    hash.includes("type=signup") ||
+    hash.includes("type=email") ||
+    hash.includes("error_code") ||
+    hash.includes("error=")
+  );
+}
+
+/**
+ * Adia o bootstrap do SDK até idle, primeira interação, ou timeout.
+ * Evita parse/exec do Supabase no caminho crítico da PDP.
+ */
+function scheduleAuthHydration(start: () => void, timeoutMs = 2000): () => void {
+  let finished = false;
+  let idleId: number | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const onInteract = () => run();
+
+  const detach = () => {
+    if (typeof cancelIdleCallback === "function" && idleId != null) {
+      cancelIdleCallback(idleId);
+    }
+    if (timeoutId != null) clearTimeout(timeoutId);
+    window.removeEventListener("pointerdown", onInteract);
+    window.removeEventListener("keydown", onInteract);
+  };
+
+  const run = () => {
+    if (finished) return;
+    finished = true;
+    detach();
+    start();
+  };
+
+  if (typeof requestIdleCallback === "function") {
+    idleId = requestIdleCallback(() => run(), { timeout: timeoutMs });
+  } else {
+    timeoutId = setTimeout(run, Math.min(timeoutMs, 1200));
+  }
+
+  window.addEventListener("pointerdown", onInteract, { once: true, passive: true });
+  window.addEventListener("keydown", onInteract, { once: true });
+
+  return () => {
+    finished = true;
+    detach();
+  };
+}
+
 async function syncProfileAfterAuth(
   token: string,
   input: { fullName: string; phone?: string },
@@ -46,19 +126,15 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const hydratePromiseRef = useRef<Promise<void> | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    let unsubscribe: (() => void) | undefined;
-
-    // Dynamic import do SDK só depois do primeiro paint — não bloqueia LCP.
-    void getSupabaseClient()
-      .then((supabase) => {
-        if (!isMounted) return;
-
-        return supabase.auth.getSession().then(({ data }) => {
-          if (!isMounted) return;
-
+  const hydrateAuth = useCallback(() => {
+    if (!hydratePromiseRef.current) {
+      hydratePromiseRef.current = (async () => {
+        try {
+          const supabase = await getSupabaseClient();
+          const { data } = await supabase.auth.getSession();
           setSession(data.session ?? null);
           setUser(data.session?.user ?? null);
 
@@ -67,21 +143,33 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
             setUser(nextSession?.user ?? null);
             setIsLoading(false);
           });
-          unsubscribe = () => sub.subscription.unsubscribe();
-        });
-      })
-      .catch(() => {
-        // Sem client (env) ou falha de rede — loja continua como visitante.
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false);
+          unsubscribeRef.current = () => sub.subscription.unsubscribe();
+        } catch {
+          // Sem client (env) ou falha de rede — loja continua como visitante.
+        } finally {
+          setIsLoading(false);
+        }
+      })();
+    }
+    return hydratePromiseRef.current;
+  }, []);
+
+  useEffect(() => {
+    let cancelSchedule: (() => void) | undefined;
+
+    if (shouldHydrateAuthEagerly()) {
+      void hydrateAuth();
+    } else {
+      cancelSchedule = scheduleAuthHydration(() => {
+        void hydrateAuth();
       });
+    }
 
     return () => {
-      isMounted = false;
-      unsubscribe?.();
+      cancelSchedule?.();
+      unsubscribeRef.current?.();
     };
-  }, []);
+  }, [hydrateAuth]);
 
   async function signUp(input: {
     fullName: string;
@@ -89,6 +177,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     email: string;
     password: string;
   }): Promise<SignUpResult> {
+    await hydrateAuth();
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase.auth.signUp({
       email: input.email,
@@ -116,6 +205,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signIn(email: string, password: string) {
+    await hydrateAuth();
     const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
@@ -128,6 +218,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    await hydrateAuth();
     const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -136,6 +227,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function resetPassword(email: string) {
+    await hydrateAuth();
     const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: appPath("/redefinir-senha"),
@@ -147,6 +239,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function updatePassword(password: string) {
+    await hydrateAuth();
     const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
@@ -155,6 +248,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function resendSignupConfirmation(email: string) {
+    await hydrateAuth();
     const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.resend({
       type: "signup",
