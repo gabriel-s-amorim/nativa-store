@@ -23,10 +23,6 @@
       "destination": "/api?nativaSeoSitemap=1"
     },
     {
-      "source": "/categoria/bolsas",
-      "destination": "/categoria/bolsas/index.html"
-    },
-    {
       "source": "/categoria/:slug",
       "destination": "/api?nativaSeoCategory=:slug"
     },
@@ -38,6 +34,19 @@
   "headers": [
     {
       "source": "/produto/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=30, must-revalidate"
+        },
+        {
+          "key": "Vary",
+          "value": "User-Agent"
+        }
+      ]
+    },
+    {
+      "source": "/categoria/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

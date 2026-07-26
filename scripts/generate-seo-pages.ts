@@ -1,3 +1,13 @@
+/**
+ * Gera HTML estático de /categoria/bolsas no build (meta/JSON-LD, sem body).
+ *
+ * RETENÇÃO TEMPORÁRIA: o rewrite da Vercel já aponta /categoria/:slug para a
+ * rota SEO dinâmica (com CategorySeoBody para bots). Este ficheiro continua a
+ * ser gerado só como rede de segurança / rollback fácil — remover do build
+ * depois de validar bodyContent em produção (preview + smoke bot vs humano).
+ *
+ * Referências: package.json → build, build:vercel (únicos callers).
+ */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { SITE_NAME, SITE_OG_IMAGE_PATH } from "../shared/const/site";
@@ -43,7 +53,9 @@ async function main() {
 
   await mkdir(outputDir, { recursive: true });
   await writeFile(path.join(outputDir, "index.html"), html, "utf8");
-  console.log(`generate-seo-pages: ${path.join(outputDir, "index.html")}`);
+  console.log(
+    `generate-seo-pages: ${path.join(outputDir, "index.html")} (fallback; tráfego usa rota dinâmica)`,
+  );
 }
 
 main().catch((error) => {

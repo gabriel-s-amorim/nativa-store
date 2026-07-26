@@ -11,6 +11,7 @@
     "analyze": "vite build --mode analyze",
     "build:vercel": "vite build && tsx scripts/generate-seo-pages.ts && esbuild server/vercel.ts --bundle --platform=node --packages=external --format=esm --jsx=automatic --outfile=api/index.js --alias:@shared=./shared && node scripts/copy-spa-html.mjs",
     "preview:seo-bot": "tsx --env-file=.env scripts/preview-product-seo-bot.ts",
+    "preview:seo-bot:categoria": "tsx --env-file=.env scripts/preview-category-seo-bot.ts",
     "start": "NODE_ENV=production node dist/index.js",
     "seed": "tsx --env-file=.env server/scripts/seed-products.ts",
     "seed:regions": "tsx --env-file=.env server/scripts/seed-regions.ts",

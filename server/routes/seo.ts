@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { absoluteUrl, stripHtml, truncateMeta } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME, SITE_OG_IMAGE_PATH } from "@shared/const/site";
+import type { Product } from "@shared/types/product";
 import { getProductBySlug, listProducts, listRelatedProducts } from "../services/products";
 import {
   buildStandaloneOgHtml,
@@ -10,12 +11,90 @@ import {
   resolvePublicBaseUrl,
   type InjectMetaOptions,
 } from "../lib/seoHtml";
+import { renderCategorySeoBody } from "../lib/renderCategorySeoBody";
 import { renderProductSeoBody } from "../lib/renderProductSeoBody";
 
 const router = Router();
 const BAGS_TITLE = "Bolsas Artesanais — Nativa Store";
 const BAGS_DESCRIPTION =
   "Bolsas artesanais autorais e exclusivas, feitas à mão com identidade brasileira. Conheça a coleção da Nativa Store.";
+/** Paridade com ProductsSection (eyebrow + h2 + texto de apoio). */
+const BAGS_SECTION_HEADING = "Nossa Coleção";
+const BAGS_SECTION_DESCRIPTION =
+  "Cada bolsa é única, feita à mão com amor e identidade brasileira";
+
+/** Mesma ordem da grade humana: featured primeiro. */
+function sortProductsForCategoryGrid(products: Product[]): Product[] {
+  return [...products].sort((a, b) => {
+    if (a.featured && !b.featured) return -1;
+    if (!a.featured && b.featured) return 1;
+    return 0;
+  });
+}
+
+/**
+ * CollectionPage + ItemList. Cada produto usa `@id` = `{productUrl}#product`,
+ * o mesmo ID do JSON-LD da PDP (evita grafo inconsistente no Google).
+ */
+function buildCategoryJsonLd(input: {
+  baseUrl: string;
+  categoryUrl: string;
+  title: string;
+  description: string;
+  products: Product[];
+}) {
+  const { baseUrl, categoryUrl, title, description, products } = input;
+
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": `${categoryUrl}#collection`,
+        name: title,
+        description,
+        url: categoryUrl,
+        mainEntity: { "@id": `${categoryUrl}#itemlist` },
+        isPartOf: {
+          "@type": "WebSite",
+          name: SITE_NAME,
+          url: absoluteUrl(baseUrl, "/"),
+        },
+      },
+      {
+        "@type": "ItemList",
+        "@id": `${categoryUrl}#itemlist`,
+        numberOfItems: products.length,
+        itemListElement: products.map((product, index) => {
+          const productUrl = absoluteUrl(baseUrl, `/produto/${product.slug}`);
+          return {
+            "@type": "ListItem",
+            position: index + 1,
+            item: {
+              "@type": "Product",
+              "@id": `${productUrl}#product`,
+              name: product.name,
+              url: productUrl,
+              image: absoluteUrl(
+                baseUrl,
+                product.image || product.images[0] || SITE_OG_IMAGE_PATH,
+              ),
+              offers: {
+                "@type": "Offer",
+                url: productUrl,
+                priceCurrency: "BRL",
+                price: product.price,
+                availability: product.inStock
+                  ? "https://schema.org/InStock"
+                  : "https://schema.org/OutOfStock",
+              },
+            },
+          };
+        }),
+      },
+    ],
+  };
+}
 
 function escapeXml(value: string): string {
   return value
@@ -98,24 +177,48 @@ router.get("/categoria/:slug", async (req, res) => {
     return;
   }
 
+  let products: Product[] = [];
+  try {
+    products = sortProductsForCategoryGrid(await listProducts("Bolsas"));
+  } catch (error) {
+    console.error("[seo] categoria/bolsas listProducts:", error);
+  }
+
+  const ua = req.headers["user-agent"];
+  const crawler = isSocialCrawler(typeof ua === "string" ? ua : undefined);
+  let bodyContent: string | undefined;
+  if (crawler) {
+    try {
+      bodyContent = renderCategorySeoBody({
+        categoryName: "Bolsas Artesanais",
+        categorySlug: "bolsas",
+        heading: BAGS_SECTION_HEADING,
+        description: BAGS_SECTION_DESCRIPTION,
+        products,
+      });
+    } catch (renderError) {
+      console.warn(
+        "[seo] falha ao renderizar body da categoria para bot (meta mantida):",
+        renderError instanceof Error ? renderError.message : renderError,
+      );
+    }
+  }
+
   await sendSeoHtml(req, res, {
     title: BAGS_TITLE,
     description: BAGS_DESCRIPTION,
     url,
     image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
     type: "website",
-    jsonLd: {
-      "@context": "https://schema.org",
-      "@type": "CollectionPage",
-      name: BAGS_TITLE,
+    keywords: `bolsas artesanais, ${SITE_KEYWORDS}`,
+    jsonLd: buildCategoryJsonLd({
+      baseUrl,
+      categoryUrl: url,
+      title: BAGS_TITLE,
       description: BAGS_DESCRIPTION,
-      url,
-      isPartOf: {
-        "@type": "WebSite",
-        name: SITE_NAME,
-        url: absoluteUrl(baseUrl, "/"),
-      },
-    },
+      products,
+    }),
+    bodyContent,
   });
 });
 
