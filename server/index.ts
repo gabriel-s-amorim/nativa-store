@@ -200,6 +200,7 @@ async function startServer() {
               ],
             },
             bodyContent,
+            preloadLcpImage: image,
           }),
         );
     } catch (error) {

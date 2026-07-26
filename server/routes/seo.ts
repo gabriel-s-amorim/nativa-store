@@ -242,6 +242,8 @@ router.get("/produto/:slug", async (req, res) => {
       },
       jsonLd,
       bodyContent,
+      // Humano + bot: descoberta precoce da hero (sem srcset na galeria hoje)
+      preloadLcpImage: image,
     });
   } catch (error) {
     console.error("[seo] falha ao montar meta do produto:", error);

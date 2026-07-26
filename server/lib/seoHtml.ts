@@ -34,6 +34,16 @@ export type InjectMetaOptions = {
    * Quando presente, substitui o conteúdo de `<div id="root">`.
    */
   bodyContent?: string;
+  /**
+   * Imagem hero da PDP para preload no <head> (humano + bot).
+   * Adiantar descoberta do LCP — não esperar o CSR montar o <img>.
+   * Só a imagem principal; não a galeria inteira.
+   */
+  preloadLcpImage?: string;
+  /** Espelha o `sizes` do <img> hero quando houver srcset no futuro. */
+  preloadLcpImageSizes?: string;
+  /** Espelha o `srcset` do <img> hero quando existir. */
+  preloadLcpImageSrcSet?: string;
 };
 
 export function isSocialCrawler(userAgent: string | undefined): boolean {
@@ -100,6 +110,40 @@ function metaProperty(property: string, content: string) {
   return `<meta property="${escapeHtmlAttr(property)}" content="${escapeHtmlAttr(content)}" />`;
 }
 
+function guessImageMime(url: string): string | undefined {
+  const path = url.split("?")[0]?.toLowerCase() ?? "";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".gif")) return "image/gif";
+  if (path.endsWith(".avif")) return "image/avif";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  return undefined;
+}
+
+/** Preload da hero LCP — cedo no <head>, sem crossorigin (o <img> também não usa). */
+export function buildLcpImagePreloadTag(options: InjectMetaOptions): string | null {
+  const href = options.preloadLcpImage?.trim();
+  if (!href) return null;
+
+  const attrs = [
+    `rel="preload"`,
+    `as="image"`,
+    `href="${escapeHtmlAttr(href)}"`,
+    `fetchpriority="high"`,
+  ];
+
+  const mime = guessImageMime(href);
+  if (mime) attrs.push(`type="${mime}"`);
+
+  // Só emitir imagesrcset/imagesizes juntos (evita preload de tamanho errado)
+  if (options.preloadLcpImageSrcSet?.trim() && options.preloadLcpImageSizes?.trim()) {
+    attrs.push(`imagesrcset="${escapeHtmlAttr(options.preloadLcpImageSrcSet.trim())}"`);
+    attrs.push(`imagesizes="${escapeHtmlAttr(options.preloadLcpImageSizes.trim())}"`);
+  }
+
+  return `<link ${attrs.join(" ")} />`;
+}
+
 export function buildHeadBlock(options: InjectMetaOptions): string {
   const title = options.title;
   const description = truncateMeta(options.description);
@@ -110,7 +154,11 @@ export function buildHeadBlock(options: InjectMetaOptions): string {
     ? "noindex, nofollow"
     : "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1";
 
+  const lcpPreload = buildLcpImagePreloadTag(options);
+
   const tags = [
+    // Preload primeiro: descoberta da LCP antes de CSS/JS/meta densas
+    ...(lcpPreload ? [lcpPreload] : []),
     `<title>${escapeHtmlAttr(title)}</title>`,
     metaName("description", description),
     metaName("robots", robots),
@@ -135,15 +183,8 @@ export function buildHeadBlock(options: InjectMetaOptions): string {
   ];
 
   if (image.startsWith("https://")) {
-    const path = image.split("?")[0]?.toLowerCase() ?? "";
-    const mime = path.endsWith(".png")
-      ? "image/png"
-      : path.endsWith(".webp")
-        ? "image/webp"
-        : path.endsWith(".gif")
-          ? "image/gif"
-          : "image/jpeg";
-    tags.push(metaProperty("og:image:type", mime));
+    const mime = guessImageMime(image);
+    if (mime) tags.push(metaProperty("og:image:type", mime));
   }
 
   if (options.keywords) {
@@ -203,6 +244,8 @@ export function injectSeoIntoHtml(html: string, options: InjectMetaOptions): str
     .replace(/<meta\s+property=["']og:[^"']+["'][^>]*>/gi, "")
     .replace(/<meta\s+property=["']product:[^"']+["'][^>]*>/gi, "")
     .replace(/<link\s+rel=["']canonical["'][^>]*>/gi, "")
+    // Evita preload LCP duplicado em re-injeção
+    .replace(/<link\s+rel=["']preload["'][^>]*as=["']image["'][^>]*>/gi, "")
     .replace(/<script\s+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, "");
 
   const block = buildHeadBlock(options);

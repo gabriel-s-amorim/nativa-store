@@ -105,6 +105,7 @@ async function main() {
       ],
     },
     bodyContent,
+    preloadLcpImage: image,
   });
 
   const outDir = path.join(process.cwd(), "tmp");
