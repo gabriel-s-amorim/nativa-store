@@ -1,60 +1,15 @@
 /**
- * Gera HTML estático de /categoria/bolsas no build (meta/JSON-LD, sem body).
+ * Antes gerava dist/public/categoria/bolsas/index.html no build.
  *
- * RETENÇÃO TEMPORÁRIA: o rewrite da Vercel já aponta /categoria/:slug para a
- * rota SEO dinâmica (com CategorySeoBody para bots). Este ficheiro continua a
- * ser gerado só como rede de segurança / rollback fácil — remover do build
- * depois de validar bodyContent em produção (preview + smoke bot vs humano).
+ * Na Vercel, ficheiros estáticos têm precedência sobre rewrites — esse HTML
+ * impedia /categoria/bolsas de chegar à rota SEO dinâmica (CategorySeoBody).
  *
- * Referências: package.json → build, build:vercel (únicos callers).
+ * Mantido como no-op no build para não partir scripts; pode remover a chamada
+ * em package.json (build / build:vercel) quando quiser.
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { SITE_NAME, SITE_OG_IMAGE_PATH } from "../shared/const/site";
-import { absoluteUrl, normalizeBaseUrl } from "../shared/lib/seo";
-import { injectSeoIntoHtml } from "../server/lib/seoHtml";
-
-const BAGS_TITLE = "Bolsas Artesanais — Nativa Store";
-const BAGS_DESCRIPTION =
-  "Bolsas artesanais autorais e exclusivas, feitas à mão com identidade brasileira. Conheça a coleção da Nativa Store.";
-
 async function main() {
-  const root = process.cwd();
-  const baseUrl = normalizeBaseUrl(
-    process.env.APP_URL ||
-      process.env.VITE_APP_URL ||
-      process.env.VERCEL_PROJECT_PRODUCTION_URL ||
-      "https://nativa.art.br",
-  );
-  const sourcePath = path.join(root, "dist", "public", "index.html");
-  const outputDir = path.join(root, "dist", "public", "categoria", "bolsas");
-  const categoryUrl = absoluteUrl(baseUrl, "/categoria/bolsas");
-  const sourceHtml = await readFile(sourcePath, "utf8");
-
-  const html = injectSeoIntoHtml(sourceHtml, {
-    title: BAGS_TITLE,
-    description: BAGS_DESCRIPTION,
-    url: categoryUrl,
-    image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
-    type: "website",
-    jsonLd: {
-      "@context": "https://schema.org",
-      "@type": "CollectionPage",
-      name: BAGS_TITLE,
-      description: BAGS_DESCRIPTION,
-      url: categoryUrl,
-      isPartOf: {
-        "@type": "WebSite",
-        name: SITE_NAME,
-        url: absoluteUrl(baseUrl, "/"),
-      },
-    },
-  });
-
-  await mkdir(outputDir, { recursive: true });
-  await writeFile(path.join(outputDir, "index.html"), html, "utf8");
   console.log(
-    `generate-seo-pages: ${path.join(outputDir, "index.html")} (fallback; tráfego usa rota dinâmica)`,
+    "generate-seo-pages: skipped (categoria/bolsas agora é só rota dinâmica /api/seo)",
   );
 }
 
