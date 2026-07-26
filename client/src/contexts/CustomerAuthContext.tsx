@@ -1,7 +1,7 @@
 import { mapAuthError } from "@/lib/authErrors";
 import { appPath } from "@/lib/appUrl";
 import { updateCustomerProfile } from "@/lib/customerApi";
-import { supabaseClient } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 
@@ -49,28 +49,37 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    let unsubscribe: (() => void) | undefined;
 
-    supabaseClient.auth
-      .getSession()
-      .then(({ data }) => {
+    // Dynamic import do SDK só depois do primeiro paint — não bloqueia LCP.
+    void getSupabaseClient()
+      .then((supabase) => {
         if (!isMounted) return;
-        setSession(data.session ?? null);
-        setUser(data.session?.user ?? null);
+
+        return supabase.auth.getSession().then(({ data }) => {
+          if (!isMounted) return;
+
+          setSession(data.session ?? null);
+          setUser(data.session?.user ?? null);
+
+          const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+            setSession(nextSession);
+            setUser(nextSession?.user ?? null);
+            setIsLoading(false);
+          });
+          unsubscribe = () => sub.subscription.unsubscribe();
+        });
+      })
+      .catch(() => {
+        // Sem client (env) ou falha de rede — loja continua como visitante.
       })
       .finally(() => {
-        if (!isMounted) return;
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       });
-
-    const { data: subscription } = supabaseClient.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-      setIsLoading(false);
-    });
 
     return () => {
       isMounted = false;
-      subscription.subscription.unsubscribe();
+      unsubscribe?.();
     };
   }, []);
 
@@ -80,7 +89,8 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     email: string;
     password: string;
   }): Promise<SignUpResult> {
-    const { data, error } = await supabaseClient.auth.signUp({
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase.auth.signUp({
       email: input.email,
       password: input.password,
       options: {
@@ -106,7 +116,8 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signIn(email: string, password: string) {
-    const { error } = await supabaseClient.auth.signInWithPassword({
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
@@ -117,14 +128,16 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    const { error } = await supabaseClient.auth.signOut();
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase.auth.signOut();
     if (error) {
       throw new Error(mapAuthError(error));
     }
   }
 
   async function resetPassword(email: string) {
-    const { error } = await supabaseClient.auth.resetPasswordForEmail(email.trim(), {
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: appPath("/redefinir-senha"),
     });
 
@@ -134,14 +147,16 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function updatePassword(password: string) {
-    const { error } = await supabaseClient.auth.updateUser({ password });
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase.auth.updateUser({ password });
     if (error) {
       throw new Error(mapAuthError(error));
     }
   }
 
   async function resendSignupConfirmation(email: string) {
-    const { error } = await supabaseClient.auth.resend({
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase.auth.resend({
       type: "signup",
       email: email.trim(),
       options: {

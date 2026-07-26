@@ -24,7 +24,6 @@ import CustomerResetPassword from "./pages/auth/CustomerResetPassword";
 import CustomerVerifyEmail from "./pages/auth/CustomerVerifyEmail";
 import CartPage from "./pages/CartPage";
 import WishlistPage from "./pages/WishlistPage";
-import QuizPage from "./pages/QuizPage";
 import { CartProvider } from "./contexts/CartContext";
 import { WishlistProvider } from "./contexts/WishlistContext";
 import { StoreDiscoveryProvider } from "./contexts/StoreDiscoveryContext";
@@ -41,6 +40,8 @@ const AdminRouter = lazy(() => import("./pages/admin/AdminRouter"));
 const ProductPage = lazy(() => import("./pages/ProductPage"));
 // Lazy: SDK do Mercado Pago (@mercadopago/sdk-react) só no checkout.
 const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
+// Lazy: Quiz (e framer-motion do QuizCuradoria) só em /quiz — não na PDP.
+const QuizPage = lazy(() => import("./pages/QuizPage"));
 const StoreHome = () => <Home />;
 
 function AdminFallback() {
@@ -80,6 +81,14 @@ function CheckoutPageRoute() {
   );
 }
 
+function QuizPageRoute() {
+  return (
+    <Suspense fallback={<StorePageFallback />}>
+      <QuizPage />
+    </Suspense>
+  );
+}
+
 function Router() {
   const [location] = useLocation();
 
@@ -106,7 +115,7 @@ function Router() {
       <Route path={"/carrinho"} component={CartPage} />
       <Route path={"/checkout"} component={CheckoutPageRoute} />
       <Route path={"/favoritos"} component={WishlistPage} />
-      <Route path={"/quiz"} component={QuizPage} />
+      <Route path={"/quiz"} component={QuizPageRoute} />
       <Route path={"/produto/:slug"} component={ProductPageRoute} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

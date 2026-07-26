@@ -31,7 +31,7 @@ import type { ProductInput } from "@shared/schemas/product";
 import type { Product } from "@shared/types/product";
 import type { QuizExportPayload, QuizImportReport, QuizQuestion, QuizResult } from "@shared/types/quiz";
 import type { QuizQuestionInput, QuizResultInput } from "@shared/schemas/quiz";
-import { supabaseClient } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export class AdminApiError extends Error {
   issues?: unknown;
@@ -114,7 +114,8 @@ export async function uploadProductImage(
       body: JSON.stringify({ folder, contentType: optimized.type || "image/gif" }),
     });
 
-    const { error } = await supabaseClient.storage
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase.storage
       .from("product-images")
       .uploadToSignedUrl(signed.path, signed.token, optimized, {
         contentType: optimized.type || "image/gif",

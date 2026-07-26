@@ -249,13 +249,11 @@ export default defineConfig(({ mode }) => ({
             return "react-vendor";
           }
 
-          if (normalized.includes("framer-motion")) return "motion";
-          if (normalized.includes("@supabase")) return "supabase";
           if (normalized.includes("@radix-ui")) return "radix";
-          // recharts / @mercadopago: NÃO forçar manualChunk — o lazy de
-          // AdminDashboard / CheckoutPage já os isola. Nomear esses chunks
-          // fazia o Rollup colocar deps partilhadas neles e o entry
-          // modulepreloadar libs irrelevantes na loja pública.
+          // framer-motion / @supabase / recharts / @mercadopago: NÃO forçar
+          // manualChunk — lazy (Quiz, auth dinâmico, AdminDashboard, Checkout)
+          // já isola. Nomear esses chunks fazia o Rollup colocar deps
+          // partilhadas neles e o entry modulepreloadar libs na loja pública.
           if (normalized.includes("xlsx")) return "xlsx";
           if (normalized.includes("@fancyapps")) return "fancyapps";
           if (normalized.includes("lucide-react")) return "icons";
