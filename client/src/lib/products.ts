@@ -1,8 +1,6 @@
 import type { Product } from "@shared/types/product";
 
-export function formatPrice(price: number) {
-  return price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+export { formatPrice } from "@shared/lib/formatPrice";
 
 export async function fetchProducts(): Promise<Product[]> {
   const response = await fetch("/api/products");

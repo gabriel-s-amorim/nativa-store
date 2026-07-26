@@ -29,6 +29,11 @@ export type InjectMetaOptions = {
     availability?: string;
     brand?: string;
   };
+  /**
+   * HTML do body para crawlers (dynamic rendering).
+   * Quando presente, substitui o conteúdo de `<div id="root">`.
+   */
+  bodyContent?: string;
 };
 
 export function isSocialCrawler(userAgent: string | undefined): boolean {
@@ -185,6 +190,7 @@ export function buildStandaloneOgHtml(options: InjectMetaOptions): string {
 
 /**
  * Substitui/insere bloco de SEO no HTML do SPA.
+ * Com `bodyContent`, preenche `#root` (dynamic rendering para bots).
  */
 export function injectSeoIntoHtml(html: string, options: InjectMetaOptions): string {
   const cleaned = html
@@ -200,10 +206,22 @@ export function injectSeoIntoHtml(html: string, options: InjectMetaOptions): str
     .replace(/<script\s+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, "");
 
   const block = buildHeadBlock(options);
-  if (/<\/head>/i.test(cleaned)) {
-    return cleaned.replace(/<\/head>/i, `    ${block}\n  </head>`);
+  let withHead = /<\/head>/i.test(cleaned)
+    ? cleaned.replace(/<\/head>/i, `    ${block}\n  </head>`)
+    : `${block}\n${cleaned}`;
+
+  if (options.bodyContent) {
+    const rootWithBody = `<div id="root">${options.bodyContent}</div>`;
+    if (/<div\s+id=["']root["']\s*>\s*<\/div>/i.test(withHead)) {
+      withHead = withHead.replace(/<div\s+id=["']root["']\s*>\s*<\/div>/i, rootWithBody);
+    } else if (/<div\s+id=["']root["'][^>]*>[\s\S]*?<\/div>/i.test(withHead)) {
+      withHead = withHead.replace(/<div\s+id=["']root["'][^>]*>[\s\S]*?<\/div>/i, rootWithBody);
+    } else if (/<body[^>]*>/i.test(withHead)) {
+      withHead = withHead.replace(/<body([^>]*)>/i, `<body$1>\n    ${rootWithBody}\n`);
+    }
   }
-  return `${block}\n${cleaned}`;
+
+  return withHead;
 }
 
 export function defaultSiteMeta(baseUrl: string): InjectMetaOptions {

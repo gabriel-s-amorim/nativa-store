@@ -4,14 +4,16 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createApiApp } from "./app";
-import { getProductBySlug } from "./services/products";
+import { getProductBySlug, listProducts } from "./services/products";
 import { absoluteUrl, stripHtml, truncateMeta } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME } from "@shared/const/site";
 import {
   injectSeoIntoHtml,
+  isSocialCrawler,
   loadSpaHtml,
   resolvePublicBaseUrl,
 } from "./lib/seoHtml";
+import { renderProductSeoBody } from "./lib/renderProductSeoBody";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -113,9 +115,28 @@ async function startServer() {
         product.category === "Bolsas" ? "/categoria/bolsas" : "/#colecoes",
       );
 
+      const ua = req.headers["user-agent"];
+      const crawler = isSocialCrawler(typeof ua === "string" ? ua : undefined);
+      let bodyContent: string | undefined;
+      if (crawler) {
+        try {
+          const all = await listProducts();
+          const related = all
+            .filter((p) => p.category === product.category && p.id !== product.id)
+            .slice(0, 3);
+          bodyContent = renderProductSeoBody({ product, relatedProducts: related });
+        } catch (renderError) {
+          console.warn(
+            "[seo] falha ao renderizar body para bot (meta mantida):",
+            renderError instanceof Error ? renderError.message : renderError,
+          );
+        }
+      }
+
       res
         .status(200)
         .setHeader("Cache-Control", "public, s-maxage=30, must-revalidate")
+        .setHeader("Vary", "User-Agent")
         .type("html")
         .send(
           injectSeoIntoHtml(spaHtml, {
@@ -181,6 +202,7 @@ async function startServer() {
                 },
               ],
             },
+            bodyContent,
           }),
         );
     } catch (error) {

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { absoluteUrl, stripHtml, truncateMeta } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME, SITE_OG_IMAGE_PATH } from "@shared/const/site";
+import type { Product } from "@shared/types/product";
 import { getProductBySlug, listProducts } from "../services/products";
 import {
   buildStandaloneOgHtml,
@@ -10,6 +11,7 @@ import {
   resolvePublicBaseUrl,
   type InjectMetaOptions,
 } from "../lib/seoHtml";
+import { renderProductSeoBody } from "../lib/renderProductSeoBody";
 
 const router = Router();
 const BAGS_TITLE = "Bolsas Artesanais — Nativa Store";
@@ -33,10 +35,19 @@ function requestBaseUrl(req: Request): string {
   return resolvePublicBaseUrl(host, proto);
 }
 
+function relatedProductsFor(product: Product, all: Product[], limit = 3): Product[] {
+  return all.filter((p) => p.category === product.category && p.id !== product.id).slice(0, limit);
+}
+
 async function sendSeoHtml(req: Request, res: Response, options: InjectMetaOptions, status = 200) {
   const ua = req.headers["user-agent"];
   const crawler = isSocialCrawler(typeof ua === "string" ? ua : undefined);
   const spaHtml = await loadSpaHtmlAsync(requestBaseUrl(req));
+
+  // Humanos nunca recebem bodyContent — só crawlers (dynamic rendering).
+  const htmlOptions: InjectMetaOptions = crawler
+    ? options
+    : { ...options, bodyContent: undefined };
 
   // Sempre preferir o SPA com OG no <head> (WhatsApp/Facebook leem só as meta tags).
   // HTML mínimo era cacheado no CDN sem Vary e quebrava a loja no navegador.
@@ -48,8 +59,8 @@ async function sendSeoHtml(req: Request, res: Response, options: InjectMetaOptio
       .type("html")
       .send(
         crawler
-          ? buildStandaloneOgHtml(options)
-          : buildStandaloneOgHtml(options).replace(
+          ? buildStandaloneOgHtml(htmlOptions)
+          : buildStandaloneOgHtml(htmlOptions).replace(
               "</body>",
               `<p><a href="/">Abrir a Nativa Store</a></p>
     <script>
@@ -67,7 +78,7 @@ async function sendSeoHtml(req: Request, res: Response, options: InjectMetaOptio
     .setHeader("Cache-Control", "public, s-maxage=30, must-revalidate")
     .setHeader("Vary", "User-Agent")
     .type("html")
-    .send(injectSeoIntoHtml(spaHtml, options));
+    .send(injectSeoIntoHtml(spaHtml, htmlOptions));
 }
 
 router.get("/categoria/:slug", async (req, res) => {
@@ -203,6 +214,24 @@ router.get("/produto/:slug", async (req, res) => {
       ],
     };
 
+    const ua = req.headers["user-agent"];
+    const crawler = isSocialCrawler(typeof ua === "string" ? ua : undefined);
+    let bodyContent: string | undefined;
+    if (crawler) {
+      try {
+        const all = await listProducts();
+        bodyContent = renderProductSeoBody({
+          product,
+          relatedProducts: relatedProductsFor(product, all),
+        });
+      } catch (renderError) {
+        console.warn(
+          "[seo] falha ao renderizar body para bot (meta mantida):",
+          renderError instanceof Error ? renderError.message : renderError,
+        );
+      }
+    }
+
     await sendSeoHtml(req, res, {
       title,
       description,
@@ -217,6 +246,7 @@ router.get("/produto/:slug", async (req, res) => {
         brand: SITE_NAME,
       },
       jsonLd,
+      bodyContent,
     });
   } catch (error) {
     console.error("[seo] falha ao montar meta do produto:", error);
