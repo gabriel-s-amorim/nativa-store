@@ -9,6 +9,18 @@
       "includeFiles": "api/spa.html"
     }
   },
+  "redirects": [
+    {
+      "source": "/produtos/:slug/",
+      "destination": "/produto/:slug",
+      "permanent": true
+    },
+    {
+      "source": "/produtos/:slug",
+      "destination": "/produto/:slug",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
