@@ -113,7 +113,7 @@ export default function ProductPage() {
         }
       : {
           title: loading ? `Carregando… — ${SITE_NAME}` : `Produto — ${SITE_NAME}`,
-          noIndex: true,
+          noIndex: notFound,
           path: slug ? `/produto/${slug}` : undefined,
         },
   );
