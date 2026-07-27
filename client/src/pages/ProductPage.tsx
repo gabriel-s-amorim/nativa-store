@@ -53,6 +53,7 @@ import {
 import { formatPrice, fetchProductBySlug, fetchRelatedProducts } from "@/lib/products";
 import { readProductBootstrap } from "@/lib/productBootstrap";
 import { buildProductJsonLd, usePageMeta } from "@/lib/seo";
+import { setProductStickyCtaVisible } from "@/lib/floatingChrome";
 import { stripHtml } from "@shared/lib/seo";
 import { SITE_KEYWORDS, SITE_NAME } from "@shared/const/site";
 import { useCart } from "@/contexts/CartContext";
@@ -202,6 +203,11 @@ export default function ProductPage() {
     observer.observe(target);
     return () => observer.disconnect();
   }, [product]);
+
+  useEffect(() => {
+    setProductStickyCtaVisible(Boolean(showStickyCta && product && !notFound));
+    return () => setProductStickyCtaVisible(false);
+  }, [showStickyCta, product, notFound]);
 
   const descriptionHtml = useMemo(
     () => sanitizeProductHtml(product?.description ?? ""),

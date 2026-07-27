@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useAccessibility, type FontScale } from "@/contexts/AccessibilityContext";
+import { useProductStickyCtaVisible } from "@/lib/floatingChrome";
 
 const FONT_LABEL: Record<FontScale, string> = {
   normal: "Normal",
@@ -23,6 +24,8 @@ const FONT_LABEL: Record<FontScale, string> = {
 export default function AccessibilityToolbar() {
   const [location] = useLocation();
   const isAdmin = location === "/admin" || location.startsWith("/admin/");
+  const isCheckout = location === "/checkout" || location.startsWith("/checkout/");
+  const stickyCtaVisible = useProductStickyCtaVisible();
   const [open, setOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const panelId = useId();
@@ -37,6 +40,13 @@ export default function AccessibilityToolbar() {
     toggleUnderlineLinks,
     resetPreferences,
   } = useAccessibility();
+
+  useEffect(() => {
+    document.body.classList.toggle("nativa-checkout", isCheckout);
+    return () => {
+      document.body.classList.remove("nativa-checkout");
+    };
+  }, [isCheckout]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,10 +80,18 @@ export default function AccessibilityToolbar() {
     requestAnimationFrame(() => setStatusMessage(message));
   };
 
+  // Mobile: sobe acima da sticky CTA (PDP) ou do rodapé do checkout — evita cobrir preço/CTAs
+  const positionClass =
+    stickyCtaVisible
+      ? "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 lg:bottom-8 lg:left-6"
+      : isCheckout
+        ? "bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-4 sm:bottom-8 sm:left-6"
+        : "bottom-[calc(1.25rem+env(safe-area-inset-bottom))] left-4 sm:bottom-8 sm:left-6";
+
   return (
     <div
       ref={panelRef}
-      className="nativa-a11y-root fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] left-4 z-[46] sm:bottom-8 sm:left-6"
+      className={`nativa-a11y-root fixed z-[46] transition-[bottom] duration-300 ${positionClass}`}
     >
       <div id={statusId} className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {statusMessage}

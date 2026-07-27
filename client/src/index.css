@@ -559,6 +559,7 @@
   /*
    * VLibras (mobile + desktop): FAB azul à esquerda.
    * z-index abaixo do header/menus para não invadir o hambúrguer.
+   * Empilha acima do FAB de acessibilidade (e da sticky CTA da PDP).
    */
   div[vw] {
     z-index: 43 !important;
@@ -569,6 +570,18 @@
     z-index: 43 !important;
     bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
     left: 1rem !important;
+  }
+
+  /* PDP sticky: a11y sobe para ~5.75rem → VLibras sobe junto */
+  body.nativa-sticky-cta div[vw] [vw-access-button],
+  body.nativa-sticky-cta div[vw].enabled [vw-access-button] {
+    bottom: calc(10.25rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Checkout: a11y elevado → VLibras acima dele */
+  body.nativa-checkout div[vw] [vw-access-button],
+  body.nativa-checkout div[vw].enabled [vw-access-button] {
+    bottom: calc(10rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   div[vw] .vw-plugin-wrapper,
@@ -587,6 +600,18 @@
     div[vw].enabled [vw-access-button] {
       bottom: 6.5rem !important;
       left: 1.5rem !important;
+    }
+
+    body.nativa-checkout div[vw] [vw-access-button],
+    body.nativa-checkout div[vw].enabled [vw-access-button] {
+      bottom: 6.5rem !important;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    body.nativa-sticky-cta div[vw] [vw-access-button],
+    body.nativa-sticky-cta div[vw].enabled [vw-access-button] {
+      bottom: 6.5rem !important;
     }
   }
 }
