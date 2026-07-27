@@ -7,6 +7,8 @@ import NotFound from "@/pages/NotFound";
 import { lazy, Suspense } from "react";
 import { Redirect, Route, Switch } from "wouter";
 import AdminBanners from "./AdminBanners";
+import AdminContent from "./AdminContent";
+import AdminContentPageEditor from "./AdminContentPageEditor";
 import AdminCoupons from "./AdminCoupons";
 import AdminCustomerDetail from "./AdminCustomerDetail";
 import AdminCustomersList from "./AdminCustomersList";
@@ -132,6 +134,16 @@ export default function AdminRouter() {
         <Route path="/admin/regioes">
           <ProtectedAdmin>
             <AdminRegions />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/conteudo">
+          <ProtectedAdmin>
+            <AdminContent />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/conteudo/:slug">
+          <ProtectedAdmin>
+            <AdminContentPageEditor />
           </ProtectedAdmin>
         </Route>
         <Route path="/admin/integracoes">

@@ -14,6 +14,7 @@ import { useAdminNotifications } from "@/contexts/AdminNotificationsContext";
 import "@/styles/admin-theme.css";
 import {
   ChevronLeft,
+  FileText,
   ImageIcon,
   LayoutDashboard,
   LogOut,
@@ -91,6 +92,12 @@ const navItems: NavItem[] = [
     href: "/admin/regioes",
     icon: Map,
     match: (path) => path.startsWith("/admin/regioes"),
+  },
+  {
+    label: "Conteúdo",
+    href: "/admin/conteudo",
+    icon: FileText,
+    match: (path) => path.startsWith("/admin/conteudo"),
   },
   {
     label: "Email Marketing",

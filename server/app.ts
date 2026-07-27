@@ -12,14 +12,16 @@ import ordersRouter from "./routes/orders";
 import mercadoPagoRouter from "./routes/mercadoPago";
 import mercadoPagoWebhookRouter from "./routes/mercadoPagoWebhook";
 import newsletterRouter from "./routes/newsletter";
+import pagesRouter from "./routes/pages";
 import productsRouter from "./routes/products";
 import quizRouter from "./routes/quiz";
 import regionsRouter from "./routes/regions";
+import settingsRouter from "./routes/settings";
 import shippingRouter from "./routes/shipping";
 import seoRouter from "./routes/seo";
 
 /**
- * No Vercel a única function é /api. Rewrites de /produto e /sitemap
+ * No Vercel a única function é /api. Rewrites de /produto, /sitemap e páginas de ajuda
  * caem aqui — redirecionamos internamente para /api/seo/*.
  */
 function vercelSeoRewrite(req: Request, _res: Response, next: NextFunction) {
@@ -37,6 +39,13 @@ function vercelSeoRewrite(req: Request, _res: Response, next: NextFunction) {
     return;
   }
 
+  const queryPage = req.query.nativaSeoPage;
+  if (typeof queryPage === "string" && queryPage.trim()) {
+    req.url = `/api/seo/pagina/${encodeURIComponent(queryPage.trim())}`;
+    next();
+    return;
+  }
+
   // Alguns runtimes preservam o path original do rewrite
   const pathOnly = (req.path || "").split("?")[0];
   const categoryMatch = pathOnly.match(/^\/categoria\/([^/]+)\/?$/);
@@ -49,6 +58,15 @@ function vercelSeoRewrite(req: Request, _res: Response, next: NextFunction) {
   const productMatch = pathOnly.match(/^\/produto\/([^/]+)\/?$/);
   if (productMatch?.[1]) {
     req.url = `/api/seo/produto/${encodeURIComponent(decodeURIComponent(productMatch[1]))}`;
+    next();
+    return;
+  }
+
+  const helpMatch = pathOnly.match(
+    /^\/(como-comprar|trocas-e-devolucoes|frete-e-entrega|perguntas-frequentes)\/?$/,
+  );
+  if (helpMatch?.[1]) {
+    req.url = `/api/seo/pagina/${encodeURIComponent(helpMatch[1])}`;
     next();
     return;
   }
@@ -84,9 +102,11 @@ export function createApiApp() {
   app.use("/api/webhooks/mercado-pago", mercadoPagoWebhookRouter);
   app.use("/api/webhooks/brevo", brevoWebhookRouter);
   app.use("/api/newsletter", newsletterRouter);
+  app.use("/api/pages", pagesRouter);
   app.use("/api/products", productsRouter);
   app.use("/api/quiz", quizRouter);
   app.use("/api/regions", regionsRouter);
+  app.use("/api/settings", settingsRouter);
   app.use("/api/shipping", shippingRouter);
   app.use("/api/seo", seoRouter);
 

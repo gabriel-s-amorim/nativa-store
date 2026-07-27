@@ -1,7 +1,13 @@
 import { Router, type Request, type Response } from "express";
 import { absoluteUrl, stripHtml, truncateMeta } from "@shared/lib/seo";
+import {
+  buildContentPageJsonLd,
+  renderContentPageSeoBody,
+} from "@shared/lib/contentPageSeo";
+import { HELP_PAGE_SLUGS } from "@shared/types/contentPage";
 import { SITE_KEYWORDS, SITE_NAME, SITE_OG_IMAGE_PATH } from "@shared/const/site";
 import type { Product } from "@shared/types/product";
+import { getPublishedPageBySlug, listPublishedPages } from "../services/contentPages";
 import { getProductBySlug, listProducts, listRelatedProducts } from "../services/products";
 import {
   buildStandaloneOgHtml,
@@ -373,16 +379,108 @@ router.get("/produto/:slug", async (req, res) => {
   }
 });
 
+router.get("/pagina/:slug", async (req, res) => {
+  const slug = String(req.params.slug ?? "").trim();
+  const baseUrl = requestBaseUrl(req);
+
+  try {
+    if (!(HELP_PAGE_SLUGS as readonly string[]).includes(slug)) {
+      await sendSeoHtml(
+        req,
+        res,
+        {
+          title: `Página não encontrada — ${SITE_NAME}`,
+          description: "Esta página não está disponível na Nativa Store.",
+          url: absoluteUrl(baseUrl, `/${encodeURIComponent(slug)}`),
+          image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
+          type: "website",
+          noIndex: true,
+        },
+        404,
+      );
+      return;
+    }
+
+    const page = await getPublishedPageBySlug(slug);
+    if (!page) {
+      await sendSeoHtml(
+        req,
+        res,
+        {
+          title: `Página não encontrada — ${SITE_NAME}`,
+          description: "Esta página de ajuda não está disponível.",
+          url: absoluteUrl(baseUrl, `/${encodeURIComponent(slug)}`),
+          image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
+          type: "website",
+          noIndex: true,
+        },
+        404,
+      );
+      return;
+    }
+
+    const url = absoluteUrl(baseUrl, `/${page.slug}`);
+    const title = page.seoTitle || `${page.title} — ${SITE_NAME}`;
+    const description = truncateMeta(page.seoDescription || page.title);
+
+    const ua = req.headers["user-agent"];
+    const crawler = isSocialCrawler(typeof ua === "string" ? ua : undefined);
+    const bodyContent = crawler ? renderContentPageSeoBody(page) : undefined;
+
+    await sendSeoHtml(req, res, {
+      title,
+      description,
+      url,
+      image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
+      type: "website",
+      keywords: `${page.title}, ajuda, ${SITE_KEYWORDS}`,
+      jsonLd: buildContentPageJsonLd({ baseUrl, page }),
+      bodyContent,
+    });
+  } catch (error) {
+    console.error("[seo] falha ao montar meta da página de ajuda:", error);
+    const spaHtml = await loadSpaHtmlAsync(baseUrl);
+    if (spaHtml) {
+      res.status(200).type("html").setHeader("Cache-Control", "no-store").send(spaHtml);
+      return;
+    }
+    res
+      .status(200)
+      .type("html")
+      .setHeader("Cache-Control", "private, no-store")
+      .send(
+        buildStandaloneOgHtml({
+          title: SITE_NAME,
+          description: "Ajuda da Nativa Store.",
+          url: absoluteUrl(baseUrl, `/${encodeURIComponent(slug)}`),
+          image: absoluteUrl(baseUrl, SITE_OG_IMAGE_PATH),
+        }),
+      );
+  }
+});
+
 router.get("/sitemap.xml", async (req, res) => {
   const baseUrl = requestBaseUrl(req).replace(/\/$/, "");
 
   try {
-    const products = await listProducts();
+    const [products, helpPages] = await Promise.all([
+      listProducts(),
+      listPublishedPages(),
+    ]);
     const urls = [
       { loc: `${baseUrl}/`, priority: "1.0", changefreq: "daily" },
       ...(products.some((product) => product.category === "Bolsas")
         ? [{ loc: `${baseUrl}/categoria/bolsas`, priority: "0.9", changefreq: "weekly" }]
         : []),
+      ...helpPages
+        .filter((page) =>
+          (HELP_PAGE_SLUGS as readonly string[]).includes(page.slug),
+        )
+        .map((page) => ({
+          loc: `${baseUrl}/${page.slug}`,
+          priority: "0.6",
+          changefreq: "monthly",
+        })),
       ...products.map((product) => ({
         loc: `${baseUrl}/produto/${product.slug}`,
         priority: "0.8",

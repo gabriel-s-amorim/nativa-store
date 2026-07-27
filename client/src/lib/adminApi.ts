@@ -11,8 +11,14 @@ import type {
   OrderStatus,
 } from "@shared/types/order";
 import type { Banner, BannerInput } from "@shared/types/banner";
+import type {
+  ContentPage,
+  ContentPageInput,
+  ContentPageSummary,
+} from "@shared/types/contentPage";
 import type { Coupon, CouponInput } from "@shared/types/coupon";
 import type { Region, RegionInput } from "@shared/types/region";
+import type { StoreSettings, StoreSettingsInput } from "@shared/types/storeSettings";
 import type {
   MelhorEnvioSettingsInput,
   MelhorEnvioStatus,
@@ -416,6 +422,32 @@ export function updateAdminRegion(id: string, input: RegionInput) {
 export function deleteAdminRegion(id: string) {
   return request<void>(`/api/admin/regions/${encodeURIComponent(id)}`, {
     method: "DELETE",
+  });
+}
+
+export function fetchAdminStoreSettings() {
+  return request<StoreSettings>("/api/admin/settings");
+}
+
+export function updateAdminStoreSettings(input: StoreSettingsInput) {
+  return request<StoreSettings>("/api/admin/settings", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function fetchAdminContentPages() {
+  return request<ContentPageSummary[]>("/api/admin/pages");
+}
+
+export function fetchAdminContentPage(slug: string) {
+  return request<ContentPage>(`/api/admin/pages/${encodeURIComponent(slug)}`);
+}
+
+export function updateAdminContentPage(slug: string, input: ContentPageInput) {
+  return request<ContentPage>(`/api/admin/pages/${encodeURIComponent(slug)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
   });
 }
 

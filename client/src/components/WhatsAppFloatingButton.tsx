@@ -1,7 +1,9 @@
 import { useLocation } from "wouter";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { useProductStickyCtaVisible } from "@/lib/floatingChrome";
-import { buildWhatsAppUrl, defaultWhatsAppMessage } from "@/lib/whatsapp";
+import { fetchStoreSettings } from "@/lib/storeSettings";
+import { buildWhatsAppUrl, defaultWhatsAppMessage, WHATSAPP_NUMBER } from "@/lib/whatsapp";
+import { useEffect, useState } from "react";
 
 /**
  * Botão flutuante de WhatsApp — canto inferior direito.
@@ -10,6 +12,19 @@ import { buildWhatsAppUrl, defaultWhatsAppMessage } from "@/lib/whatsapp";
 export default function WhatsAppFloatingButton() {
   const [location] = useLocation();
   const stickyCtaVisible = useProductStickyCtaVisible();
+  const [whatsappNumber, setWhatsappNumber] = useState(WHATSAPP_NUMBER);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStoreSettings().then((settings) => {
+      if (!cancelled && settings.whatsappNumber) {
+        setWhatsappNumber(settings.whatsappNumber);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const isAdmin = location === "/admin" || location.startsWith("/admin/");
   const isCheckout = location === "/checkout" || location.startsWith("/checkout/");
@@ -22,7 +37,7 @@ export default function WhatsAppFloatingButton() {
 
   return (
     <a
-      href={buildWhatsAppUrl(defaultWhatsAppMessage())}
+      href={buildWhatsAppUrl(defaultWhatsAppMessage(), whatsappNumber)}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Falar no WhatsApp"

@@ -10,20 +10,9 @@ import {
   type ReactNode,
 } from "react";
 import type { StoryWithUrls } from "@/content/stories";
+import { fetchStoreSettings } from "@/lib/storeSettings";
+import { DEFAULT_STORE_SETTINGS } from "@shared/types/storeSettings";
 import { StoryVideo } from "./StoryVideo";
-
-const SOCIAL_LINKS = [
-  {
-    label: "Instagram",
-    href: "https://www.instagram.com/nativa_criativa/",
-    icon: Instagram,
-  },
-  {
-    label: "Facebook",
-    href: "https://www.facebook.com/share/1BjeTNQpat/?mibextid=wwXIfr",
-    icon: Facebook,
-  },
-] as const;
 
 const CTA_BORDER = "36px 14px 42px 18px";
 const CTA_SLIDE_ID = "__social-cta__";
@@ -72,6 +61,37 @@ function SocialCtaCard({
   reduceMotion: boolean | null;
   onReturnToStory?: () => void;
 }) {
+  const [socials, setSocials] = useState(() => [
+    { label: "Instagram", href: DEFAULT_STORE_SETTINGS.instagramUrl, icon: Instagram as typeof Instagram },
+    { label: "Facebook", href: DEFAULT_STORE_SETTINGS.facebookUrl, icon: Facebook as typeof Facebook },
+  ]);
+  const [tiktokUrl, setTiktokUrl] = useState(DEFAULT_STORE_SETTINGS.tiktokUrl);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStoreSettings().then((settings) => {
+      if (cancelled) return;
+      setSocials(
+        [
+          settings.instagramUrl
+            ? { label: "Instagram", href: settings.instagramUrl, icon: Instagram }
+            : null,
+          settings.facebookUrl
+            ? { label: "Facebook", href: settings.facebookUrl, icon: Facebook }
+            : null,
+        ].filter(Boolean) as {
+          label: string;
+          href: string;
+          icon: typeof Instagram;
+        }[],
+      );
+      setTiktokUrl(settings.tiktokUrl);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div
       className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden px-5 py-8 text-center"
@@ -114,7 +134,7 @@ function SocialCtaCard({
         </p>
 
         <div className="mb-6 flex items-center gap-3">
-          {SOCIAL_LINKS.map(({ label, href, icon: Icon }) => (
+          {socials.map(({ label, href, icon: Icon }) => (
             <motion.a
               key={label}
               href={href}
@@ -128,17 +148,19 @@ function SocialCtaCard({
               <Icon className="h-5 w-5" />
             </motion.a>
           ))}
-          <motion.a
-            href="https://www.tiktok.com/@nativa.criativa?_r=1&_t=ZS-98HzhNyOEYj"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition hover:bg-white/25"
-            aria-label="TikTok"
-            whileHover={reduceMotion ? undefined : { scale: 1.08, y: -2 }}
-            whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-          >
-            <TikTokGlyph className="h-5 w-5" />
-          </motion.a>
+          {tiktokUrl ? (
+            <motion.a
+              href={tiktokUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition hover:bg-white/25"
+              aria-label="TikTok"
+              whileHover={reduceMotion ? undefined : { scale: 1.08, y: -2 }}
+              whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+            >
+              <TikTokGlyph className="h-5 w-5" />
+            </motion.a>
+          ) : null}
         </div>
 
         {onReturnToStory ? (

@@ -42,6 +42,7 @@ const ProductPage = lazy(() => import("./pages/ProductPage"));
 const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
 // Lazy: Quiz (e framer-motion do QuizCuradoria) só em /quiz — não na PDP.
 const QuizPage = lazy(() => import("./pages/QuizPage"));
+const HelpPage = lazy(() => import("./pages/HelpPage"));
 const StoreHome = () => <Home />;
 
 function AdminFallback() {
@@ -89,6 +90,14 @@ function QuizPageRoute() {
   );
 }
 
+function HelpPageRoute({ slug }: { slug: string }) {
+  return (
+    <Suspense fallback={<StorePageFallback />}>
+      <HelpPage slug={slug} />
+    </Suspense>
+  );
+}
+
 function Router() {
   const [location] = useLocation();
 
@@ -116,6 +125,18 @@ function Router() {
       <Route path={"/checkout"} component={CheckoutPageRoute} />
       <Route path={"/favoritos"} component={WishlistPage} />
       <Route path={"/quiz"} component={QuizPageRoute} />
+      <Route path={"/como-comprar"}>
+        <HelpPageRoute slug="como-comprar" />
+      </Route>
+      <Route path={"/trocas-e-devolucoes"}>
+        <HelpPageRoute slug="trocas-e-devolucoes" />
+      </Route>
+      <Route path={"/frete-e-entrega"}>
+        <HelpPageRoute slug="frete-e-entrega" />
+      </Route>
+      <Route path={"/perguntas-frequentes"}>
+        <HelpPageRoute slug="perguntas-frequentes" />
+      </Route>
       <Route path={"/produto/:slug"} component={ProductPageRoute} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

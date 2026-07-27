@@ -8,7 +8,12 @@ import { toast } from "sonner";
 import { Instagram, Facebook, Mail, MapPin, Phone } from "lucide-react";
 import NativaLogo from "./NativaLogo";
 import { WaveDividerDown } from "./NativaDecorations";
-import { buildWhatsAppUrl, defaultWhatsAppMessage, WHATSAPP_DISPLAY } from "@/lib/whatsapp";
+import { buildWhatsAppUrl, defaultWhatsAppMessage } from "@/lib/whatsapp";
+import { fetchStoreSettings } from "@/lib/storeSettings";
+import type { StoreSettings } from "@shared/types/storeSettings";
+import { DEFAULT_STORE_SETTINGS } from "@shared/types/storeSettings";
+import { useEffect, useState } from "react";
+import { Link } from "wouter";
 
 const FOOTER_BG = "#1A3D2B";
 
@@ -26,7 +31,9 @@ function TikTokIcon({ size = 16 }: { size?: number }) {
   );
 }
 
-const footerLinks = {
+type FooterLink = { label: string; href: string; internal?: boolean };
+
+const footerLinks: Record<string, FooterLink[]> = {
   loja: [
     { label: "Coleções", href: "#colecoes" },
     { label: "Novidades", href: "#novidades" },
@@ -34,28 +41,53 @@ const footerLinks = {
     { label: "Edições Limitadas", href: "#" },
   ],
   ajuda: [
-    { label: "Como Comprar", href: "#" },
-    { label: "Trocas e Devoluções", href: "#" },
-    { label: "Frete e Entrega", href: "#" },
-    { label: "Perguntas Frequentes", href: "#" },
+    { label: "Como Comprar", href: "/como-comprar", internal: true },
+    { label: "Trocas e Devoluções", href: "/trocas-e-devolucoes", internal: true },
+    { label: "Frete e Entrega", href: "/frete-e-entrega", internal: true },
+    { label: "Perguntas Frequentes", href: "/perguntas-frequentes", internal: true },
   ],
   empresa: [
     { label: "Nossa História", href: "#sobre" },
-    { label: "Artesãs Parceiras", href: "#" },
-    { label: "Sustentabilidade", href: "#" },
-    { label: "Trabalhe Conosco", href: "#" },
   ],
 };
 
 export default function Footer() {
-  const handleLink = (e: React.MouseEvent, href: string) => {
-    e.preventDefault();
+  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStoreSettings().then((data) => {
+      if (!cancelled) setSettings(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleLink = (e: React.MouseEvent, href: string, internal?: boolean) => {
+    if (internal) return;
     if (href.startsWith("#") && href.length > 1) {
+      e.preventDefault();
       document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
-    } else {
+      return;
+    }
+    if (href === "#") {
+      e.preventDefault();
       toast("Em breve!", { description: "Esta página está sendo desenvolvida." });
     }
   };
+
+  const socials = [
+    settings.instagramUrl
+      ? { icon: <Instagram size={16} />, label: "Instagram", href: settings.instagramUrl }
+      : null,
+    settings.facebookUrl
+      ? { icon: <Facebook size={16} />, label: "Facebook", href: settings.facebookUrl }
+      : null,
+    settings.tiktokUrl
+      ? { icon: <TikTokIcon size={16} />, label: "TikTok", href: settings.tiktokUrl }
+      : null,
+  ].filter(Boolean) as { icon: React.ReactNode; label: string; href: string }[];
 
   return (
     <>
@@ -64,10 +96,8 @@ export default function Footer() {
         id="contato"
         style={{ background: FOOTER_BG }}
       >
-      {/* Main footer content */}
       <div className="container py-16">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 text-center md:text-left">
-          {/* Brand column */}
           <div className="lg:col-span-2 flex flex-col items-center md:items-start">
             <div className="mb-4">
               <NativaLogo className="h-12 sm:h-14 w-auto" taglineClassName="text-white/70" showTagline />
@@ -79,18 +109,22 @@ export default function Footer() {
               Peças autorais e exclusivas: bolsas artesanais feitas à mão para contar histórias brasileiras.
             </p>
 
-            {/* Contact info */}
             <div className="space-y-2 mb-6">
-              <div className="flex items-center justify-center md:justify-start gap-2 text-white/55">
-                <span className="text-[#E8821A]">
-                  <Mail size={14} />
-                </span>
-                <span className="text-xs" style={{ fontFamily: "'Nunito', sans-serif" }}>
-                  contato@nativa.com.br
-                </span>
-              </div>
+              {settings.contactEmail ? (
+                <a
+                  href={`mailto:${settings.contactEmail}`}
+                  className="flex items-center justify-center md:justify-start gap-2 text-white/55 transition-colors hover:text-white/90"
+                >
+                  <span className="text-[#E8821A]">
+                    <Mail size={14} />
+                  </span>
+                  <span className="text-xs" style={{ fontFamily: "'Nunito', sans-serif" }}>
+                    {settings.contactEmail}
+                  </span>
+                </a>
+              ) : null}
               <a
-                href={buildWhatsAppUrl(defaultWhatsAppMessage())}
+                href={buildWhatsAppUrl(defaultWhatsAppMessage(), settings.whatsappNumber)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 text-white/55 transition-colors hover:text-[#25D366] md:justify-start"
@@ -99,57 +133,43 @@ export default function Footer() {
                   <Phone size={14} />
                 </span>
                 <span className="text-xs" style={{ fontFamily: "'Nunito', sans-serif" }}>
-                  {WHATSAPP_DISPLAY}
+                  {settings.whatsappDisplay}
                 </span>
               </a>
-              <div className="flex items-center justify-center md:justify-start gap-2 text-white/55">
-                <span className="text-[#E8821A]">
-                  <MapPin size={14} />
-                </span>
-                <span className="text-xs" style={{ fontFamily: "'Nunito', sans-serif" }}>
-                  São Paulo, SP — Brasil
-                </span>
-              </div>
+              {settings.addressLine ? (
+                <div className="flex items-center justify-center md:justify-start gap-2 text-white/55">
+                  <span className="text-[#E8821A]">
+                    <MapPin size={14} />
+                  </span>
+                  <span className="text-xs" style={{ fontFamily: "'Nunito', sans-serif" }}>
+                    {settings.addressLine}
+                  </span>
+                </div>
+              ) : null}
             </div>
 
-            {/* Social links */}
-            <div className="flex gap-3 justify-center md:justify-start">
-              {[
-                {
-                  icon: <Instagram size={16} />,
-                  label: "Instagram",
-                  href: "https://www.instagram.com/nativa_criativa/",
-                },
-                {
-                  icon: <Facebook size={16} />,
-                  label: "Facebook",
-                  href: "https://www.facebook.com/share/1BjeTNQpat/?mibextid=wwXIfr",
-                },
-                {
-                  icon: <TikTokIcon size={16} />,
-                  label: "TikTok",
-                  href: "https://www.tiktok.com/@nativa.criativa?_r=1&_t=ZS-98HzhNyOEYj",
-                },
-              ].map((social) => (
-                <a
-                  key={social.label}
-                  href={social.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110"
-                  style={{
-                    background: "rgba(255,255,255,0.1)",
-                    color: "rgba(255,255,255,0.7)",
-                  }}
-                  aria-label={social.label}
-                >
-                  {social.icon}
-                </a>
-              ))}
-            </div>
+            {socials.length > 0 ? (
+              <div className="flex gap-3 justify-center md:justify-start">
+                {socials.map((social) => (
+                  <a
+                    key={social.label}
+                    href={social.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110"
+                    style={{
+                      background: "rgba(255,255,255,0.1)",
+                      color: "rgba(255,255,255,0.7)",
+                    }}
+                    aria-label={social.label}
+                  >
+                    {social.icon}
+                  </a>
+                ))}
+              </div>
+            ) : null}
           </div>
 
-          {/* Links columns */}
           {Object.entries(footerLinks).map(([section, links]) => (
             <div key={section} className="flex flex-col items-center md:items-start">
               <h4
@@ -164,14 +184,24 @@ export default function Footer() {
               <ul className="space-y-2.5">
                 {links.map((link) => (
                   <li key={link.label}>
-                    <a
-                      href={link.href}
-                      onClick={(e) => handleLink(e, link.href)}
-                      className="text-sm text-white/55 hover:text-white/90 transition-colors duration-200"
-                      style={{ fontFamily: "'Lora', serif" }}
-                    >
-                      {link.label}
-                    </a>
+                    {link.internal ? (
+                      <Link
+                        href={link.href}
+                        className="text-sm text-white/55 hover:text-white/90 transition-colors duration-200"
+                        style={{ fontFamily: "'Lora', serif" }}
+                      >
+                        {link.label}
+                      </Link>
+                    ) : (
+                      <a
+                        href={link.href}
+                        onClick={(e) => handleLink(e, link.href, link.internal)}
+                        className="text-sm text-white/55 hover:text-white/90 transition-colors duration-200"
+                        style={{ fontFamily: "'Lora', serif" }}
+                      >
+                        {link.label}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -180,7 +210,6 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* Bottom bar */}
       <div
         className="border-t py-5"
         style={{ borderColor: "rgba(255,255,255,0.08)" }}

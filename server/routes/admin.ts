@@ -27,8 +27,10 @@ import adminMetaCatalogRouter from "./adminMetaCatalog";
 import adminNotificationsRouter from "./adminNotifications";
 import adminOrdersRouter from "./adminOrders";
 import adminImportRouter from "./adminImport";
+import adminPagesRouter from "./adminPages";
 import adminQuizRouter from "./adminQuiz";
 import adminRegionsRouter from "./adminRegions";
+import adminSettingsRouter from "./adminSettings";
 
 const router = Router();
 
@@ -118,8 +120,10 @@ router.use("/dashboard", adminDashboardRouter);
 router.use("/banners", adminBannersRouter);
 router.use("/coupons", adminCouponsRouter);
 router.use("/brevo", adminBrevoRouter);
+router.use("/pages", adminPagesRouter);
 router.use("/quiz", adminQuizRouter);
 router.use("/regions", adminRegionsRouter);
+router.use("/settings", adminSettingsRouter);
 router.use("/melhor-envio", adminMelhorEnvioRouter);
 router.use("/mercado-pago", adminMercadoPagoRouter);
 router.use("/meta-catalog", adminMetaCatalogRouter);
