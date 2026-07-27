@@ -12,7 +12,7 @@ import type {
 import { supabase } from "../lib/supabase";
 
 const SELECT =
-  "slug, title, seo_title, seo_description, page_type, content, is_published, updated_at";
+  "slug, title, seo_title, seo_description, page_type, content, is_published, created_at, updated_at";
 
 export async function listPublishedPages(): Promise<ContentPageSummary[]> {
   const { data, error } = await supabase

@@ -51,4 +51,6 @@ export interface Product {
   highlights: string[];
   styleTags: string[];
   regionId: string | null;
+  /** ISO timestamptz do banco; usado no sitemap lastmod. */
+  updatedAt?: string;
 }

@@ -4,6 +4,7 @@ import {
   buildContentPageJsonLd,
   renderContentPageSeoBody,
 } from "@shared/lib/contentPageSeo";
+import { SITE_BUILD_DATE } from "@shared/const/buildInfo";
 import { HELP_PAGE_SLUGS } from "@shared/types/contentPage";
 import { SITE_KEYWORDS, SITE_NAME, SITE_OG_IMAGE_PATH } from "@shared/const/site";
 import type { Product } from "@shared/types/product";
@@ -19,6 +20,25 @@ import {
 } from "../lib/seoHtml";
 import { renderCategorySeoBody } from "../lib/renderCategorySeoBody";
 import { renderProductSeoBody } from "../lib/renderProductSeoBody";
+
+/** YYYY-MM-DD para <lastmod> do sitemap. */
+function toSitemapDate(value: string | null | undefined): string {
+  if (!value) return SITE_BUILD_DATE;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return SITE_BUILD_DATE;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function maxSitemapDate(dates: Array<string | null | undefined>): string {
+  let max = "1970-01-01";
+  for (const value of dates) {
+    const date = toSitemapDate(value);
+    if (date > max) max = date;
+  }
+  return max === "1970-01-01" ? SITE_BUILD_DATE : max;
+}
 
 const router = Router();
 const BAGS_TITLE = "Bolsas Artesanais — Nativa Store";
@@ -467,10 +487,23 @@ router.get("/sitemap.xml", async (req, res) => {
       listProducts(),
       listPublishedPages(),
     ]);
+    const bagProducts = products.filter((product) => product.category === "Bolsas");
     const urls = [
-      { loc: `${baseUrl}/`, priority: "1.0", changefreq: "daily" },
-      ...(products.some((product) => product.category === "Bolsas")
-        ? [{ loc: `${baseUrl}/categoria/bolsas`, priority: "0.9", changefreq: "weekly" }]
+      {
+        loc: `${baseUrl}/`,
+        lastmod: SITE_BUILD_DATE,
+        priority: "1.0",
+        changefreq: "daily",
+      },
+      ...(bagProducts.length > 0
+        ? [
+            {
+              loc: `${baseUrl}/categoria/bolsas`,
+              lastmod: maxSitemapDate(bagProducts.map((product) => product.updatedAt)),
+              priority: "0.9",
+              changefreq: "weekly",
+            },
+          ]
         : []),
       ...helpPages
         .filter((page) =>
@@ -478,11 +511,13 @@ router.get("/sitemap.xml", async (req, res) => {
         )
         .map((page) => ({
           loc: `${baseUrl}/${page.slug}`,
+          lastmod: toSitemapDate(page.updatedAt),
           priority: "0.6",
           changefreq: "monthly",
         })),
       ...products.map((product) => ({
         loc: `${baseUrl}/produto/${product.slug}`,
+        lastmod: toSitemapDate(product.updatedAt),
         priority: "0.8",
         changefreq: "weekly",
       })),
@@ -494,6 +529,7 @@ ${urls
   .map(
     (entry) => `  <url>
     <loc>${escapeXml(entry.loc)}</loc>
+    <lastmod>${entry.lastmod}</lastmod>
     <changefreq>${entry.changefreq}</changefreq>
     <priority>${entry.priority}</priority>
   </url>`,

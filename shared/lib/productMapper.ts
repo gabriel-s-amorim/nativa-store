@@ -37,6 +37,8 @@ export interface ProductRow {
   highlights: unknown;
   style_tags?: unknown;
   region_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -128,6 +130,7 @@ export function mapProductRowToProduct(row: ProductRow): Product {
     highlights: asStringArray(row.highlights),
     styleTags: asStringArray(row.style_tags),
     regionId: row.region_id ?? null,
+    updatedAt: row.updated_at ?? row.created_at ?? undefined,
   };
 }
 

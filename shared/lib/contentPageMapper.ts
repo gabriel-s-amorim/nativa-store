@@ -14,6 +14,7 @@ export type ContentPageRow = {
   page_type: string;
   content: unknown;
   is_published: boolean;
+  created_at?: string;
   updated_at: string;
 };
 
@@ -31,7 +32,7 @@ export function mapContentPageRow(row: ContentPageRow): ContentPage {
     pageType: asPageType(row.page_type),
     content: (row.content ?? {}) as ContentPageBody,
     isPublished: Boolean(row.is_published),
-    updatedAt: row.updated_at,
+    updatedAt: row.updated_at || row.created_at || "",
   };
 }
 
@@ -41,7 +42,7 @@ export function mapContentPageSummary(row: ContentPageRow): ContentPageSummary {
     title: row.title,
     pageType: asPageType(row.page_type),
     isPublished: Boolean(row.is_published),
-    updatedAt: row.updated_at,
+    updatedAt: row.updated_at || row.created_at || "",
   };
 }
 
