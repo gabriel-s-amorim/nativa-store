@@ -1,94 +1,71 @@
 /**
- * Rate limit simples em memória para /api/admin/login.
- * Em serverless (Vercel) o estado é por instância — ainda reduz força bruta.
+ * Rate limit de login admin persistido no Postgres (compartilhado entre
+ * instâncias serverless na Vercel).
  */
 
+import type { Request } from "express";
+import { getClientIp as extractClientIp } from "./clientIp";
+import { supabase } from "./supabase";
+
 const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 8;
-const LOCKOUT_MS = 15 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
 
-interface AttemptState {
-  failures: number;
-  windowStartedAt: number;
-  lockedUntil: number;
+function failureBucket(key: string): string {
+  return `admin-login:${key}`;
 }
 
-const attemptsByKey = new Map<string, AttemptState>();
-
-function prune(now: number) {
-  if (attemptsByKey.size < 500) return;
-  for (const [key, state] of Array.from(attemptsByKey.entries())) {
-    if (state.lockedUntil < now && state.windowStartedAt + WINDOW_MS < now) {
-      attemptsByKey.delete(key);
-    }
-  }
+export function getClientIp(req: {
+  ip?: string;
+  headers: Record<string, unknown>;
+  socket?: { remoteAddress?: string };
+}): string {
+  const ip = extractClientIp(req as Request);
+  return ip || req.ip?.trim() || "unknown";
 }
 
-export function getClientIp(req: { ip?: string; headers: Record<string, unknown> }): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) {
-    return forwarded.split(",")[0]?.trim() || "unknown";
-  }
-  if (Array.isArray(forwarded) && typeof forwarded[0] === "string") {
-    return forwarded[0].split(",")[0]?.trim() || "unknown";
-  }
-  return req.ip?.trim() || "unknown";
-}
-
-export function checkAdminLoginRateLimit(key: string): {
+export async function checkAdminLoginRateLimit(key: string): Promise<{
   allowed: boolean;
   retryAfterSec?: number;
-} {
-  const now = Date.now();
-  prune(now);
+}> {
+  const since = new Date(Date.now() - WINDOW_MS).toISOString();
+  const { count, error } = await supabase
+    .from("rate_limit_events")
+    .select("id", { count: "exact", head: true })
+    .eq("bucket", failureBucket(key))
+    .gte("created_at", since);
 
-  const state = attemptsByKey.get(key);
-  if (!state) {
+  if (error) {
+    console.error("admin login rate check failed:", error.message);
     return { allowed: true };
   }
 
-  if (state.lockedUntil > now) {
+  if ((count ?? 0) >= MAX_ATTEMPTS) {
     return {
       allowed: false,
-      retryAfterSec: Math.ceil((state.lockedUntil - now) / 1000),
-    };
-  }
-
-  if (now - state.windowStartedAt > WINDOW_MS) {
-    attemptsByKey.delete(key);
-    return { allowed: true };
-  }
-
-  if (state.failures >= MAX_ATTEMPTS) {
-    state.lockedUntil = now + LOCKOUT_MS;
-    return {
-      allowed: false,
-      retryAfterSec: Math.ceil(LOCKOUT_MS / 1000),
+      retryAfterSec: Math.ceil(WINDOW_MS / 1000),
     };
   }
 
   return { allowed: true };
 }
 
-export function recordAdminLoginFailure(key: string): void {
-  const now = Date.now();
-  const state = attemptsByKey.get(key);
-
-  if (!state || now - state.windowStartedAt > WINDOW_MS) {
-    attemptsByKey.set(key, {
-      failures: 1,
-      windowStartedAt: now,
-      lockedUntil: 0,
-    });
-    return;
-  }
-
-  state.failures += 1;
-  if (state.failures >= MAX_ATTEMPTS) {
-    state.lockedUntil = now + LOCKOUT_MS;
+export async function recordAdminLoginFailure(key: string): Promise<void> {
+  const { error } = await supabase.from("rate_limit_events").insert({
+    bucket: failureBucket(key),
+  });
+  if (error) {
+    console.error("admin login failure record failed:", error.message);
   }
 }
 
-export function clearAdminLoginFailures(key: string): void {
-  attemptsByKey.delete(key);
+export async function clearAdminLoginFailures(key: string): Promise<void> {
+  const since = new Date(Date.now() - WINDOW_MS).toISOString();
+  const { error } = await supabase
+    .from("rate_limit_events")
+    .delete()
+    .eq("bucket", failureBucket(key))
+    .gte("created_at", since);
+  if (error) {
+    console.error("admin login clear failed:", error.message);
+  }
 }

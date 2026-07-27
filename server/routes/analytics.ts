@@ -4,6 +4,8 @@ import {
   setAnalyticsExcludeCookie,
   shouldExcludeAnalytics,
 } from "../lib/analyticsExclude";
+import { getClientIp } from "../lib/clientIp";
+import { consumeMemoryRateLimit } from "../lib/memoryRateLimit";
 import {
   generateVisitorSessionId,
   getVisitorSessionFromCookie,
@@ -22,6 +24,17 @@ router.post("/page-view", async (req, res) => {
     }
 
     if (shouldExcludeAnalytics(req)) {
+      res.status(204).send();
+      return;
+    }
+
+    const ip = getClientIp(req) ?? req.ip ?? "unknown";
+    const rate = consumeMemoryRateLimit({
+      key: `page-view:${ip}`,
+      max: 120,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (!rate.allowed) {
       res.status(204).send();
       return;
     }

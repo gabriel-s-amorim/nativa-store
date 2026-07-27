@@ -3,6 +3,8 @@ import {
   shippingQuoteSchema,
 } from "@shared/schemas/melhorEnvio";
 import { Router } from "express";
+import { getClientIp } from "../lib/clientIp";
+import { consumeDbRateLimit } from "../lib/dbRateLimit";
 import {
   requireCustomer,
   type CustomerAuthRequest,
@@ -25,6 +27,20 @@ router.get("/config", async (_req, res) => {
 
 router.post("/quote", async (req, res) => {
   try {
+    const ip = getClientIp(req) ?? req.ip ?? "unknown";
+    const rate = await consumeDbRateLimit({
+      bucket: `shipping-quote:${ip}`,
+      max: 30,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (!rate.allowed) {
+      res.setHeader("Retry-After", String(rate.retryAfterSec ?? 600));
+      res.status(429).json({
+        error: "Muitas cotações. Aguarde alguns minutos e tente de novo.",
+      });
+      return;
+    }
+
     const parsed = shippingQuoteSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });

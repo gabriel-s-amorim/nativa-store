@@ -222,18 +222,19 @@ export async function deleteCoupon(id: string): Promise<void> {
 }
 
 export async function incrementCouponUsage(code: string): Promise<void> {
-  const coupon = await findCouponByCode(code);
-  if (!coupon) return;
+  const normalized = normalizeCouponCode(code);
+  if (!normalized) return;
 
-  const { error } = await supabase
-    .from("coupons")
-    .update({
-      usage_count: coupon.usageCount + 1,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", coupon.id);
+  const { data, error } = await supabase.rpc("increment_coupon_usage", {
+    p_code: normalized,
+  });
 
   if (error) {
     throw new Error(`Erro ao registrar uso do cupom: ${error.message}`);
+  }
+
+  // Pedido já foi criado; se a cota estourou por race, só registra o aviso.
+  if (data === false) {
+    console.warn(`Cupom sem cota restante ao incrementar: ${normalized}`);
   }
 }

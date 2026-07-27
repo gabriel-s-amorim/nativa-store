@@ -4,6 +4,7 @@ import {
   VISITOR_SESSION_COOKIE,
   VISITOR_SESSION_MAX_AGE_MS,
 } from "@shared/const/analytics";
+import { shouldUseSecureCookies } from "./cookieSecure";
 
 export function generateVisitorSessionId(): string {
   return crypto.randomUUID();
@@ -19,11 +20,9 @@ export function getVisitorSessionFromCookie(
 }
 
 export function setVisitorSessionCookie(res: Response, sessionId: string): void {
-  const isProduction = process.env.NODE_ENV === "production";
-
   res.cookie(VISITOR_SESSION_COOKIE, sessionId, {
     httpOnly: true,
-    secure: isProduction,
+    secure: shouldUseSecureCookies(),
     sameSite: "lax",
     maxAge: VISITOR_SESSION_MAX_AGE_MS,
     path: "/",

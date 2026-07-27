@@ -6,6 +6,7 @@ import {
 import type { Request, Response } from "express";
 import { ADMIN_COOKIE_NAME, verifyAdminToken } from "./adminAuth";
 import { getClientIp } from "./clientIp";
+import { shouldUseSecureCookies } from "./cookieSecure";
 
 function parseExcludeIps(): Set<string> {
   const raw = process.env.ANALYTICS_EXCLUDE_IPS?.trim() ?? "";
@@ -54,10 +55,9 @@ export function shouldExcludeAnalytics(req: Request): boolean {
 }
 
 export function setAnalyticsExcludeCookie(res: Response): void {
-  const isProduction = process.env.NODE_ENV === "production";
   res.cookie(ANALYTICS_EXCLUDE_COOKIE, ANALYTICS_EXCLUDE_COOKIE_VALUE, {
     httpOnly: false,
-    secure: isProduction,
+    secure: shouldUseSecureCookies(),
     sameSite: "lax",
     maxAge: ANALYTICS_EXCLUDE_COOKIE_MAX_AGE_MS,
     path: "/",

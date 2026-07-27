@@ -68,26 +68,50 @@ async function fetchCartItems(cartId: string): Promise<CartItemRow[]> {
   return (data ?? []) as CartItemRow[];
 }
 
-async function validateCheckoutStock(items: CartItemRow[]): Promise<void> {
-  const productIds = Array.from(new Set(items.map(item => item.product_id)));
+/** Revalida preço e estoque do catálogo antes de fechar o pedido. */
+async function syncCartPricesAndValidateStock(
+  items: CartItemRow[]
+): Promise<CartItemRow[]> {
+  const productIds = Array.from(new Set(items.map((item) => item.product_id)));
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, in_stock, stock_count")
+    .select("id, name, price, in_stock, stock_count")
     .in("id", productIds);
   if (error) throw new Error(error.message);
 
   const products = new Map(
-    (data ?? []).map(product => [Number(product.id), product])
+    (data ?? []).map((product) => [Number(product.id), product])
   );
+
   const requested = new Map<number, { quantity: number; name: string }>();
+  const synced: CartItemRow[] = [];
+
   for (const item of items) {
     const id = Number(item.product_id);
+    const product = products.get(id);
+    if (!product) {
+      throw new Error(`Produto indisponível: ${item.product_name}`);
+    }
+
+    const currentPrice = Number(product.price);
+    if (Number(item.unit_price) !== currentPrice) {
+      const { error: updateError } = await supabase
+        .from("cart_items")
+        .update({ unit_price: currentPrice })
+        .eq("id", item.id);
+      if (updateError) throw new Error(updateError.message);
+      synced.push({ ...item, unit_price: currentPrice });
+    } else {
+      synced.push(item);
+    }
+
     const current = requested.get(id);
     requested.set(id, {
       quantity: (current?.quantity ?? 0) + item.quantity,
       name: item.product_name,
     });
   }
+
   for (const [id, item] of Array.from(requested.entries())) {
     const product = products.get(id);
     if (
@@ -98,6 +122,8 @@ async function validateCheckoutStock(items: CartItemRow[]): Promise<void> {
       throw new Error(`Estoque insuficiente para ${item.name}`);
     }
   }
+
+  return synced;
 }
 
 async function fetchOrderWithItems(
@@ -267,9 +293,9 @@ export async function createOrderFromCheckout(
     const cartRow = await fetchCustomerCartRow(customerId);
     if (!cartRow) throw new Error("Carrinho vazio");
 
-    const cartItems = await fetchCartItems(cartRow.id);
-    if (cartItems.length === 0) throw new Error("Carrinho vazio");
-    await validateCheckoutStock(cartItems);
+    const cartItemsRaw = await fetchCartItems(cartRow.id);
+    if (cartItemsRaw.length === 0) throw new Error("Carrinho vazio");
+    const cartItems = await syncCartPricesAndValidateStock(cartItemsRaw);
 
     const subtotal = cartItems.reduce(
       (sum, item) => sum + Number(item.unit_price) * item.quantity,

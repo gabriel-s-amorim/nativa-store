@@ -2,9 +2,11 @@ import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 
 export const ADMIN_COOKIE_NAME = "nativa_admin_token";
-export const ADMIN_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
-
-const TOKEN_TTL = "7d";
+/** Sessão admin: 12h (reduzido de 7d para limitar janela de abuso se o cookie vazar). */
+export const ADMIN_COOKIE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const TOKEN_TTL = "12h";
+const TOKEN_ISSUER = "nativa-store";
+const TOKEN_AUDIENCE = "nativa-admin";
 
 function getJwtSecret(): string {
   const secret = process.env.ADMIN_JWT_SECRET?.trim();
@@ -38,12 +40,19 @@ export function checkAdminPassword(candidate: string): boolean {
 }
 
 export function signAdminToken(): string {
-  return jwt.sign({ role: "admin" }, getJwtSecret(), { expiresIn: TOKEN_TTL });
+  return jwt.sign({ role: "admin" }, getJwtSecret(), {
+    expiresIn: TOKEN_TTL,
+    issuer: TOKEN_ISSUER,
+    audience: TOKEN_AUDIENCE,
+  });
 }
 
 export function verifyAdminToken(token: string): boolean {
   try {
-    const payload = jwt.verify(token, getJwtSecret());
+    const payload = jwt.verify(token, getJwtSecret(), {
+      issuer: TOKEN_ISSUER,
+      audience: TOKEN_AUDIENCE,
+    });
     return (
       typeof payload === "object" &&
       payload !== null &&

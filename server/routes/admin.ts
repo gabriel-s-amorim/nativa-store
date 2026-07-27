@@ -13,6 +13,7 @@ import {
   recordAdminLoginFailure,
 } from "../lib/adminLoginRateLimit";
 import { setAnalyticsExcludeCookie } from "../lib/analyticsExclude";
+import { shouldUseSecureCookies } from "../lib/cookieSecure";
 import { upload } from "../lib/upload";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { createSignedImageUpload, uploadProductImage } from "../services/uploads";
@@ -51,9 +52,9 @@ function handleSingleImageUpload(
   });
 }
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   const rateKey = getClientIp(req);
-  const rate = checkAdminLoginRateLimit(rateKey);
+  const rate = await checkAdminLoginRateLimit(rateKey);
   if (!rate.allowed) {
     res.setHeader("Retry-After", String(rate.retryAfterSec ?? 900));
     res.status(429).json({
@@ -81,17 +82,17 @@ router.post("/login", (req, res) => {
   }
 
   if (!isValid) {
-    recordAdminLoginFailure(rateKey);
+    await recordAdminLoginFailure(rateKey);
     res.status(401).json({ error: "Senha inválida" });
     return;
   }
 
-  clearAdminLoginFailures(rateKey);
+  await clearAdminLoginFailures(rateKey);
   const token = signAdminToken();
 
   res.cookie(ADMIN_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookies(),
     sameSite: "lax",
     maxAge: ADMIN_COOKIE_MAX_AGE_MS,
     path: "/",

@@ -14,6 +14,9 @@ GRANT EXECUTE ON FUNCTION public.checkout_create_payment_order(uuid, uuid, numer
 REVOKE ALL ON FUNCTION public.reconcile_mercado_pago_payment(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.reconcile_mercado_pago_payment(text, text, text, text, jsonb) TO service_role;
 
+REVOKE ALL ON FUNCTION public.increment_coupon_usage(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.increment_coupon_usage(text) TO service_role;
+
 REVOKE ALL ON FUNCTION public.handle_new_customer() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.notify_admin_new_order() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.notify_admin_new_customer() FROM PUBLIC, anon, authenticated;

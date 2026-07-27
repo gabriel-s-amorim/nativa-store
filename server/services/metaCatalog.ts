@@ -4,6 +4,7 @@ import type {
   MetaCatalogTestResult,
 } from "@shared/types/metaCatalog";
 import { normalizeBaseUrl } from "@shared/lib/seo";
+import { timingSafeEqual } from "node:crypto";
 import { nanoid } from "nanoid";
 import { supabase } from "../lib/supabase";
 import {
@@ -28,6 +29,16 @@ type MetaCatalogSettingsRow = {
 };
 
 const SYNC_WINDOW_MS = 36 * 60 * 60 * 1000;
+
+function tokensEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) {
+    timingSafeEqual(left, left);
+    return false;
+  }
+  return timingSafeEqual(left, right);
+}
 
 function appBaseUrl(): string {
   return normalizeBaseUrl(
@@ -204,12 +215,16 @@ export async function getPublicProductFeedXml(
     throw error;
   }
 
-  if (settings.feed_token) {
-    if (!tokenFromQuery || tokenFromQuery !== settings.feed_token) {
-      const error = new Error("Token do feed inválido");
-      (error as Error & { status?: number }).status = 401;
-      throw error;
-    }
+  if (!settings.feed_token) {
+    const error = new Error("Feed do catálogo Meta sem token configurado");
+    (error as Error & { status?: number }).status = 403;
+    throw error;
+  }
+
+  if (!tokenFromQuery || !tokensEqual(tokenFromQuery, settings.feed_token)) {
+    const error = new Error("Token do feed inválido");
+    (error as Error & { status?: number }).status = 401;
+    throw error;
   }
 
   const result = await generateMetaCatalogFeed();
