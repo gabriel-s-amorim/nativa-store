@@ -1,0 +1,13 @@
+ok => OK
+category Roupas => OK
+color empty name => colors.0.name:Informe o nome da cor
+size empty => sizes.0.label:Informe o tamanho
+faq empty => faq.0.question:Informe a pergunta
+stock NaN => stockCount:Invalid input: expected number, received NaN
+stock null => stockCount:Invalid input: expected number, received null
+no images => image:Adicione ao menos uma imagem | images:Adicione ao menos uma imagem
+width 0 => widthCm:Too small: expected number to be >0
+width undefined => widthCm:Invalid input: expected number, received undefined
+missing dims keys => widthCm:Invalid input: expected number, received undefined | heightCm:Invalid input: expected number, received undefined | lengthCm:Invalid input: expected number, received undefined | weightKg:Invalid input: expected number, received undefined
+styleTags missing => styleTags:Invalid input: expected array, received undefined
+regionId empty string => regionId:Too small: expected string to have >=1 characters

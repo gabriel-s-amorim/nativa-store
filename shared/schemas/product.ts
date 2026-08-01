@@ -27,6 +27,16 @@ export const productArtisanSchema = z.object({
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/** Dimensão/peso opcional: null ou número > 0 (0 é tratado como vazio). */
+const optionalMeasure = (max: number, label: string) =>
+  z
+    .number({ error: `Informe um ${label} válido` })
+    .max(max, `${label} acima do permitido`)
+    .nullable()
+    .refine((value) => value === null || value > 0, {
+      message: `Informe um ${label} maior que zero`,
+    });
+
 export const productSchema = z.object({
   slug: z
     .string()
@@ -53,10 +63,10 @@ export const productSchema = z.object({
   sku: z.string(),
   inStock: z.boolean(),
   stockCount: z.number().int().min(0),
-  widthCm: z.number().positive().max(200).nullable(),
-  heightCm: z.number().positive().max(200).nullable(),
-  lengthCm: z.number().positive().max(200).nullable(),
-  weightKg: z.number().positive().max(100).nullable(),
+  widthCm: optionalMeasure(200, "largura"),
+  heightCm: optionalMeasure(200, "altura"),
+  lengthCm: optionalMeasure(200, "comprimento"),
+  weightKg: optionalMeasure(100, "peso"),
   faq: z.array(productFaqSchema),
   highlights: z.array(z.string()),
   styleTags: z.array(z.string()),

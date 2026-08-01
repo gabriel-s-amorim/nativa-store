@@ -36,8 +36,8 @@ import {
   TextQuote,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
-import { Controller, useFieldArray, useForm } from "react-hook-form";
+import { useEffect, useState, type BaseSyntheticEvent, type ReactNode } from "react";
+import { Controller, useFieldArray, useForm, type FieldErrors } from "react-hook-form";
 import { toast } from "sonner";
 import { Link, useLocation, useParams } from "wouter";
 
@@ -51,6 +51,56 @@ const FORM_TABS = [
   { value: "descricao", label: "Descrição & SEO", short: "Texto", icon: TextQuote },
   { value: "artesao", label: "Artesão & FAQ", short: "FAQ", icon: HelpCircle },
 ] as const;
+
+const FIELD_TO_TAB: Record<string, (typeof FORM_TABS)[number]["value"]> = {
+  name: "geral",
+  slug: "geral",
+  category: "geral",
+  sku: "geral",
+  badge: "geral",
+  badgeColor: "geral",
+  featured: "geral",
+  price: "preco",
+  originalPrice: "preco",
+  stockCount: "preco",
+  inStock: "preco",
+  widthCm: "preco",
+  heightCm: "preco",
+  lengthCm: "preco",
+  weightKg: "preco",
+  image: "imagens",
+  images: "imagens",
+  sizes: "variacoes",
+  colors: "variacoes",
+  shortDescription: "descricao",
+  description: "descricao",
+  materials: "descricao",
+  careInstructions: "descricao",
+  highlights: "descricao",
+  artisan: "artesao",
+  regionId: "artesao",
+  faq: "artesao",
+};
+
+function getFirstErrorMessage(errors: FieldErrors<ProductInput>): string | undefined {
+  for (const value of Object.values(errors)) {
+    if (!value) continue;
+    if (typeof value === "object" && "message" in value && typeof value.message === "string") {
+      return value.message;
+    }
+    if (typeof value === "object") {
+      const nested = getFirstErrorMessage(value as FieldErrors<ProductInput>);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
+function parseOptionalNumber(raw: string): number | null {
+  if (raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
 
 function FormSection({
   title,
@@ -98,6 +148,7 @@ export default function AdminProductForm() {
     handleSubmit,
     watch,
     setValue,
+    getValues,
     reset,
     formState: { errors },
   } = useForm<ProductInput>({
@@ -167,6 +218,62 @@ export default function AdminProductForm() {
     }
   }
 
+  function onInvalid(formErrors: FieldErrors<ProductInput>) {
+    const firstField = Object.keys(formErrors)[0];
+    const tab = firstField ? (FIELD_TO_TAB[firstField] ?? "geral") : "geral";
+    setActiveTab(tab);
+    toast.error(getFirstErrorMessage(formErrors) ?? "Verifique os campos obrigatórios antes de salvar");
+  }
+
+  /** Remove linhas vazias e normaliza números antes da validação Zod. */
+  function prepareAndSubmit(event?: BaseSyntheticEvent) {
+    event?.preventDefault();
+    const values = getValues();
+
+    setValue(
+      "sizes",
+      values.sizes.filter((size) => size.label.trim().length > 0),
+      { shouldValidate: false },
+    );
+    setValue(
+      "colors",
+      values.colors.filter((color) => color.name.trim().length > 0),
+      { shouldValidate: false },
+    );
+    setValue(
+      "faq",
+      values.faq.filter(
+        (item) => item.question.trim().length > 0 || item.answer.trim().length > 0,
+      ),
+      { shouldValidate: false },
+    );
+
+    const measureKeys = ["widthCm", "heightCm", "lengthCm", "weightKg"] as const;
+    for (const key of measureKeys) {
+      const value = values[key];
+      if (value === 0 || (typeof value === "number" && !Number.isFinite(value))) {
+        setValue(key, null, { shouldValidate: false });
+      }
+    }
+
+    if (
+      values.originalPrice != null &&
+      (values.originalPrice === 0 || !Number.isFinite(values.originalPrice))
+    ) {
+      setValue("originalPrice", null, { shouldValidate: false });
+    }
+
+    if (typeof values.price === "number" && !Number.isFinite(values.price)) {
+      setValue("price", Number.NaN, { shouldValidate: false });
+    }
+
+    if (typeof values.stockCount !== "number" || !Number.isFinite(values.stockCount)) {
+      setValue("stockCount", 0, { shouldValidate: false });
+    }
+
+    void handleSubmit(onSubmit, onInvalid)(event);
+  }
+
   const actionButtons = (
     <>
       <Button
@@ -214,7 +321,7 @@ export default function AdminProductForm() {
       }
     >
       <form
-        onSubmit={handleSubmit(onSubmit)}
+        onSubmit={prepareAndSubmit}
         className="flex flex-col gap-3 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:gap-4 lg:pb-24"
       >
         {isEditing && name ? (
@@ -298,6 +405,7 @@ export default function AdminProductForm() {
                       </Select>
                     )}
                   />
+                  <FieldError message={errors.category?.message} />
                 </div>
 
                 <div className="flex flex-col gap-2">
@@ -377,7 +485,13 @@ export default function AdminProductForm() {
                     step="0.01"
                     min="0"
                     className="h-11 rounded-xl lg:h-9 lg:rounded-md"
-                    {...register("price", { valueAsNumber: true })}
+                    {...register("price", {
+                      setValueAs: (value) => {
+                        if (value === "" || value == null) return Number.NaN;
+                        const n = typeof value === "number" ? value : Number(value);
+                        return Number.isFinite(n) ? n : Number.NaN;
+                      },
+                    })}
                   />
                   <FieldError message={errors.price?.message} />
                 </div>
@@ -393,9 +507,12 @@ export default function AdminProductForm() {
                     placeholder="Em branco = sem promoção"
                     value={originalPrice ?? ""}
                     onChange={(e) =>
-                      setValue("originalPrice", e.target.value === "" ? null : Number(e.target.value))
+                      setValue("originalPrice", parseOptionalNumber(e.target.value), {
+                        shouldValidate: true,
+                      })
                     }
                   />
+                  <FieldError message={errors.originalPrice?.message} />
                 </div>
 
                 <div className="flex flex-col gap-2">
@@ -405,8 +522,15 @@ export default function AdminProductForm() {
                     type="number"
                     min="0"
                     className="h-11 rounded-xl lg:h-9 lg:rounded-md"
-                    {...register("stockCount", { valueAsNumber: true })}
+                    {...register("stockCount", {
+                      setValueAs: (value) => {
+                        if (value === "" || value == null) return 0;
+                        const n = typeof value === "number" ? value : Number(value);
+                        return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+                      },
+                    })}
                   />
+                  <FieldError message={errors.stockCount?.message} />
                 </div>
 
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3.5 lg:rounded-xl">
@@ -444,16 +568,13 @@ export default function AdminProductForm() {
                               min={step}
                               step={step}
                               value={field.value ?? ""}
-                              onChange={event =>
-                                field.onChange(
-                                  event.target.value === ""
-                                    ? null
-                                    : Number(event.target.value)
-                                )
+                              onChange={(event) =>
+                                field.onChange(parseOptionalNumber(event.target.value))
                               }
                             />
                           )}
                         />
+                        <FieldError message={errors[name]?.message} />
                       </div>
                     ))}
                   </div>
@@ -483,39 +604,39 @@ export default function AdminProductForm() {
               <FormSection title="Tamanhos" description="Tamanhos disponíveis para este produto.">
                 <div className="flex flex-col gap-3">
                   {sizesArray.fields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="flex flex-col gap-2 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3 sm:flex-row sm:items-center sm:gap-2 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0"
-                    >
-                      <Input
-                        {...register(`sizes.${index}.label`)}
-                        placeholder="Ex: P, M, G ou Único"
-                        className="h-11 flex-1 rounded-xl lg:h-9 lg:rounded-md"
-                      />
-                      <div className="flex items-center justify-between gap-2 sm:justify-start">
-                        <div className="flex items-center gap-1.5 whitespace-nowrap text-sm text-[var(--admin-text-secondary)]">
-                          <Controller
-                            control={control}
-                            name={`sizes.${index}.available`}
-                            render={({ field: switchField }) => (
-                              <Switch
-                                checked={switchField.value}
-                                onCheckedChange={switchField.onChange}
-                              />
-                            )}
-                          />
-                          Disponível
+                    <div key={field.id} className="flex flex-col gap-1">
+                      <div className="flex flex-col gap-2 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3 sm:flex-row sm:items-center sm:gap-2 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
+                        <Input
+                          {...register(`sizes.${index}.label`)}
+                          placeholder="Ex: P, M, G ou Único"
+                          className="h-11 flex-1 rounded-xl lg:h-9 lg:rounded-md"
+                        />
+                        <div className="flex items-center justify-between gap-2 sm:justify-start">
+                          <div className="flex items-center gap-1.5 whitespace-nowrap text-sm text-[var(--admin-text-secondary)]">
+                            <Controller
+                              control={control}
+                              name={`sizes.${index}.available`}
+                              render={({ field: switchField }) => (
+                                <Switch
+                                  checked={switchField.value}
+                                  onCheckedChange={switchField.onChange}
+                                />
+                              )}
+                            />
+                            Disponível
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="shrink-0"
+                            onClick={() => sizesArray.remove(index)}
+                          >
+                            <Trash2 className="size-4 text-destructive" />
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="shrink-0"
-                          onClick={() => sizesArray.remove(index)}
-                        >
-                          <Trash2 className="size-4 text-destructive" />
-                        </Button>
                       </div>
+                      <FieldError message={errors.sizes?.[index]?.label?.message} />
                     </div>
                   ))}
                   <Button
@@ -534,36 +655,37 @@ export default function AdminProductForm() {
               <FormSection title="Cores" description="Cores disponíveis (opcional).">
                 <div className="flex flex-col gap-3">
                   {colorsArray.fields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="flex items-center gap-2 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0"
-                    >
-                      <Controller
-                        control={control}
-                        name={`colors.${index}.hex`}
-                        render={({ field: colorField }) => (
-                          <input
-                            type="color"
-                            value={colorField.value}
-                            onChange={colorField.onChange}
-                            className="h-11 w-11 shrink-0 cursor-pointer rounded-xl border border-input lg:h-9 lg:w-10 lg:rounded-md"
-                          />
-                        )}
-                      />
-                      <Input
-                        {...register(`colors.${index}.name`)}
-                        placeholder="Nome da cor"
-                        className="h-11 flex-1 rounded-xl lg:h-9 lg:rounded-md"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="shrink-0"
-                        onClick={() => colorsArray.remove(index)}
-                      >
-                        <Trash2 className="size-4 text-destructive" />
-                      </Button>
+                    <div key={field.id} className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-hover)] p-3 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
+                        <Controller
+                          control={control}
+                          name={`colors.${index}.hex`}
+                          render={({ field: colorField }) => (
+                            <input
+                              type="color"
+                              value={colorField.value}
+                              onChange={colorField.onChange}
+                              className="h-11 w-11 shrink-0 cursor-pointer rounded-xl border border-input lg:h-9 lg:w-10 lg:rounded-md"
+                            />
+                          )}
+                        />
+                        <Input
+                          {...register(`colors.${index}.name`)}
+                          placeholder="Nome da cor"
+                          className="h-11 flex-1 rounded-xl lg:h-9 lg:rounded-md"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="shrink-0"
+                          onClick={() => colorsArray.remove(index)}
+                        >
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      </div>
+                      <FieldError message={errors.colors?.[index]?.name?.message} />
+                      <FieldError message={errors.colors?.[index]?.hex?.message} />
                     </div>
                   ))}
                   <Button
@@ -759,6 +881,8 @@ export default function AdminProductForm() {
                         rows={2}
                         className="rounded-xl lg:rounded-md"
                       />
+                      <FieldError message={errors.faq?.[index]?.question?.message} />
+                      <FieldError message={errors.faq?.[index]?.answer?.message} />
                     </div>
                   ))}
                   <Button
