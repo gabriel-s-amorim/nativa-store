@@ -16,8 +16,8 @@ export interface ProductRow {
   images: unknown;
   badge: string;
   badge_color: string;
-  rating: number;
-  reviews: number;
+  rating_avg: number;
+  reviews_count: number;
   featured: boolean;
   short_description: string;
   description: string;
@@ -109,8 +109,8 @@ export function mapProductRowToProduct(row: ProductRow): Product {
     images: asStringArray(row.images),
     badge: row.badge,
     badgeColor: row.badge_color,
-    rating: Number(row.rating),
-    reviews: row.reviews,
+    rating: Number(row.rating_avg ?? 0),
+    reviews: Number(row.reviews_count ?? 0),
     featured: row.featured,
     shortDescription: row.short_description,
     description: row.description,
@@ -145,8 +145,8 @@ export function mapProductToRow(product: Omit<Product, "id">) {
     images: product.images,
     badge: product.badge,
     badge_color: product.badgeColor,
-    rating: product.rating,
-    reviews: product.reviews,
+    rating_avg: product.rating,
+    reviews_count: product.reviews,
     featured: product.featured,
     short_description: product.shortDescription,
     description: product.description,
