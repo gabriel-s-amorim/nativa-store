@@ -23,7 +23,13 @@ import { fetchRegions } from "@/lib/regions";
 import type { RegionWithProducts } from "@shared/types/region";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { slugify } from "@shared/lib/slugify";
-import { productDefaults, productSchema, type ProductInput } from "@shared/schemas/product";
+import {
+  formatProductIssues,
+  normalizeProductFormValues,
+  productDefaults,
+  productSchema,
+  type ProductInput,
+} from "@shared/schemas/product";
 import {
   ArrowLeft,
   CircleDollarSign,
@@ -37,7 +43,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState, type BaseSyntheticEvent, type ReactNode } from "react";
-import { Controller, useFieldArray, useForm, type FieldErrors } from "react-hook-form";
+import { Controller, useFieldArray, useForm, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
 import { Link, useLocation, useParams } from "wouter";
 
@@ -81,20 +87,6 @@ const FIELD_TO_TAB: Record<string, (typeof FORM_TABS)[number]["value"]> = {
   regionId: "artesao",
   faq: "artesao",
 };
-
-function getFirstErrorMessage(errors: FieldErrors<ProductInput>): string | undefined {
-  for (const value of Object.values(errors)) {
-    if (!value) continue;
-    if (typeof value === "object" && "message" in value && typeof value.message === "string") {
-      return value.message;
-    }
-    if (typeof value === "object") {
-      const nested = getFirstErrorMessage(value as FieldErrors<ProductInput>);
-      if (nested) return nested;
-    }
-  }
-  return undefined;
-}
 
 function parseOptionalNumber(raw: string): number | null {
   if (raw === "") return null;
@@ -145,14 +137,13 @@ export default function AdminProductForm() {
   const {
     register,
     control,
-    handleSubmit,
     watch,
     setValue,
     getValues,
     reset,
     formState: { errors },
   } = useForm<ProductInput>({
-    resolver: zodResolver(productSchema),
+    resolver: zodResolver(productSchema) as Resolver<ProductInput>,
     defaultValues: productDefaults,
     mode: "onBlur",
   });
@@ -192,8 +183,8 @@ export default function AdminProductForm() {
           setLocation("/admin/produtos");
           return;
         }
-        const { id: _id, ...rest } = product;
-        reset(rest);
+        const { id: _id, updatedAt: _updatedAt, ...rest } = product;
+        reset(normalizeProductFormValues(rest));
       })
       .catch(() => toast.error("Não foi possível carregar o produto"))
       .finally(() => setIsLoadingProduct(false));
@@ -203,75 +194,57 @@ export default function AdminProductForm() {
   async function onSubmit(data: ProductInput) {
     setIsSaving(true);
     try {
+      const payload = normalizeProductFormValues(data);
       if (isEditing && params.slug) {
-        await updateProduct(params.slug, data);
+        await updateProduct(params.slug, payload);
         toast.success("Produto atualizado com sucesso");
       } else {
-        await createProduct(data);
+        await createProduct(payload);
         toast.success("Produto criado com sucesso");
       }
       setLocation("/admin/produtos");
     } catch (error) {
-      toast.error(error instanceof AdminApiError ? error.message : "Não foi possível salvar o produto");
+      if (error instanceof AdminApiError) {
+        toast.error(
+          formatProductIssues(error.issues as Array<{ path: PropertyKey[]; message: string }>) ??
+            error.message,
+        );
+      } else {
+        toast.error("Não foi possível salvar o produto");
+      }
     } finally {
       setIsSaving(false);
     }
-  }
-
-  function onInvalid(formErrors: FieldErrors<ProductInput>) {
-    const firstField = Object.keys(formErrors)[0];
-    const tab = firstField ? (FIELD_TO_TAB[firstField] ?? "geral") : "geral";
-    setActiveTab(tab);
-    toast.error(getFirstErrorMessage(formErrors) ?? "Verifique os campos obrigatórios antes de salvar");
   }
 
   /** Remove linhas vazias e normaliza números antes da validação Zod. */
   function prepareAndSubmit(event?: BaseSyntheticEvent) {
     event?.preventDefault();
     const values = getValues();
-
-    setValue(
-      "sizes",
-      values.sizes.filter((size) => size.label.trim().length > 0),
-      { shouldValidate: false },
-    );
-    setValue(
-      "colors",
-      values.colors.filter((color) => color.name.trim().length > 0),
-      { shouldValidate: false },
-    );
-    setValue(
-      "faq",
-      values.faq.filter(
+    const normalized = normalizeProductFormValues({
+      ...values,
+      sizes: (values.sizes ?? []).filter((size) => size.label.trim().length > 0),
+      colors: (values.colors ?? []).filter((color) => color.name.trim().length > 0),
+      faq: (values.faq ?? []).filter(
         (item) => item.question.trim().length > 0 || item.answer.trim().length > 0,
       ),
-      { shouldValidate: false },
-    );
+    });
 
-    const measureKeys = ["widthCm", "heightCm", "lengthCm", "weightKg"] as const;
-    for (const key of measureKeys) {
-      const value = values[key];
-      if (value === 0 || (typeof value === "number" && !Number.isFinite(value))) {
-        setValue(key, null, { shouldValidate: false });
-      }
+    // Mantém a UI alinhada com os valores limpos (sem linhas vazias / NaN).
+    reset(normalized, { keepDefaultValues: true });
+
+    const parsed = productSchema.safeParse(normalized);
+    if (!parsed.success) {
+      const firstPath = String(parsed.error.issues[0]?.path[0] ?? "");
+      setActiveTab(FIELD_TO_TAB[firstPath] ?? "geral");
+      toast.error(
+        formatProductIssues(parsed.error.issues) ??
+          "Verifique os campos obrigatórios antes de salvar",
+      );
+      return;
     }
 
-    if (
-      values.originalPrice != null &&
-      (values.originalPrice === 0 || !Number.isFinite(values.originalPrice))
-    ) {
-      setValue("originalPrice", null, { shouldValidate: false });
-    }
-
-    if (typeof values.price === "number" && !Number.isFinite(values.price)) {
-      setValue("price", Number.NaN, { shouldValidate: false });
-    }
-
-    if (typeof values.stockCount !== "number" || !Number.isFinite(values.stockCount)) {
-      setValue("stockCount", 0, { shouldValidate: false });
-    }
-
-    void handleSubmit(onSubmit, onInvalid)(event);
+    void onSubmit(parsed.data);
   }
 
   const actionButtons = (

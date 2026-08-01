@@ -1,4 +1,4 @@
-import { productSchema, type ProductInput } from "@shared/schemas/product";
+import { formatProductIssues, productSchema, type ProductInput } from "@shared/schemas/product";
 import { Router } from "express";
 import { notifyProductUrls } from "../lib/indexnow";
 import { requireAdmin } from "../middleware/requireAdmin";
@@ -71,7 +71,10 @@ router.post("/", requireAdmin, async (req, res) => {
     const parsed = productSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });
+      res.status(400).json({
+        error: formatProductIssues(parsed.error.issues) ?? "Dados inválidos",
+        issues: parsed.error.issues,
+      });
       return;
     }
 
@@ -133,7 +136,10 @@ router.put("/:slug", requireAdmin, async (req, res) => {
     const parsed = productSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      res.status(400).json({ error: "Dados inválidos", issues: parsed.error.issues });
+      res.status(400).json({
+        error: formatProductIssues(parsed.error.issues) ?? "Dados inválidos",
+        issues: parsed.error.issues,
+      });
       return;
     }
 
