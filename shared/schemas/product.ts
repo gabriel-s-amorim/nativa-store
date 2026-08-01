@@ -81,8 +81,17 @@ export const productSchema = z.object({
   images: z.array(z.string().min(1)).min(1, "Adicione ao menos uma imagem"),
   badge: z.string(),
   badgeColor: z.string().min(1, "Informe a cor do selo"),
-  rating: z.number().min(0).max(5),
-  reviews: z.number().int().min(0),
+  rating: z
+    .any()
+    .transform((value) => {
+      const n = finiteOrZero(value);
+      return Math.min(5, Math.max(0, n));
+    })
+    .pipe(z.number({ error: "Informe uma avaliação válida" }).min(0).max(5)),
+  reviews: z
+    .any()
+    .transform((value) => Math.max(0, Math.floor(finiteOrZero(value))))
+    .pipe(z.number({ error: "Informe o número de avaliações" }).int().min(0)),
   featured: z.boolean(),
   shortDescription: z.string(),
   description: z.string(),
@@ -223,19 +232,25 @@ export function normalizeProductFormValues(
     originalPrice: input.originalPrice ?? null,
     regionId: input.regionId ?? null,
     stockCount: input.stockCount ?? 0,
+    rating: input.rating ?? productDefaults.rating,
+    reviews: input.reviews ?? productDefaults.reviews,
+    featured: typeof input.featured === "boolean" ? input.featured : productDefaults.featured,
+    inStock: typeof input.inStock === "boolean" ? input.inStock : productDefaults.inStock,
   });
 
   if (parsed.success) return parsed.data;
 
   return {
     ...productDefaults,
-    ...input,
+    ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)),
     name: typeof input.name === "string" ? input.name : productDefaults.name,
     slug: typeof input.slug === "string" ? input.slug : productDefaults.slug,
     category: (input.category as ProductInput["category"]) ?? productDefaults.category,
     price: finiteOrZero(input.price),
     originalPrice: finiteOrNull(input.originalPrice),
     stockCount: Math.max(0, Math.floor(finiteOrZero(input.stockCount))),
+    rating: Math.min(5, Math.max(0, finiteOrZero(input.rating))),
+    reviews: Math.max(0, Math.floor(finiteOrZero(input.reviews))),
     widthCm: finiteOrNull(input.widthCm),
     heightCm: finiteOrNull(input.heightCm),
     lengthCm: finiteOrNull(input.lengthCm),
